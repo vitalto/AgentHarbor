@@ -12,7 +12,7 @@ import type { AgentPane, TmuxService } from '@/modules/tmux/tmux.service.js';
 function pane(overrides: Partial<AgentPane>): AgentPane {
   return {
     windowId: '@1', windowName: 'proj', paneId: '%3', panePid: 100, cwd: '/mnt/d/Develop/proj',
-    dead: false, command: 'claude.exe', ...overrides,
+    dead: false, command: 'claude.exe', currentCommand: 'init', ...overrides,
   };
 }
 

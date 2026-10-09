@@ -12,16 +12,18 @@ export type AgentPane = {
   dead: boolean;
   /** The command the pane was started with (pane_start_command), e.g. the claude launch line. */
   command: string;
+  /** What runs in the foreground right now (pane_current_command), e.g. bash or npm. */
+  currentCommand: string;
 };
 
 export type TmuxService = ReturnType<typeof createTmuxService>;
 
 const FIELD_SEPARATOR = '\u001f';
-const PANE_FORMAT = ['#{window_id}', '#{window_name}', '#{pane_id}', '#{pane_pid}', '#{pane_current_path}', '#{pane_dead}', '#{pane_start_command}']
+const PANE_FORMAT = ['#{window_id}', '#{window_name}', '#{pane_id}', '#{pane_pid}', '#{pane_current_path}', '#{pane_dead}', '#{pane_start_command}', '#{pane_current_command}']
   .join(FIELD_SEPARATOR);
 
 function parsePaneLine(line: string): AgentPane | null {
-  const [windowId, windowName, paneId, panePid, cwd, dead, command] = line.split(FIELD_SEPARATOR);
+  const [windowId, windowName, paneId, panePid, cwd, dead, command, currentCommand] = line.split(FIELD_SEPARATOR);
   if (!windowId || !paneId) {
     return null;
   }
@@ -33,6 +35,7 @@ function parsePaneLine(line: string): AgentPane | null {
     cwd: cwd ?? '',
     dead: dead === '1',
     command: command ?? '',
+    currentCommand: currentCommand ?? '',
   };
 }
 
@@ -109,6 +112,20 @@ export function createTmuxService(options: { socketName?: string; session?: stri
         throw new TmuxError(`tmux new-window returned an unexpected line: ${output}`);
       }
       return pane;
+    },
+
+    /** How many attached clients (any session of the group, e.g. a phone on main or another browser) show this window. */
+    async countViewers(windowId: string): Promise<number> {
+      let output: string;
+      try {
+        output = await run(['list-sessions', '-F', `#{session_attached}${FIELD_SEPARATOR}#{window_id}`]);
+      } catch {
+        return 0;
+      }
+      return output.split('\n').reduce((count, line) => {
+        const [attached, currentWindowId] = line.split(FIELD_SEPARATOR);
+        return currentWindowId === windowId ? count + (Number(attached) || 0) : count;
+      }, 0);
     },
 
     async killWindow(windowId: string): Promise<void> {

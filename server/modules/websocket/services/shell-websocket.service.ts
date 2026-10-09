@@ -30,6 +30,8 @@ type ShellTmuxGateway = {
   hasSession: () => Promise<boolean>;
   listPanes: () => Promise<AgentPane[]>;
   newWindow: (input: { cwd: string; name: string; command: string }) => Promise<AgentPane>;
+  countViewers: (windowId: string) => Promise<number>;
+  killWindow: (windowId: string) => Promise<void>;
   sessionName: () => string;
   socketArgs: () => string[];
 };
@@ -44,6 +46,8 @@ const defaultTmuxGateway: ShellTmuxGateway = {
   hasSession: () => tmuxService.hasSession(),
   listPanes: () => tmuxService.listPanes(),
   newWindow: (input) => tmuxService.newWindow(input),
+  countViewers: (windowId) => tmuxService.countViewers(windowId),
+  killWindow: (windowId) => tmuxService.killWindow(windowId),
   sessionName: () => tmuxService.sessionName(),
   socketArgs: () => tmuxService.socketArgs(),
 };
@@ -95,6 +99,25 @@ function plainShellWindowName(projectPath: string): string {
 }
 
 const pendingShellWindows = new Map<string, Promise<string>>();
+
+const VIEWER_DETACH_SETTLE_MS = 500;
+const IDLE_SHELL_COMMANDS = /^-?(bash|zsh|sh|fish|dash)$/;
+
+/**
+ * A project shell window exists for the Shell tab. Once nobody looks at it and
+ * nothing runs in it (the shell itself is in the foreground), it is closed so
+ * such windows do not pile up in tmux; a running dev server keeps it open.
+ */
+async function closeShellWindowIfIdle(gateway: ShellTmuxGateway, windowId: string): Promise<void> {
+  const pane = (await gateway.listPanes()).find((candidate) => candidate.windowId === windowId);
+  if (!pane || !pane.windowName.startsWith('sh:') || !IDLE_SHELL_COMMANDS.test(pane.currentCommand)) {
+    return;
+  }
+  if ((await gateway.countViewers(windowId)) > 0) {
+    return;
+  }
+  await gateway.killWindow(windowId).catch(() => undefined);
+}
 
 /** Reuses the project's shell window so reconnecting lands in the same shell; two racing inits share one creation. */
 async function ensurePlainShellWindow(gateway: ShellTmuxGateway, cwd: string): Promise<string> {
@@ -152,11 +175,18 @@ export function handleShellConnection(ws: WebSocket, dependencies: ShellWebSocke
   let initGeneration = 0;
   let socketClosed = false;
   let terminalSize = { cols: 80, rows: 24 };
+  let attachedWindowId: string | null = null;
 
   const killViewer = () => {
     const current = viewer;
+    const windowId = attachedWindowId;
     viewer = null;
+    attachedWindowId = null;
     current?.kill();
+    if (windowId) {
+      // Give tmux a moment to drop the killed viewer's session before counting who still looks.
+      setTimeout(() => void closeShellWindowIfIdle(gateway, windowId).catch(() => undefined), VIEWER_DETACH_SETTLE_MS);
+    }
   };
 
   const attachViewer = async (message: ShellIncomingMessage) => {
@@ -166,8 +196,9 @@ export function handleShellConnection(ws: WebSocket, dependencies: ShellWebSocke
     terminalSize = { cols: readNumber(message.cols, 80), rows: readNumber(message.rows, 24) };
 
     let spawned: IPty;
+    let windowId: string;
     try {
-      const windowId = await resolveTargetWindow(message, gateway);
+      windowId = await resolveTargetWindow(message, gateway);
       if (socketClosed || generation !== initGeneration) {
         return;
       }
@@ -185,6 +216,7 @@ export function handleShellConnection(ws: WebSocket, dependencies: ShellWebSocke
       return;
     }
     viewer = spawned;
+    attachedWindowId = windowId;
 
     spawned.onData((chunk) => {
       sendFrame(ws, { type: 'output', data: chunk });

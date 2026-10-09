@@ -49,7 +49,7 @@ function createFakePty() {
 }
 
 function pane(windowId: string, windowName: string, overrides: Partial<AgentPane> = {}): AgentPane {
-  return { windowId, windowName, paneId: `%${windowId.slice(1)}`, panePid: 1, cwd: '/work', dead: false, command: 'bash', ...overrides };
+  return { windowId, windowName, paneId: `%${windowId.slice(1)}`, panePid: 1, cwd: '/work', dead: false, command: 'bash', currentCommand: 'bash', ...overrides };
 }
 
 type SpawnCall = { file: string; args: string[]; options: { cols?: number; rows?: number; cwd?: string; env?: NodeJS.ProcessEnv } };
@@ -58,7 +58,9 @@ function createHarness(overrides: {
   ensureAgentWindow?: (appSessionId: string) => Promise<PaneSession>;
   hasSession?: boolean;
   panes?: AgentPane[];
+  viewers?: number;
 } = {}) {
+  const killedWindows: string[] = [];
   const spawns: SpawnCall[] = [];
   const ptys: Array<ReturnType<typeof createFakePty>> = [];
   const newWindows: Array<{ cwd: string; name: string; command: string }> = [];
@@ -78,6 +80,8 @@ function createHarness(overrides: {
     },
     sessionName: () => 'main',
     socketArgs: () => [] as string[],
+    countViewers: async () => overrides.viewers ?? 0,
+    killWindow: async (windowId: string) => void killedWindows.push(windowId),
   };
   const dependencies = {
     tmux,
@@ -90,7 +94,7 @@ function createHarness(overrides: {
   };
   const socket = createFakeSocket();
   handleShellConnection(socket as never, dependencies);
-  return { socket, spawns, ptys, newWindows };
+  return { socket, spawns, ptys, newWindows, killedWindows };
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -262,4 +266,41 @@ test('a socket closed while the window is being opened never spawns a viewer', a
   await settle();
 
   assert.equal(spawns.length, 0);
+});
+
+const afterViewerDetach = () => new Promise((resolve) => setTimeout(resolve, 600));
+
+test('closing the tab closes its project shell window when the shell is idle and nobody else watches', async () => {
+  const shellWindow = pane('@4', 'sh:AgentHarbor');
+  const { socket, killedWindows } = createHarness({ panes: [shellWindow] });
+  socket.emit('message', JSON.stringify({ type: 'init', projectPath: '/mnt/d/Develop/AgentHarbor', isPlainShell: true, sessionId: null }));
+  await settle();
+  socket.emit('close');
+  await afterViewerDetach();
+  assert.deepEqual(killedWindows, ['@4']);
+});
+
+test('a project shell running something, or watched elsewhere, stays open', async () => {
+  const busy = createHarness({ panes: [pane('@4', 'sh:AgentHarbor', { currentCommand: 'npm' })] });
+  busy.socket.emit('message', JSON.stringify({ type: 'init', projectPath: '/mnt/d/Develop/AgentHarbor', isPlainShell: true, sessionId: null }));
+  await settle();
+  busy.socket.emit('close');
+
+  const watched = createHarness({ panes: [pane('@4', 'sh:AgentHarbor')], viewers: 1 });
+  watched.socket.emit('message', JSON.stringify({ type: 'init', projectPath: '/mnt/d/Develop/AgentHarbor', isPlainShell: true, sessionId: null }));
+  await settle();
+  watched.socket.emit('close');
+
+  await afterViewerDetach();
+  assert.deepEqual(busy.killedWindows, []);
+  assert.deepEqual(watched.killedWindows, []);
+});
+
+test('closing the tab never closes a Claude session window', async () => {
+  const { socket, killedWindows } = createHarness({ panes: [pane('@5', 'project', { currentCommand: 'bash' })] });
+  socket.emit('message', JSON.stringify({ type: 'init', sessionId: 'app-1' }));
+  await settle();
+  socket.emit('close');
+  await afterViewerDetach();
+  assert.deepEqual(killedWindows, []);
 });

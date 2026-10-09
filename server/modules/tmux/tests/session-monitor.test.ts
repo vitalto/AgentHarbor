@@ -44,7 +44,7 @@ async function harness() {
     attached: 0,
   };
   const paneSession = (): PaneSession => ({
-    pane: { windowId: '@1', windowName: 'proj', paneId: '%1', panePid: 10, cwd: '/p', dead: false, command: 'claude' },
+    pane: { windowId: '@1', windowName: 'proj', paneId: '%1', panePid: 10, cwd: '/p', dead: false, command: 'claude', currentCommand: 'init' },
     providerSessionId: 'p1', transcriptPath, cwd: '/p', registered: true,
   });
   const tmux = {
