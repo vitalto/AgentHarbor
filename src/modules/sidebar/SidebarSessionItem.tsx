@@ -356,7 +356,7 @@ function SidebarSessionItem({
                   </span>
                 </button>
 
-                <button
+                {(!agentWindow || agentWindow.location === 'tmux') && <button
                   type="button"
                   onClick={() => {
                     setMobileOptionsOpen(false);
@@ -366,7 +366,7 @@ function SidebarSessionItem({
                 >
                   {agentWindow ? <Power className="h-5 w-5 flex-shrink-0" /> : <SquareTerminal className="h-5 w-5 flex-shrink-0" />}
                   <span className="text-sm font-medium">{agentWindow ? 'Close Claude window' : 'Open in tmux'}</span>
-                </button>
+                </button>}
 
                 {!isProcessing && (
                   <button

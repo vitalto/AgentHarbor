@@ -178,7 +178,7 @@ export default function SessionOptions({
               closeOnSelect: false,
               onSelect: handleCopyAction,
             },
-            {
+            ...(agentWindow && agentWindow.location !== 'tmux' ? [] : [{
               key: 'agent-window',
               label: agentWindow ? 'Close Claude window' : 'Open in tmux',
               description: agentWindow
@@ -190,7 +190,7 @@ export default function SessionOptions({
                   console.error('[AgentHarbor] window action failed', error);
                 });
               },
-            },
+            }]),
             ...(canFork && onFork ? [{
               key: 'fork',
               label: 'Fork session',

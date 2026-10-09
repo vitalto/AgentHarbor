@@ -274,6 +274,8 @@ function ChatInterface({
 
   const viewedSessionId = selectedSession?.id || currentSessionId || null;
   const viewedTui = getTuiState(viewedSessionId);
+  const viewedAgent = findWindow(viewedSessionId);
+  const viewedOutsideTmux = viewedAgent && (viewedAgent.location !== 'tmux' || viewedAgent.duplicateProcesses) ? viewedAgent : null;
   const chooseTuiOption = useCallback((optionIndex: number) => {
     if (viewedSessionId) {
       sendMessage({ type: 'chat.tui-keys', sessionId: viewedSessionId, optionIndex });
@@ -490,11 +492,19 @@ function ChatInterface({
 
           {isProcessing && !viewedTui.prompt && <LiveScreen lines={viewedTui.screen} />}
 
+          {viewedOutsideTmux && (
+            <div className="mx-auto mb-2 max-w-[54.25rem] rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground" data-testid="outside-tmux-notice">
+              {viewedOutsideTmux.duplicateProcesses
+                ? 'Two Claude processes hold this session. Close one of them, otherwise both write its history.'
+                : `This session runs in ${viewedOutsideTmux.location === 'windows' ? 'a Windows terminal' : 'another terminal'} (pid ${viewedOutsideTmux.pid}). You can watch it here; to chat from here, close it there first.`}
+            </div>
+          )}
+
           <ChatComposer
           tuiPrompt={viewedTui.prompt}
           onTuiChoose={chooseTuiOption}
           onTuiKey={pressTuiKey}
-          hasLiveWindow={Boolean(findWindow(viewedSessionId))}
+          hasLiveWindow={findWindow(viewedSessionId)?.location === 'tmux'}
           activity={sessionActivity}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}

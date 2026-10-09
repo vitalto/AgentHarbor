@@ -4,12 +4,22 @@ import { api } from '@/shared/api';
 
 export type AgentWindowActivity = 'busy' | 'waiting' | 'idle';
 
-/** A session whose Claude currently runs in a tmux window. */
+/**
+ * A session whose Claude is running right now. `tmux` agents are fully
+ * controllable; `windows`/`elsewhere` ones run in another terminal and can only
+ * be watched (typing into them is not possible from here).
+ */
 export type AgentWindow = {
   sessionId: string;
   providerSessionId: string;
-  windowName: string;
+  title: string | null;
+  projectPath: string | null;
+  location: 'tmux' | 'windows' | 'elsewhere';
+  windowName: string | null;
+  pid: number | null;
   activity: AgentWindowActivity;
+  /** More than one Claude process holds this session. */
+  duplicateProcesses: boolean;
 };
 
 const POLL_MS = 4000;
