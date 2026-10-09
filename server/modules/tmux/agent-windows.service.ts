@@ -34,20 +34,24 @@ async function uniqueWindowName(base: string): Promise<string> {
  * (the folder-trust dialog) are surfaced to the web so the user can answer them.
  */
 async function waitForRegistration(appSessionId: string, paneId: string): Promise<PaneSession> {
-  const deadline = Date.now() + REGISTRATION_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    const registered = await paneRegistry.waitForRegistration(paneId, POLL_MS * 3);
-    if (registered) {
-      getSessionMonitor().announcePrompt(appSessionId, null);
-      return registered;
+  const monitor = getSessionMonitor();
+  monitor.setStartingPane(appSessionId, paneId);
+  try {
+    const deadline = Date.now() + REGISTRATION_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const registered = await paneRegistry.waitForRegistration(paneId, POLL_MS * 3);
+      if (registered) {
+        return registered;
+      }
+      const alive = (await tmuxService.listPanes()).some((pane) => pane.paneId === paneId && !pane.dead);
+      if (!alive) {
+        throw new AgentWindowError('Claude exited right after starting. Open the terminal tab to see why.');
+      }
     }
-    const alive = (await tmuxService.listPanes()).some((pane) => pane.paneId === paneId && !pane.dead);
-    if (!alive) {
-      throw new AgentWindowError('Claude exited right after starting. Open the terminal tab to see why.');
-    }
-    getSessionMonitor().announcePrompt(appSessionId, await getSessionMonitor().readPrompt(paneId));
+    throw new AgentWindowError('Claude did not finish starting within 2 minutes.');
+  } finally {
+    monitor.setStartingPane(appSessionId, null);
   }
-  throw new AgentWindowError('Claude did not finish starting within 2 minutes.');
 }
 
 export async function findAgentWindow(appSessionId: string): Promise<PaneSession | null> {

@@ -55,9 +55,12 @@ test('reports a reset when the file shrinks', async (t) => {
   assert.deepEqual((await tail.poll()).rows, [{ n: 9 }]);
 });
 
-test('a missing file yields nothing until it appears', async (t) => {
+test('a transcript created after tailing started is read from its first row', async (t) => {
   const { filePath, cleanup } = await tempTranscript('');
   t.after(cleanup);
-  const tail = createTranscriptTail(`${filePath}.missing`, 0);
+  const later = `${filePath}.new`;
+  const tail = createTranscriptTail(later);
   assert.deepEqual(await tail.poll(), { rows: [], reset: false });
+  await writeFile(later, '{"first":true}\n');
+  assert.deepEqual((await tail.poll()).rows, [{ first: true }]);
 });

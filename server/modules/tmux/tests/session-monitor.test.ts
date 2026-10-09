@@ -183,6 +183,26 @@ test('a waiting menu is broadcast as a prompt, answered by key, and cleared', as
   assert.equal(socket.frames.at(-1)?.kind, 'tui_prompt_cleared');
 });
 
+test('a window still starting up has its menus surfaced and answered before it registers', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  const socket = new FakeSocket();
+  monitor.watch('app1', socket);
+  state.paneAlive = false;
+  state.screen = fixture('trust-folder');
+  monitor.setStartingPane('app1', '%9');
+  state.running = true;
+  void monitor.beginTurn('app1');
+
+  await monitor.tick();
+  await monitor.tick();
+  assert.deepEqual(socket.kinds(), ['tui_prompt'], 'no flapping and no "window closed" while starting');
+  assert.deepEqual(state.completed, []);
+
+  assert.equal(await monitor.chooseOption('app1', 1), true);
+  assert.deepEqual(state.sentKeys.at(-1), ['Down', 'Enter']);
+});
+
 test('screenTail keeps what is printed above the input box', () => {
   const tail = screenTail(fixture('streaming'));
   assert.equal(tail.at(-1), '* Kneading… (3s · thinking with high effort)');

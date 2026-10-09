@@ -79,6 +79,8 @@ export function screenTail(lines: string[]): string[] {
 export function createSessionMonitor(deps: SessionMonitorDependencies) {
   const now = deps.now ?? Date.now;
   const watches = new Map<string, Watch>();
+  /** Windows opened for a session whose SessionStart hook has not reported yet (e.g. stuck on the trust dialog). */
+  const startingPanes = new Map<string, string>();
   let timer: NodeJS.Timeout | null = null;
   let ticking = false;
 
@@ -163,6 +165,12 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
       return;
     }
     const pane = panesBySession.get(providerSessionId);
+    const startingPaneId = startingPanes.get(watch.appSessionId);
+    if (!pane && startingPaneId) {
+      // Not registered yet: only menus on its screen matter, and the turn must not be failed as "window closed".
+      emitPrompt(watch, parseTuiPrompt(await deps.tmux.capturePane(startingPaneId).catch(() => [])));
+      return;
+    }
     const activity = pane ? statuses.get(providerSessionId)?.activity ?? 'idle' : null;
     const active = activity === 'busy' || activity === 'waiting';
 
@@ -284,26 +292,39 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
       return providerSessionId ? deps.registry.findPaneForSession(providerSessionId) : null;
     },
 
+    setStartingPane(appSessionId: string, paneId: string | null): void {
+      if (paneId) {
+        startingPanes.set(appSessionId, paneId);
+      } else {
+        startingPanes.delete(appSessionId);
+      }
+    },
+
+    /** The session's pane: its registered window, or the one still starting up. */
+    async resolvePaneId(appSessionId: string): Promise<string | null> {
+      return (await monitor.findPane(appSessionId))?.pane.paneId ?? startingPanes.get(appSessionId) ?? null;
+    },
+
     async sendKeys(appSessionId: string, keys: string[]): Promise<boolean> {
-      const pane = await monitor.findPane(appSessionId);
-      if (!pane) {
+      const paneId = await monitor.resolvePaneId(appSessionId);
+      if (!paneId) {
         return false;
       }
-      await deps.tmux.sendKeys(pane.pane.paneId, keys);
+      await deps.tmux.sendKeys(paneId, keys);
       return true;
     },
 
     async chooseOption(appSessionId: string, optionIndex: number): Promise<boolean> {
-      const pane = await monitor.findPane(appSessionId);
-      if (!pane) {
+      const paneId = await monitor.resolvePaneId(appSessionId);
+      if (!paneId) {
         return false;
       }
       // Re-read the screen: the menu cursor may have moved since the prompt was broadcast.
-      const prompt = parseTuiPrompt(await deps.tmux.capturePane(pane.pane.paneId));
+      const prompt = parseTuiPrompt(await deps.tmux.capturePane(paneId));
       if (!prompt || optionIndex < 0 || optionIndex >= prompt.options.length) {
         return false;
       }
-      await deps.tmux.sendKeys(pane.pane.paneId, keysForOption(prompt, optionIndex));
+      await deps.tmux.sendKeys(paneId, keysForOption(prompt, optionIndex));
       return true;
     },
 

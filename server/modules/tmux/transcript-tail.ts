@@ -33,6 +33,10 @@ export function createTranscriptTail(filePath: string, startOffset?: number) {
     async poll(): Promise<TranscriptPoll> {
       const size = await currentSize();
       if (size === null) {
+        // A transcript that does not exist yet belongs to a new session: read it from its first row.
+        if (offset < 0) {
+          offset = 0;
+        }
         return { rows: [], reset: false };
       }
       if (offset < 0) {
