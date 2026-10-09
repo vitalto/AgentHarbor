@@ -33,7 +33,7 @@ function OpenedSession() {
 }
 
 test('lists every live agent with where it runs, and opens its chat on click', async () => {
-  const { default: LiveAgentsList } = await import('@/modules/sidebar/LiveAgentsList');
+  const { default: LiveAgentsList } = await import('@/modules/live-agents/LiveAgentsList');
   render(
     <MemoryRouter initialEntries={['/']}>
       <Routes>
@@ -56,7 +56,7 @@ test('the × closes an agent after a confirming click; a busy outside one can be
   closeWindow
     .mockRejectedValueOnce(new AgentMoveError('Claude in the other terminal (pid 1248) reports "shell"', 'AGENT_BUSY_ELSEWHERE'))
     .mockResolvedValueOnce(undefined);
-  const { default: LiveAgentsList } = await import('@/modules/sidebar/LiveAgentsList');
+  const { default: LiveAgentsList } = await import('@/modules/live-agents/LiveAgentsList');
   render(<MemoryRouter><LiveAgentsList /></MemoryRouter>);
 
   fireEvent.click(screen.getByLabelText('Close Claude for Windows chat'));

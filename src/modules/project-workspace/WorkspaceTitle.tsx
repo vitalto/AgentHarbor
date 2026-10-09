@@ -5,6 +5,8 @@ import type { AppTab, Project, ProjectSession } from '@/shared/types';
 import { usePlugins } from '@/modules/plugins';
 import { getSessionTitle } from '@/shared/utils';
 import { useSessionTitleRename } from '@/modules/project-workspace/hooks/useSessionTitleRename';
+import { CloseAgentButton } from '@/modules/live-agents';
+import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 
 type WorkspaceTitleProps = {
   activeTab: AppTab;
@@ -43,6 +45,8 @@ export default function WorkspaceTitle({
 }: WorkspaceTitleProps) {
   const { t } = useTranslation();
   const { plugins } = usePlugins();
+  const { findWindow } = useAgentWindows();
+  const liveAgent = activeTab === 'chat' ? findWindow(selectedSession?.id) : null;
 
   const pluginDisplayName = activeTab.startsWith('plugin:')
     ? plugins.find((p) => p.name === activeTab.replace('plugin:', ''))?.displayName
@@ -119,6 +123,7 @@ export default function WorkspaceTitle({
           </div>
         )}
       </div>
+      {liveAgent && <CloseAgentButton agent={liveAgent} icon="power" />}
     </div>
   );
 }

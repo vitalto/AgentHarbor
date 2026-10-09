@@ -10,7 +10,7 @@ import { PROVIDER_LABELS, createSessionViewModel, formatCompactAge } from '@/mod
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
 import SessionOptions from '@/modules/sidebar/SessionOptions';
-import AgentWindowBadge from '@/modules/sidebar/AgentWindowBadge';
+import { AgentWindowBadge } from '@/modules/live-agents';
 import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 
 type SidebarSessionItemProps = {
