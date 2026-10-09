@@ -19,12 +19,8 @@ import { CODE_EDITOR_STORAGE_KEYS } from '@/shared/constants';
 export type UserPreferences = {
   theme: 'light' | 'dark';
   userLanguage: string;
-  tasksEnabled: boolean;
   projectSortOrder: 'name' | 'date';
   claudePermissions: unknown;
-  cursorPermissions: unknown;
-  codexPermissions: unknown;
-  opencodePermissions: unknown;
   codeEditorSettings: unknown;
   uiPreferences: unknown;
   selectedProvider: string;
@@ -56,12 +52,8 @@ const SERVER_WRITE_DEBOUNCE_MS = 400;
 const LEGACY_STORAGE_KEYS: Record<UserPreferenceKey, string> = {
   theme: 'theme',
   userLanguage: 'userLanguage',
-  tasksEnabled: 'tasks-enabled',
   projectSortOrder: 'claude-settings',
   claudePermissions: 'claude-settings',
-  cursorPermissions: 'cursor-tools-settings',
-  codexPermissions: 'codex-settings',
-  opencodePermissions: 'opencode-settings',
   // Unused: the four code-editor settings never shared one key, so they are
   // read by readLegacyCodeEditorSettings instead.
   codeEditorSettings: '',

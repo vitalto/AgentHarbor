@@ -99,7 +99,7 @@
   "usageLimit": {
     "resetAt": "Claude-Nutzungslimit erreicht. Dein Limit wird um **{{time}} {{timezone}}** zurückgesetzt - {{date}}"
   },
-  "codex": {
+  "permissionModes": {
     "permissionMode": "Berechtigungsmodus",
     "modes": {
       "default": "Standardmodus",

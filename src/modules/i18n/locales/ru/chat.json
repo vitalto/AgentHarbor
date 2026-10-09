@@ -111,7 +111,7 @@
   "usageLimit": {
     "resetAt": "Достигнут лимит использования Claude. Ваш лимит будет сброшен в **{{time}} {{timezone}}** - {{date}}"
   },
-  "codex": {
+  "permissionModes": {
     "permissionMode": "Режим разрешений",
     "modes": {
       "default": "Режим по умолчанию",

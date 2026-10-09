@@ -91,7 +91,7 @@
   "usageLimit": {
     "resetAt": "מגבלת השימוש של Claude מוצתה. המגבלה תתאפס ב-**{{time}} {{timezone}}** - {{date}}"
   },
-  "codex": {
+  "permissionModes": {
     "permissionMode": "מצב הרשאות",
     "modes": {
       "default": "מצב ברירת מחדל",

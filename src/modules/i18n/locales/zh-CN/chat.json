@@ -94,7 +94,7 @@
   "usageLimit": {
     "resetAt": "Claude 使用限制已达到。您的限制将在 **{{time}} {{timezone}}** - {{date}} 重置"
   },
-  "codex": {
+  "permissionModes": {
     "permissionMode": "权限模式",
     "modes": {
       "default": "默认模式",

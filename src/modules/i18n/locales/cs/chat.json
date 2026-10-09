@@ -127,7 +127,7 @@
   "usageLimit": {
     "resetAt": "Byl dosažen limit využití Claude. Limit se obnoví v **{{time}} {{timezone}}** – {{date}}"
   },
-  "codex": {
+  "permissionModes": {
     "permissionMode": "Režim oprávnění",
     "modes": {
       "default": "Výchozí režim",

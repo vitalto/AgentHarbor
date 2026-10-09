@@ -93,7 +93,7 @@
   "usageLimit": {
     "resetAt": "Claude 使用限制已達到。您的限制將在 **{{time}} {{timezone}}** - {{date}} 重置"
   },
-  "codex": {
+  "permissionModes": {
     "permissionMode": "權限模式",
     "modes": {
       "default": "預設模式",

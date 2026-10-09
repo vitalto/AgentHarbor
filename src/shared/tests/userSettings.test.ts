@@ -72,10 +72,10 @@ test('a burst of writes collapses into one request carrying every change', async
 
   store.writeUserPreference('theme', 'dark');
   store.writeUserPreference('userLanguage', 'de');
-  store.writeUserPreference('tasksEnabled', true);
+  store.writeUserPreference('projectSortOrder', 'date');
 
   await vi.advanceTimersByTimeAsync(500);
-  assert.deepEqual(saved, [{ theme: 'dark', userLanguage: 'de', tasksEnabled: true }]);
+  assert.deepEqual(saved, [{ theme: 'dark', userLanguage: 'de', projectSortOrder: 'date' }]);
 });
 
 test('writing the value a preference already has sends nothing and notifies nobody', async () => {
@@ -117,16 +117,14 @@ test('hydrate adopts the server copy over the local mirror', async () => {
 
 test('hydrate seeds a preference the server has never seen from its legacy key', async () => {
   localStorage.setItem('theme', 'dark');
-  localStorage.setItem('tasks-enabled', 'true');
-  localStorage.setItem('selected-provider', 'codex');
+  localStorage.setItem('selected-provider', 'claude');
   localStorage.setItem('uiPreferences', JSON.stringify({ showThinking: false }));
 
   const store = await loadStore();
   await store.hydrateUserPreferences();
 
   assert.equal(store.readUserPreference('theme', 'light'), 'dark');
-  assert.equal(store.readUserPreference('tasksEnabled', false), true);
-  assert.equal(store.readUserPreference('selectedProvider', 'claude'), 'codex');
+  assert.equal(store.readUserPreference('selectedProvider', 'none'), 'claude');
   assert.deepEqual(store.readUserPreference('uiPreferences', {}), { showThinking: false });
 
   await vi.advanceTimersByTimeAsync(500);

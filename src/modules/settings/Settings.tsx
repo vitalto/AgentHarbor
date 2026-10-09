@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -8,11 +8,8 @@ import SettingsSidebar from '@/modules/settings/SettingsSidebar';
 import AgentsSettingsTab from '@/modules/settings/tabs/agents-settings/AgentsSettingsTab';
 import AppearanceSettingsTab from '@/modules/settings/tabs/AppearanceSettingsTab';
 import CredentialsSettingsTab from '@/modules/settings/tabs/api-settings/CredentialsSettingsTab';
-import VoiceSettingsTab from '@/modules/settings/tabs/VoiceSettingsTab';
 import GitSettingsTab from '@/modules/settings/tabs/git-settings/GitSettingsTab';
-import BrowserUseSettingsTab from '@/modules/settings/tabs/browser-use-settings/BrowserUseSettingsTab';
 import NotificationsSettingsTab from '@/modules/settings/tabs/NotificationsSettingsTab';
-import TasksSettingsTab from '@/modules/settings/tabs/tasks-settings/TasksSettingsTab';
 import { PluginSettingsTab } from '@/modules/plugins';
 import AboutTab from '@/modules/settings/tabs/AboutTab';
 import { useSettingsController } from '@/modules/settings/hooks/useSettingsController';
@@ -26,23 +23,9 @@ type SettingsProps = {
   initialTab?: string;
 };
 
-type DesktopNotificationsState = {
-  enabled: boolean;
-  supported: boolean;
-  connectedCount?: number;
-  targetCount?: number;
-  lastError?: string | null;
-};
-
 /** Exported as the settings module's public entry point and rendered by the sidebar module as its settings dialog. */
 function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: SettingsProps) {
   const { t } = useTranslation('settings');
-  const desktopNotificationsBridge = useMemo(() => (
-    typeof window === 'undefined'
-      ? null
-      : ((window as any).cloudcliDesktopNotifications || null)
-  ), []);
-  const [desktopNotificationsState, setDesktopNotificationsState] = useState<DesktopNotificationsState | null>(null);
   const {
     activeTab,
     setActiveTab,
@@ -55,10 +38,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setClaudePermissions,
     notificationPreferences,
     setNotificationPreferences,
-    cursorPermissions,
-    setCursorPermissions,
-    codexPermissionMode,
-    setCodexPermissionMode,
     providerAuthStatus,
     openLoginForProvider,
     showLoginModal,
@@ -93,45 +72,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setNotificationPreferences({
       ...notificationPreferences,
       channels: { ...notificationPreferences.channels, webPush: false },
-    });
-  };
-
-  useEffect(() => {
-    if (!desktopNotificationsBridge) return undefined;
-    let mounted = true;
-    desktopNotificationsBridge.getState().then((state: any) => {
-      if (mounted) {
-        setDesktopNotificationsState(state?.desktopNotifications || null);
-      }
-    }).catch(() => {});
-    const unsubscribe = desktopNotificationsBridge.onStateUpdated?.((state: any) => {
-      if (mounted) {
-        setDesktopNotificationsState(state?.desktopNotifications || null);
-      }
-    });
-    return () => {
-      mounted = false;
-      unsubscribe?.();
-    };
-  }, [desktopNotificationsBridge]);
-
-  const handleEnableDesktopNotifications = async () => {
-    if (!desktopNotificationsBridge) return;
-    const state = await desktopNotificationsBridge.update({ enabled: true });
-    setDesktopNotificationsState(state?.desktopNotifications || null);
-    setNotificationPreferences({
-      ...notificationPreferences,
-      channels: { ...notificationPreferences.channels, desktop: true },
-    });
-  };
-
-  const handleDisableDesktopNotifications = async () => {
-    if (!desktopNotificationsBridge) return;
-    const state = await desktopNotificationsBridge.update({ enabled: false });
-    setDesktopNotificationsState(state?.desktopNotifications || null);
-    setNotificationPreferences({
-      ...notificationPreferences,
-      channels: { ...notificationPreferences.channels, desktop: false },
     });
   };
 
@@ -240,17 +180,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   onProviderLogin={openLoginForProvider}
                   claudePermissions={claudePermissions}
                   onClaudePermissionsChange={setClaudePermissions}
-                  cursorPermissions={cursorPermissions}
-                  onCursorPermissionsChange={setCursorPermissions}
-                  codexPermissionMode={codexPermissionMode}
-                  onCodexPermissionModeChange={setCodexPermissionMode}
                   projects={projects}
                 />
               )}
-
-              {activeTab === 'tasks' && <TasksSettingsTab />}
-
-              {activeTab === 'browser' && <BrowserUseSettingsTab />}
 
               {activeTab === 'notifications' && (
                 <NotificationsSettingsTab
@@ -261,16 +193,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   isPushLoading={isPushLoading}
                   onEnablePush={handleEnablePush}
                   onDisablePush={handleDisablePush}
-                  isDesktop={Boolean(desktopNotificationsBridge)}
-                  desktopNotifications={desktopNotificationsState}
-                  onEnableDesktopNotifications={handleEnableDesktopNotifications}
-                  onDisableDesktopNotifications={handleDisableDesktopNotifications}
                 />
               )}
 
               {activeTab === 'api' && <CredentialsSettingsTab />}
-
-              {activeTab === 'voice' && <VoiceSettingsTab />}
 
               {activeTab === 'plugins' && <PluginSettingsTab />}
 

@@ -101,7 +101,7 @@
   "usageLimit": {
     "resetAt": "Batas penggunaan Claude tercapai. Batas akan direset pada **{{time}} {{timezone}}** - {{date}}"
   },
-  "codex": {
+  "permissionModes": {
     "permissionMode": "Mode Izin",
     "modes": {
       "default": "Mode Default",

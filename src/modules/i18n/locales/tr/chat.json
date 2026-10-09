@@ -99,7 +99,7 @@
   "usageLimit": {
     "resetAt": "Claude kullanım limitin doldu. Limitin **{{time}} {{timezone}}** — {{date}} tarihinde sıfırlanacak"
   },
-  "codex": {
+  "permissionModes": {
     "permissionMode": "İzin Modu",
     "modes": {
       "default": "Varsayılan Mod",

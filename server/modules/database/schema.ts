@@ -96,30 +96,6 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 `;
 
-export const SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS scheduled_messages (
-    id TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    session_id TEXT NOT NULL,
-    content TEXT NOT NULL,
-    -- Composer preferences (model, effort, permission mode, attachments) as
-    -- they were when the message was scheduled, so it runs the way the user
-    -- set it up rather than however the session is configured hours later.
-    options TEXT NOT NULL DEFAULT '{}',
-    -- UTC. The client sends an absolute instant so the schedule does not move
-    -- when the user changes time zone between scheduling and firing.
-    scheduled_for DATETIME NOT NULL,
-    -- pending | sent | failed | cancelled
-    status TEXT NOT NULL DEFAULT 'pending',
-    -- Why a failed one failed, shown next to it in the composer.
-    failure_reason TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
-);
-`;
-
 export const SESSIONS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT NOT NULL,
@@ -237,7 +213,7 @@ CREATE TABLE IF NOT EXISTS session_drafts (
  * Provider sessions an app session has moved off, and must never move back to.
  *
  * Editing a message on a provider that cannot resume a transcript partway
- * (Codex) is done by branching: the conversation is copied up to the edited
+ * is done by branching: the conversation is copied up to the edited
  * turn and the app session follows the copy. The original transcript is left
  * on disk untouched — nothing is deleted — but it is no longer the session's,
  * and the indexer would otherwise rediscover it on its next full scan and hand

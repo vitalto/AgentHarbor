@@ -87,9 +87,5 @@ export function createCliApplication(): CliApplication {
       // eslint-disable-next-line boundaries/no-unknown
       await import('../../index.js');
     },
-    startBrowserUseMcp: async () => {
-      const { startBrowserUseMcp } = await import('../browser-use/index.js');
-      await startBrowserUseMcp();
-    },
   });
 }

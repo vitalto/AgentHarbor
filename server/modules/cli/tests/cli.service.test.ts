@@ -41,7 +41,6 @@ function createHarness() {
     startServer: async () => {
       serverStarts += 1;
     },
-    startBrowserUseMcp: async () => undefined,
   });
 
   return {

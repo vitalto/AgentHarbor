@@ -14,8 +14,6 @@ type WorkspaceHeaderProps = {
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
   selectedProject: Project;
   selectedSession: ProjectSession | null;
-  shouldShowTasksTab: boolean;
-  shouldShowBrowserTab: boolean;
   isMobile: boolean;
   onMenuClick: () => void;
   /** Persists a new title for a session; resolves false when the backend refuses it. */
@@ -28,8 +26,6 @@ export default function WorkspaceHeader({
   setActiveTab,
   selectedProject,
   selectedSession,
-  shouldShowTasksTab,
-  shouldShowBrowserTab,
   isMobile,
   onMenuClick,
   onRenameSession,
@@ -104,7 +100,6 @@ export default function WorkspaceHeader({
             activeTab={activeTab}
             selectedProject={selectedProject}
             selectedSession={selectedSession}
-            shouldShowTasksTab={shouldShowTasksTab}
             onRenameSession={onRenameSession}
           />
           <WorkspaceConnectionStatus />
@@ -126,8 +121,6 @@ export default function WorkspaceHeader({
               <WorkspaceTabs
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
-                shouldShowTasksTab={shouldShowTasksTab}
-                shouldShowBrowserTab={shouldShowBrowserTab}
               />
             </div>
             {canScrollRight && (

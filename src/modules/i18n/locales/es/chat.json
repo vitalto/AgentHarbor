@@ -100,7 +100,7 @@
   "usageLimit": {
     "resetAt": "Se alcanzó el límite de uso de Claude. Tu límite se restablecerá a las **{{time}} {{timezone}}** - {{date}}"
   },
-  "codex": {
+  "permissionModes": {
     "permissionMode": "Modo de permisos",
     "modes": {
       "default": "Modo por defecto",

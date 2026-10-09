@@ -93,7 +93,7 @@
   "usageLimit": {
     "resetAt": "Claudeの使用制限に達しました。制限は**{{time}} {{timezone}}** - {{date}}にリセットされます"
   },
-  "codex": {
+  "permissionModes": {
     "permissionMode": "権限モード",
     "modes": {
       "default": "デフォルトモード",
