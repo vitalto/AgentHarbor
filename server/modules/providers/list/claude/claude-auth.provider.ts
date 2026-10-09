@@ -1,10 +1,9 @@
+import fs from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import spawn from 'cross-spawn';
-
-import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
+import { getAgentConfig } from '@/modules/tmux/index.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus, ProviderAuthSubscriptionOverride } from '@/shared/types.js';
 import { getClaudeConfigDir, readObjectRecord, readOptionalString } from '@/shared/utils.js';
@@ -34,16 +33,25 @@ export class ClaudeProviderAuth implements IProviderAuth {
   /**
    * Checks whether the Claude Code CLI is available on this host.
    */
+  /**
+   * Whether the command agent windows launch (AH_CLAUDE_CMD) exists. Looked up
+   * rather than run: the server never starts Claude outside tmux, and a Windows
+   * claude.exe cannot even start from a service that has no WSL interop session.
+   */
   private checkInstalled(): boolean {
-    // cross-spawn resolves shims and PATHEXT itself, so the bare command is a
-    // usable fallback here even where the SDK's raw spawn could not use it.
-    const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH) ?? 'claude';
-    try {
-      spawn.sync(cliPath, ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return true;
-    } catch {
-      return false;
+    const command = getAgentConfig().claudeCommand;
+    const isExecutable = (candidate: string) => {
+      try {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    if (command.includes('/')) {
+      return isExecutable(command);
     }
+    return (process.env.PATH ?? '').split(path.delimiter).some((directory) => directory && isExecutable(path.join(directory, command)));
   }
 
   /**
