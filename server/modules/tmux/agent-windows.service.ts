@@ -25,6 +25,17 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class AgentWindowError extends Error {}
 
+/** The session's Claude in another terminal is not idle; moving it would cut that work off. */
+export class AgentBusyElsewhereError extends AgentWindowError {
+  constructor(readonly holder: ClaudeProcess) {
+    super(
+      `Claude in the other terminal (pid ${holder.pid}) reports "${holder.status}"`
+      + `${holder.statusSince ? ` since ${new Date(holder.statusSince).toISOString()}` : ''}. `
+      + 'Let it finish there, or close it anyway (whatever it is doing there stops).',
+    );
+  }
+}
+
 async function uniqueWindowName(base: string): Promise<string> {
   const taken = new Set((await tmuxService.listPanes()).map((pane) => pane.windowName));
   if (!taken.has(base)) {
@@ -201,7 +212,8 @@ async function stopClaudeProcess(claude: ClaudeProcess): Promise<void> {
     return;
   }
   await new Promise<void>((resolve, reject) => {
-    execFile(TASKKILL, ['/PID', String(claude.pid), '/F'], { timeout: 10_000 }, (error) => (error ? reject(error) : resolve()));
+    // /T: its own children (hung shells, MCP servers) go with it instead of lingering as orphans.
+    execFile(TASKKILL, ['/PID', String(claude.pid), '/T', '/F'], { timeout: 10_000 }, (error) => (error ? reject(error) : resolve()));
   });
 }
 
@@ -211,7 +223,7 @@ async function stopClaudeProcess(claude: ClaudeProcess): Promise<void> {
  * is idle, so no turn is cut off — and the session is resumed in tmux (or the
  * tmux copy that already exists is kept).
  */
-export async function moveSessionToTmux(appSessionId: string): Promise<PaneSession> {
+export async function moveSessionToTmux(appSessionId: string, options: { force?: boolean } = {}): Promise<PaneSession> {
   const session = sessionsDb.getSessionById(appSessionId);
   const providerSessionId = session?.provider_session_id;
   if (!providerSessionId) {
@@ -227,11 +239,8 @@ export async function moveSessionToTmux(appSessionId: string): Promise<PaneSessi
     throw new AgentWindowError('Could not tell which Claude process belongs to the tmux window; close the other one by hand.');
   }
   const working = outside.find((claude) => claude.activity !== 'idle');
-  if (working) {
-    throw new AgentWindowError(
-      `Claude is ${working.activity === 'waiting' ? 'waiting for an answer' : 'working'} in the other terminal (pid ${working.pid}). `
-      + 'Let it finish there, then move the session.',
-    );
+  if (working && !options.force) {
+    throw new AgentBusyElsewhereError(working);
   }
 
   for (const claude of outside) {

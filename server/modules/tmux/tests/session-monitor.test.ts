@@ -61,7 +61,7 @@ async function harness() {
     registry,
     readStatuses: async () => (state.paneAlive || state.runsElsewhere
       ? new Map<string, ClaudeStatus>([['p1', {
-        providerSessionId: 'p1', activity: state.activity, pid: 1, windowsPid: state.runsElsewhere, cwd: null, updatedAt: 0, startedAt: null, processCount: 1,
+        providerSessionId: 'p1', activity: state.activity, status: state.activity, statusSince: null, pid: 1, windowsPid: state.runsElsewhere, cwd: null, updatedAt: 0, startedAt: null, processCount: 1,
       }]])
       : new Map<string, ClaudeStatus>()),
     resolveProviderSessionId: () => 'p1',

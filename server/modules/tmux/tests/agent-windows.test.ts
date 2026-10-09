@@ -7,6 +7,8 @@ import type { ClaudeProcess } from '@/modules/tmux/claude-status.js';
 const windowsConsoleStatus: ClaudeProcess = {
   providerSessionId: 's1',
   activity: 'idle',
+  status: 'idle',
+  statusSince: null,
   pid: 1248,
   windowsPid: true,
   cwd: 'D:\\Develop\\TerminalShare',
@@ -26,7 +28,7 @@ test('a session with no live Claude process may be resumed', () => {
 });
 
 const claudeProcess = (pid: number, startedAt: number): ClaudeProcess => ({
-  providerSessionId: 's1', activity: 'idle', pid, windowsPid: true, cwd: null, updatedAt: 0, startedAt,
+  providerSessionId: 's1', activity: 'idle', status: 'idle', statusSince: null, pid, windowsPid: true, cwd: null, updatedAt: 0, startedAt,
 });
 
 test('the process started with the tmux pane stays; the other holder of the session is the outside one', () => {

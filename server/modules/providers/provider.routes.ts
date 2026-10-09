@@ -944,7 +944,8 @@ router.post(
   '/sessions/:sessionId/move-to-tmux',
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
-    res.json(createApiSuccessResponse(await sessionsService.moveAgentToTmux(sessionId)));
+    const force = (req.body as { force?: unknown } | undefined)?.force === true;
+    res.json(createApiSuccessResponse(await sessionsService.moveAgentToTmux(sessionId, { force })));
   }),
 );
 

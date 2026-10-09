@@ -510,12 +510,12 @@ function ChatInterface({
             <OutsideTmuxNotice
               agent={viewedOutsideTmux}
               hasPendingMessage={hasMessageAwaitingMove}
-              onMove={async () => {
-                await moveToTmux(viewedSessionId);
+              onMove={async (options) => {
+                await moveToTmux(viewedSessionId, options);
                 setHasMessageAwaitingMove(false);
               }}
-              onMoveAndSend={async () => {
-                await moveToTmux(viewedSessionId);
+              onMoveAndSend={async (options) => {
+                await moveToTmux(viewedSessionId, options);
                 setHasMessageAwaitingMove(false);
                 sendAfterMoveRef.current = true;
                 handleSubmit({ preventDefault: () => undefined } as Parameters<typeof handleSubmit>[0]);

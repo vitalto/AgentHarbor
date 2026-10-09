@@ -24,6 +24,13 @@ export type AgentWindow = {
 
 const POLL_MS = 4000;
 
+/** A refused move; `code` is AGENT_BUSY_ELSEWHERE when the other Claude is not idle (retry with force). */
+export class AgentMoveError extends Error {
+  constructor(message: string, readonly code: string | null) {
+    super(message);
+  }
+}
+
 /**
  * One shared poll for every component that shows live windows (sidebar dots,
  * chat key bar), so mounting more consumers does not multiply requests.
@@ -80,12 +87,13 @@ export function useAgentWindows() {
   }, []);
 
   /** Ends Claude in the other terminal and continues the session in tmux; rejects with the server's reason. */
-  const moveToTmux = useCallback(async (sessionId: string) => {
-    const response = await api.providers.moveAgentToTmux(sessionId);
-    const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } | string };
+  const moveToTmux = useCallback(async (sessionId: string, options: { force?: boolean } = {}) => {
+    const response = await api.providers.moveAgentToTmux(sessionId, options.force ?? false);
+    const body = (await response.json().catch(() => ({}))) as { error?: { message?: string; code?: string } | string };
     await refreshAgentWindows();
     if (!response.ok) {
-      throw new Error(typeof body.error === 'string' ? body.error : body.error?.message ?? 'Could not move the session to tmux');
+      const error = typeof body.error === 'string' ? { message: body.error } : body.error;
+      throw new AgentMoveError(error?.message ?? 'Could not move the session to tmux', error?.code ?? null);
     }
   }, []);
 

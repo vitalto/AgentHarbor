@@ -1,13 +1,13 @@
 import { useState } from 'react';
 
-import type { AgentWindow } from '@/shared/hooks/useAgentWindows';
+import { AgentMoveError, type AgentWindow } from '@/shared/hooks/useAgentWindows';
 
 type OutsideTmuxNoticeProps = {
   agent: AgentWindow;
   /** The user tried to send: offer to move and send the waiting message in one go. */
   hasPendingMessage: boolean;
-  onMove: () => Promise<void>;
-  onMoveAndSend: () => Promise<void>;
+  onMove: (options: { force?: boolean }) => Promise<void>;
+  onMoveAndSend: (options: { force?: boolean }) => Promise<void>;
 };
 
 /**
@@ -19,15 +19,19 @@ type OutsideTmuxNoticeProps = {
 export default function OutsideTmuxNotice({ agent, hasPendingMessage, onMove, onMoveAndSend }: OutsideTmuxNoticeProps) {
   const [isMoving, setIsMoving] = useState(false);
   const [moveError, setMoveError] = useState<string | null>(null);
+  /** The last move was refused because Claude there is busy; the user may override. */
+  const [canForce, setCanForce] = useState(false);
   const where = agent.location === 'windows' ? 'a Windows terminal' : 'another terminal';
 
-  const run = async (action: () => Promise<void>) => {
+  const run = async (action: (options: { force?: boolean }) => Promise<void>, force = false) => {
     setIsMoving(true);
     setMoveError(null);
+    setCanForce(false);
     try {
-      await action();
+      await action({ force });
     } catch (error) {
       setMoveError(error instanceof Error ? error.message : String(error));
+      setCanForce(error instanceof AgentMoveError && error.code === 'AGENT_BUSY_ELSEWHERE');
     } finally {
       setIsMoving(false);
     }
@@ -47,6 +51,16 @@ export default function OutsideTmuxNotice({ agent, hasPendingMessage, onMove, on
       <span className="min-w-0 flex-1">{message}</span>
       {moveError && <span className="basis-full text-red-600 dark:text-red-400">{moveError}</span>}
       <div className="flex shrink-0 gap-2">
+        {canForce && (
+          <button
+            type="button"
+            disabled={isMoving}
+            onClick={() => void run(hasPendingMessage && !agent.duplicateProcesses ? onMoveAndSend : onMove, true)}
+            className="rounded-md bg-red-600 px-2.5 py-1 font-medium text-white disabled:opacity-50"
+          >
+            Close it anyway
+          </button>
+        )}
         {hasPendingMessage && !agent.duplicateProcesses && (
           <button
             type="button"

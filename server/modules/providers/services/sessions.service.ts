@@ -5,7 +5,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { AgentWindowError, ensureAgentWindow, moveSessionToTmux, paneRegistry, readClaudeStatuses } from '@/modules/tmux/index.js';
+import { AgentBusyElsewhereError, AgentWindowError, ensureAgentWindow, moveSessionToTmux, paneRegistry, readClaudeStatuses } from '@/modules/tmux/index.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   BackgroundTaskSummary,
@@ -754,11 +754,18 @@ export const sessionsService = {
   },
 
   /** Moves a session Claude runs in another terminal into tmux (see moveSessionToTmux). */
-  async moveAgentToTmux(sessionId: string): Promise<{ sessionId: string; windowName: string }> {
+  async moveAgentToTmux(sessionId: string, options: { force?: boolean } = {}): Promise<{ sessionId: string; windowName: string }> {
     try {
-      const pane = await moveSessionToTmux(sessionId);
+      const pane = await moveSessionToTmux(sessionId, options);
       return { sessionId, windowName: pane.pane.windowName };
     } catch (error) {
+      if (error instanceof AgentBusyElsewhereError) {
+        throw new AppError(error.message, {
+          code: 'AGENT_BUSY_ELSEWHERE',
+          statusCode: 409,
+          details: { pid: error.holder.pid, status: error.holder.status, since: error.holder.statusSince },
+        });
+      }
       if (error instanceof AgentWindowError) {
         throw new AppError(error.message, { code: 'AGENT_MOVE_FAILED', statusCode: 409 });
       }

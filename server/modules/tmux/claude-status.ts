@@ -11,6 +11,10 @@ export type ClaudeActivity = 'busy' | 'waiting' | 'idle';
 export type ClaudeProcess = {
   providerSessionId: string;
   activity: ClaudeActivity;
+  /** Claude's own word for it (busy, shell, waiting, idle…). */
+  status: string;
+  /** Since when Claude has reported that status (epoch ms), if it says. */
+  statusSince: number | null;
   pid: number;
   /** Windows claude.exe seen from WSL: its pid lives in another process table. */
   windowsPid: boolean;
@@ -111,6 +115,8 @@ export async function findWindowsClaudeByCommandLine(providerSessionId: string):
     found.push({
       providerSessionId,
       activity: 'idle',
+      status: 'idle',
+      statusSince: null,
       pid,
       windowsPid: true,
       cwd: null,
@@ -176,6 +182,8 @@ export async function readClaudeProcesses(config: AgentConfig = getAgentConfig()
     processes.push({
       providerSessionId,
       activity,
+      status: String(record.status),
+      statusSince: typeof record.statusUpdatedAt === 'number' ? record.statusUpdatedAt : null,
       pid,
       windowsPid,
       cwd: typeof record.cwd === 'string' ? record.cwd : null,
