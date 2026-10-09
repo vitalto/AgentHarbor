@@ -11,3 +11,33 @@ Contributions by Siteboon AI B.V. prior to commit 004135ef were originally
 published under GPL-3.0 and are hereby relicensed to AGPL-3.0-or-later.
 Contributions by other authors prior to that commit remain under GPL-3.0
 and are incorporated into this work as permitted by GPL-3.0 Section 13.
+
+-------------------------------------------------------------------------
+
+AgentHarbor
+Modifications copyright 2026 vitalto (https://github.com/vitalto/AgentHarbor)
+
+AgentHarbor is a modified version of CloudCLI UI
+(https://github.com/siteboon/claudecodeui). It was modified by vitalto in 2026
+and is distributed under the same license (AGPL-3.0-or-later, including the
+additional terms under Section 7 in the LICENSE file). AgentHarbor is not the
+original CloudCLI UI and is not affiliated with or endorsed by Siteboon AI B.V.
+
+Summary of modifications:
+
+- Claude runtime replaced: instead of running Claude Code through the Agent SDK
+  or in stream-json mode, every agent is an interactive Claude Code TUI in a
+  tmux window. Web messages are typed into the TUI, the chat renders the
+  session's .jsonl transcript live, TUI menus (permission prompts, questions,
+  trust dialog) are shown as buttons, and the terminal tab attaches to the same
+  tmux window. A SessionStart hook maps tmux panes to Claude sessions; Claude's
+  own session status files drive the activity indicators.
+- Support for driving the Windows Claude Code binary from WSL tmux, with
+  Windows <-> WSL path translation.
+- Removed: the Codex, Cursor, OpenCode and Gemini providers, voice input,
+  TaskMaster / PRD editor, browser use, scheduled messages, /api/agent, the
+  Electron desktop app, the Docker sandbox command, edit-and-resend, fork,
+  model / effort / permission pickers, AI-generated commit messages, links to
+  the hosted CloudCLI service, and release / Docker / translated-README files.
+- Renamed to AgentHarbor (package, CLI command, UI, data directory
+  ~/.agentharbor) with a new logo.

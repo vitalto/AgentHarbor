@@ -1,156 +1,49 @@
-# Contributing to CloudCLI UI
+# Contributing to AgentHarbor
 
-Thanks for your interest in contributing to CloudCLI UI! Before you start, please take a moment to read through this guide.
+AgentHarbor is a small fork maintained by one person. Bug reports and focused pull requests are
+welcome at https://github.com/vitalto/AgentHarbor.
 
-## Before You Start
+- **Bugs**: open an issue with steps to reproduce, your OS / WSL setup, tmux and Claude Code
+  versions, and the relevant server log lines.
+- **Features**: open an issue first so we can agree on the scope before you write code.
+- **Upstream bugs**: if a bug also exists in CloudCLI UI, the project AgentHarbor is derived from,
+  consider reporting it upstream too.
 
-- **Search first.** Check [existing issues](https://github.com/siteboon/claudecodeui/issues) and [pull requests](https://github.com/siteboon/claudecodeui/pulls) to avoid duplicating work.
-- **Discuss first** for new features. Open an [issue](https://github.com/siteboon/claudecodeui/issues/new) to discuss your idea before investing time in implementation. We may already have plans or opinions on how it should work.
-- **Bug fixes are always welcome.** If you spot a bug, feel free to open a PR directly.
+## Development setup
 
-## Prerequisites
-
-- [Node.js](https://nodejs.org/) 22 or later
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and configured
-
-## Getting Started
-
-1. Fork the repository
-2. Clone your fork:
-   ```bash
-   git clone https://github.com/<your-username>/claudecodeui.git
-   cd claudecodeui
-   ```
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
-5. Create a branch for your changes:
-   ```bash
-   git checkout -b feat/your-feature-name
-   ```
-
-## Project Structure
-
-```
-claudecodeui/
-├── src/              # React frontend (Vite + Tailwind)
-│   ├── components/   # UI components
-│   ├── contexts/     # React context providers
-│   ├── hooks/        # Custom React hooks
-│   ├── i18n/         # Internationalization and translations
-│   ├── lib/          # Shared frontend libraries
-│   ├── types/        # TypeScript type definitions
-│   └── utils/        # Frontend utilities
-├── server/           # Express backend
-│   ├── routes/       # API route handlers
-│   ├── middleware/    # Express middleware
-│   ├── database/     # SQLite database layer
-│   └── tools/        # CLI tool integrations
-├── shared/           # Code shared between client and server
-└── public/           # Static assets, icons, PWA manifest
-```
-
-## Development Workflow
-
-- `npm run dev` — Start both the frontend and backend in development mode
-- `npm run build` — Create a production build
-- `npm run server` — Start only the backend server
-- `npm run client` — Start only the Vite dev server
-
-## Making Changes
-
-### Bug Fixes
-
-- Reference the issue number in your PR if one exists
-- Describe how to reproduce the bug in your PR description
-- Add a screenshot or recording for visual bugs
-
-### New Features
-
-- Keep the scope focused — one feature per PR
-- Include screenshots or recordings for UI changes
-
-### Documentation
-
-- Documentation improvements are always welcome
-- Keep language clear and concise
-
-## Commit Convention
-
-We follow [Conventional Commits](https://conventionalcommits.org/) to generate release notes automatically. Every commit message should follow this format:
-
-```
-<type>(optional scope): <description>
-```
-
-Use imperative, present tense: "add feature" not "added feature" or "adds feature".
-
-### Types
-
-| Type | Description |
-|------|-------------|
-| `feat` | A new feature |
-| `fix` | A bug fix |
-| `perf` | A performance improvement |
-| `refactor` | Code change that neither fixes a bug nor adds a feature |
-| `docs` | Documentation only |
-| `style` | CSS, formatting, visual changes |
-| `chore` | Maintenance, dependencies, config |
-| `ci` | CI/CD pipeline changes |
-| `test` | Adding or updating tests |
-| `build` | Build system changes |
-
-### Examples
+Requirements: Linux or WSL 2, tmux >= 3.3, Node.js 22, Claude Code CLI.
 
 ```bash
-feat: add conversation search
-feat(i18n): add Japanese language support
-fix: redirect unauthenticated users to login
-fix(editor): syntax highlighting for .env files
-perf: lazy load code editor component
-refactor(chat): extract message list component
-docs: update API configuration guide
+git clone https://github.com/<your-username>/AgentHarbor.git
+cd AgentHarbor
+npm ci
+npm run dev        # Vite on :5173 plus the API server
 ```
 
-### Breaking Changes
+Useful scripts:
 
-Add `!` after the type or include `BREAKING CHANGE:` in the commit footer:
+| Command | What it does |
+|---|---|
+| `npm run build` | Production build of the client (`dist/`) and server (`dist-server/`) |
+| `npm run server` | Run the built server |
+| `npm run typecheck` | TypeScript checks for client and server |
+| `npm test` | Server tests (`node:test`) |
+| `npm run test:client` | Client tests (Vitest) |
+| `npm run lint` | oxlint over `src/` and `server/` |
 
-```bash
-feat!: redesign settings page layout
-```
+Repository layout: `src/` is the React frontend, `server/` the Express + WebSocket backend
+(`server/modules/tmux` holds the tmux / Claude TUI runtime), `shared/` code used by both, `public/`
+static assets. Coding standards for each side live in `.agents/skills/`.
 
-## Pull Requests
+## Pull requests
 
-- Give your PR a clear, descriptive title following the commit convention above
-- Fill in the PR description with what changed and why
-- Link any related issues
-- Include screenshots for UI changes
-- Make sure the build passes (`npm run build`)
-- Keep PRs focused — avoid unrelated changes
-
-## Releases
-
-Releases are managed by maintainers using [release-it](https://github.com/release-it/release-it) with the [conventional changelog plugin](https://github.com/release-it/conventional-changelog).
-
-```bash
-npm run release           # interactive (prompts for version bump)
-npm run release -- patch  # patch release
-npm run release -- minor  # minor release
-```
-
-This automatically:
-- Bumps the version based on commit types (`feat` = minor, `fix` = patch)
-- Generates categorized release notes
-- Updates `CHANGELOG.md`
-- Creates a git tag and GitHub Release
-- Publishes to npm
+- One topic per PR; describe what changed and why, and how you tested it.
+- Make sure typecheck, tests, lint and the build pass.
+- Commit messages follow [Conventional Commits](https://conventionalcommits.org/)
+  (`feat: ...`, `fix(chat): ...`), enforced by commitlint.
+- Include a screenshot for visible UI changes (desktop and phone width when layout is affected).
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [AGPL-3.0-or-later License](LICENSE), including the additional terms specified in Section 7 of the LICENSE file.
+By contributing you agree that your contributions are licensed under the
+[AGPL-3.0-or-later](LICENSE), including the additional terms in Section 7 of the LICENSE file.
