@@ -24,3 +24,10 @@ test('an empty screen frame means the TUI went idle', () => {
   const busy = applyTuiEvent(empty, { kind: 'tui_screen', lines: ['thinking'] });
   assert.deepEqual(applyTuiEvent(busy, { kind: 'tui_screen', lines: [] }).screen, []);
 });
+
+test('only the spinner word of the TUI screen becomes the activity label', async () => {
+  const { extractTuiActivity } = await import('@/modules/chat/utils/tuiPrompt');
+  assert.equal(extractTuiActivity(['> Write a poem', '* Kneading… (3s · thinking with high effort)']), 'Kneading…');
+  assert.equal(extractTuiActivity(['● Bash(ls)', '✻ Running tests… (12s · ↓ 2.1k tokens)', '  ⎿  ok']), 'Running tests…');
+  assert.equal(extractTuiActivity(['✻ Cogitated for 1s · done 12:30', '> ']), null);
+});

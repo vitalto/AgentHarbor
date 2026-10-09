@@ -6,7 +6,6 @@ import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 import { useTuiSessionState } from '@/modules/chat/hooks/useTuiSessionState';
-import LiveScreen from '@/modules/chat/transcript/LiveScreen';
 import type { TuiKey } from '@/modules/chat/utils/tuiPrompt';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
@@ -490,8 +489,6 @@ function ChatInterface({
               </button>
             </div>
           )}
-
-          {isProcessing && !viewedTui.prompt && <LiveScreen lines={viewedTui.screen} />}
 
           {viewedOutsideTmux && (
             <div className="mx-auto mb-2 max-w-[54.25rem] rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground" data-testid="outside-tmux-notice">

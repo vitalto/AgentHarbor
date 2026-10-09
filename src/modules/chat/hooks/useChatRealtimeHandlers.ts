@@ -8,6 +8,7 @@ import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
 import { collectRunningBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
 import type { TuiEvent } from '@/modules/chat/hooks/useTuiSessionState';
+import { extractTuiActivity } from '@/modules/chat/utils/tuiPrompt';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
   return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';
@@ -211,11 +212,19 @@ export function useChatRealtimeHandlers({
           }
           return;
 
-        case 'tui_screen':
-          if (sid) {
-            onTuiEvent?.(sid, { kind: 'tui_screen', lines: Array.isArray(msg.lines) ? (msg.lines as string[]) : [] });
+        case 'tui_screen': {
+          if (!sid) {
+            return;
+          }
+          const lines = Array.isArray(msg.lines) ? (msg.lines as string[]) : [];
+          onTuiEvent?.(sid, { kind: 'tui_screen', lines });
+          // Only the TUI's spinner word reaches the UI, as the activity pill's label.
+          const activityText = extractTuiActivity(lines);
+          if (activityText && getSessionActivity?.(sid)) {
+            onSessionProcessing?.(sid, { statusText: activityText, canInterrupt: true });
           }
           return;
+        }
 
         case 'transcript_reset':
           // The transcript was rewritten under the live tail (e.g. compaction); reload it.
