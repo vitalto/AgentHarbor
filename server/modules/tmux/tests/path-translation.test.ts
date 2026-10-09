@@ -7,6 +7,7 @@ import { toClaudePath, toLocalPath } from '@/modules/tmux/path-translation.js';
 const windowsClaude: AgentConfig = {
   tmuxSession: 'main',
   claudeCommand: '/mnt/c/Users/u/.local/bin/claude.exe',
+  claudeArgs: '',
   claudeHome: '/mnt/c/Users/u/.claude',
   stateDir: '/mnt/c/Users/u/.agentharbor',
   windowsClaude: true,

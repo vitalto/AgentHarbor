@@ -4,6 +4,8 @@ import path from 'node:path';
 export type AgentConfig = {
   tmuxSession: string;
   claudeCommand: string;
+  /** Extra arguments appended to every Claude launch, already shell-quoted (e.g. `--permission-mode default`). */
+  claudeArgs: string;
   claudeHome: string;
   stateDir: string;
   /** Claude is the Windows binary started through WSL interop, so it speaks Windows paths. */
@@ -17,6 +19,7 @@ export function readAgentConfig(env: NodeJS.ProcessEnv = process.env): AgentConf
   return {
     tmuxSession: env.AH_TMUX_SESSION?.trim() || 'main',
     claudeCommand,
+    claudeArgs: env.AH_CLAUDE_ARGS?.trim() ?? '',
     claudeHome: env.CLAUDE_HOME?.trim() || path.join(os.homedir(), '.claude'),
     stateDir: env.AH_STATE_DIR?.trim() || path.join(os.homedir(), '.agentharbor'),
     windowsClaude: /\.exe$/i.test(claudeCommand),

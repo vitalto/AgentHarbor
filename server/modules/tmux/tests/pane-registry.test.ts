@@ -21,6 +21,7 @@ async function setup(panes: AgentPane[]) {
   const config: AgentConfig = {
     tmuxSession: 'main',
     claudeCommand: '/mnt/c/claude.exe',
+    claudeArgs: '',
     claudeHome: path.join(root, 'claude'),
     stateDir: path.join(root, 'state'),
     windowsClaude: true,

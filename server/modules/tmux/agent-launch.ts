@@ -48,7 +48,8 @@ export function buildAgentLaunch(
   const settingsArg = ` --settings ${quoteForShell(toClaudePath(hookSettingsPath(config), config))}`;
 
   // `exec` makes Claude the pane process, so `$$` here equals tmux's #{pane_pid}.
-  const command = `export AH_PANE="\${TMUX_PANE#%}-$$"; exec ${quoteForShell(config.claudeCommand)}${settingsArg}${sessionArgs}`;
+  const extraArgs = config.claudeArgs ? ` ${config.claudeArgs}` : '';
+  const command = `export AH_PANE="\${TMUX_PANE#%}-$$"; exec ${quoteForShell(config.claudeCommand)}${settingsArg}${extraArgs}${sessionArgs}`;
 
   const env: Record<string, string> = { AH_STATE_DIR: config.stateDir };
   if (config.windowsClaude) {
