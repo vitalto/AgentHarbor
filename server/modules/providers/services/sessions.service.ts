@@ -14,6 +14,7 @@ import type {
   LLMProvider,
   NormalizedMessage,
   WorkflowAgentActivity,
+  SessionSubagent,
 } from '@/shared/types.js';
 import { AppError, sliceTailPage } from '@/shared/utils.js';
 
@@ -541,6 +542,25 @@ export const sessionsService = {
    * that left no transcript for this agent: either way there is nothing to
    * show, and the card says so in one line.
    */
+  async listSubagents(sessionId: string): Promise<SessionSubagent[]> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, { code: 'SESSION_NOT_FOUND', statusCode: 404 });
+    }
+    return (await providerRegistry.resolveProvider(session.provider as LLMProvider).sessions.listSubagents?.(sessionId)) ?? [];
+  },
+
+  async readSubagentActivity(sessionId: string, agentId: string): Promise<WorkflowAgentActivity> {
+    const session = sessionsDb.getSessionById(sessionId);
+    const activity = session
+      ? await providerRegistry.resolveProvider(session.provider as LLMProvider).sessions.readSubagentActivity?.(sessionId, agentId)
+      : null;
+    if (!activity) {
+      throw new AppError(`Subagent "${agentId}" was not found.`, { code: 'SUBAGENT_NOT_FOUND', statusCode: 404 });
+    }
+    return activity;
+  },
+
   async readWorkflowAgentActivity(sessionId: string, runId: string, agentId: string): Promise<WorkflowAgentActivity> {
     const session = sessionsDb.getSessionById(sessionId);
     if (!session) {

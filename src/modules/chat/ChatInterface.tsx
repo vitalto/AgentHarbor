@@ -7,6 +7,7 @@ import { useWebSocket } from '@/shared/context/WebSocketContext';
 import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 import { useTuiSessionState } from '@/modules/chat/hooks/useTuiSessionState';
 import OutsideTmuxNotice from '@/modules/chat/composer/OutsideTmuxNotice';
+import SessionAgentsPanel from '@/modules/chat/composer/SessionAgentsPanel';
 import type { TuiKey } from '@/modules/chat/utils/tuiPrompt';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
@@ -504,6 +505,15 @@ function ChatInterface({
                 <ArrowDownIcon className="h-4 w-4" aria-hidden />
               </button>
             </div>
+          )}
+
+          {viewedSessionId && (
+            <SessionAgentsPanel
+              sessionId={viewedSessionId}
+              onFileOpen={onFileOpen}
+              createDiff={createDiff}
+              selectedProject={selectedProject}
+            />
           )}
 
           {viewedOutsideTmux && viewedSessionId && (

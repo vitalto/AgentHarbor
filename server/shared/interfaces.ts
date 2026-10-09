@@ -19,6 +19,7 @@ import type {
   ProviderRuntimeWriter,
   UpsertProviderMcpServerInput,
   WorkflowAgentActivity,
+  SessionSubagent,
 } from '@/shared/types.js';
 
 //----------------- PROVIDER CONTRACT INTERFACES ------------
@@ -225,6 +226,10 @@ export interface IProviderSessions {
    * Implemented only by providers whose runtime spawns workflow agents; its
    * absence is what makes an agent's timeline unavailable in the card.
    */
+  /** The session's subagents, running first. */
+  listSubagents?(sessionId: string): Promise<SessionSubagent[]>;
+  /** One subagent's timeline; null when it left no transcript. */
+  readSubagentActivity?(sessionId: string, agentId: string): Promise<WorkflowAgentActivity | null>;
   readWorkflowAgentActivity?(
     sessionId: string,
     runId: string,

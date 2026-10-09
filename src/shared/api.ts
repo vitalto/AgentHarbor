@@ -275,6 +275,11 @@ export const api = {
     put(`/api/providers/sessions/${sessionId}`, { summary }),
   // What one agent of a workflow run did, read from its transcript on demand
   // when its row in the workflow card is opened.
+  // The subagents (Agent tool) a session spawned, and what one of them did.
+  sessionSubagents: (sessionId: string) =>
+    get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/subagents`),
+  subagentActivity: (sessionId: string, agentId: string) =>
+    get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(agentId)}`),
   workflowAgentActivity: (sessionId: string, runId: string, agentId: string) =>
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/agents/${encodeURIComponent(agentId)}`),
 

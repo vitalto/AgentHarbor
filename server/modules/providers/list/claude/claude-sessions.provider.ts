@@ -17,6 +17,7 @@ import type {
   WorkflowAgentInfo,
   WorkflowAgentProgress,
   WorkflowInfo,
+  SessionSubagent,
 } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
 import { prepareTranscriptMessages, truncateNestedOutput } from '@/shared/message-unification.js';
@@ -58,6 +59,13 @@ const formatDuration = (milliseconds: number): string => {
  * the card says how many earlier ones were left out.
  */
 const MAX_TRANSMITTED_SUBAGENT_ACTIVITIES = 200;
+
+/**
+ * A subagent whose transcript changed this recently counts as running. Claude
+ * records no explicit end for a background agent, so the write rhythm (a row
+ * per step, steps rarely longer than this) is the signal.
+ */
+const SUBAGENT_RUNNING_WINDOW_MS = 90_000;
 
 type ClaudeToolResult = {
   content: unknown;
@@ -1676,6 +1684,80 @@ export class ClaudeSessionsProvider implements IProviderSessions {
    * rule history applies to a launch row, keyed here on the agent's first row
    * rather than the launch's.
    */
+  async listSubagents(sessionId: string): Promise<SessionSubagent[]> {
+    const directory = this.subagentsDirectory(sessionId);
+    if (!directory) {
+      return [];
+    }
+    let names: string[];
+    try {
+      names = (await fsp.readdir(directory)).filter((name) => /^agent-.+\.jsonl$/.test(name));
+    } catch {
+      return [];
+    }
+    const now = Date.now();
+    const subagents = await Promise.all(names.map(async (name): Promise<SessionSubagent | null> => {
+      const transcriptPath = path.join(directory, name);
+      const metaPath = transcriptPath.replace(/\.jsonl$/, '.meta.json');
+      const [stats, metaStats, meta, rawMeta] = await Promise.all([
+        fsp.stat(transcriptPath).catch(() => null),
+        fsp.stat(metaPath).catch(() => null),
+        readClaudeSubagentMeta(metaPath),
+        fsp.readFile(metaPath, 'utf8').then((text) => JSON.parse(text) as AnyRecord).catch(() => ({} as AnyRecord)),
+      ]);
+      if (!stats) {
+        return null;
+      }
+      return {
+        agentId: name.slice('agent-'.length, -'.jsonl'.length),
+        description: meta.description,
+        agentType: meta.agentType,
+        background: rawMeta.requestShape === 'background',
+        running: now - stats.mtimeMs < SUBAGENT_RUNNING_WINDOW_MS,
+        startedAt: metaStats ? new Date(metaStats.mtimeMs).toISOString() : null,
+        updatedAt: new Date(stats.mtimeMs).toISOString(),
+      };
+    }));
+    return subagents
+      .filter((subagent): subagent is SessionSubagent => subagent !== null)
+      .sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async readSubagentActivity(sessionId: string, agentId: string): Promise<WorkflowAgentActivity | null> {
+    const directory = this.subagentsDirectory(sessionId);
+    if (!directory || !/^[\w-]+$/.test(agentId)) {
+      return null;
+    }
+    const transcriptPath = path.join(directory, `agent-${agentId}.jsonl`);
+    const stats = await fsp.stat(transcriptPath).catch(() => null);
+    if (!stats) {
+      return null;
+    }
+    const [transcript, meta] = await Promise.all([
+      readClaudeSubagentTranscript(transcriptPath),
+      readClaudeSubagentMeta(transcriptPath.replace(/\.jsonl$/, '.meta.json')),
+    ]);
+    return {
+      agent: {
+        id: agentId,
+        label: meta.description,
+        model: transcript.model,
+        status: Date.now() - stats.mtimeMs < SUBAGENT_RUNNING_WINDOW_MS ? 'running' : 'completed',
+      },
+      activity: transcript.activity.slice(-MAX_TRANSMITTED_SUBAGENT_ACTIVITIES),
+      activityCount: transcript.activity.length,
+    };
+  }
+
+  /** `<projectDir>/<providerSessionId>/subagents` of an indexed session. */
+  private subagentsDirectory(sessionId: string): string | null {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session?.jsonl_path || !session.provider_session_id) {
+      return null;
+    }
+    return path.join(path.dirname(session.jsonl_path), session.provider_session_id, 'subagents');
+  }
+
   async readWorkflowAgentActivity(
     sessionId: string,
     runId: string,

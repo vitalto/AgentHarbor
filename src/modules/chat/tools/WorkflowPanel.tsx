@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, CircleAlert, CircleCheck, CircleDashed, Workflow } from 'lucide-react';
 
@@ -190,11 +190,10 @@ function mergeWorkflowAgents(
   return rows;
 }
 
-type WorkflowAgentTimelineProps = {
-  sessionId: string;
-  runId: string;
-  agentId: string;
-  /** Whether the card still lists the agent as running, which is what keeps the timeline re-reading. */
+type AgentActivityTimelineProps = {
+  /** Fetches the agent's timeline (a workflow agent, or a session subagent). */
+  readActivity: () => Promise<Response>;
+  /** Whether the agent is still listed as running, which is what keeps the timeline re-reading. */
   isRunning: boolean;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
@@ -209,7 +208,7 @@ type WorkflowAgentTimelineProps = {
  * re-read every few seconds while the agent runs, since the transcript is
  * the only place its progress lands.
  */
-const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFileOpen, createDiff, selectedProject }: WorkflowAgentTimelineProps) => {
+export const AgentActivityTimeline = memo(({ readActivity, isRunning, onFileOpen, createDiff, selectedProject }: AgentActivityTimelineProps) => {
   const { t } = useTranslation();
   // What the last read returned — the timeline, or why there is none — and
   // null until the first read lands. A later read that fails keeps the last
@@ -224,7 +223,7 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
       let settled = false;
       try {
         const payload = await readApiJson<{ data: WorkflowAgentActivity }>(
-          await api.workflowAgentActivity(sessionId, runId, agentId),
+          await readActivity(),
         );
         if (cancelled) {
           return;
@@ -253,7 +252,7 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
       cancelled = true;
       clearTimeout(nextRead);
     };
-  }, [sessionId, runId, agentId, isRunning]);
+  }, [readActivity, isRunning]);
 
   if (!loaded) {
     return <div className="text-[11px] text-muted-foreground/60">{t('workflow.agentTimelineLoading', 'Reading the agent\'s steps…')}</div>;
@@ -278,7 +277,7 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
     />
   );
 });
-WorkflowAgentTimeline.displayName = 'WorkflowAgentTimeline';
+AgentActivityTimeline.displayName = 'AgentActivityTimeline';
 
 type WorkflowAgentRowProps = {
   agent: WorkflowAgentRow;
@@ -295,6 +294,12 @@ type WorkflowAgentRowProps = {
  * timeline.
  */
 const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createDiff, selectedProject }: WorkflowAgentRowProps) => {
+  const runId = timelineAddress?.runId;
+  const timelineSessionId = timelineAddress?.sessionId;
+  const readWorkflowAgentActivity = useCallback(
+    () => api.workflowAgentActivity(timelineSessionId ?? '', runId ?? '', agent.agentId ?? ''),
+    [agent.agentId, runId, timelineSessionId],
+  );
   const { t } = useTranslation();
   // Opened on demand: the timeline is a fetch and, for a long run, a few
   // hundred tool renderers.
@@ -351,10 +356,8 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
 
       {isOpen && timelineAddress && agent.agentId && (
         <div className="mt-1 space-y-2 pl-[30px]">
-          <WorkflowAgentTimeline
-            sessionId={timelineAddress.sessionId}
-            runId={timelineAddress.runId}
-            agentId={agent.agentId}
+          <AgentActivityTimeline
+            readActivity={readWorkflowAgentActivity}
             isRunning={agent.status === 'running'}
             onFileOpen={onFileOpen}
             createDiff={createDiff}

@@ -1007,6 +1007,22 @@ router.get(
   }),
 );
 
+router.get(
+  '/sessions/:sessionId/subagents',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(await sessionsService.listSubagents(parseSessionId(req.params.sessionId))));
+  }),
+);
+
+router.get(
+  '/sessions/:sessionId/subagents/:agentId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const agentId = parseWorkflowAgentId(req.params.agentId);
+    res.json(createApiSuccessResponse(await sessionsService.readSubagentActivity(sessionId, agentId)));
+  }),
+);
+
 router.get('/search/sessions', asyncHandler(async (req: Request, res: Response) => {
   const query = parseSessionSearchQuery(req.query.q);
   const limit = parseSessionSearchLimit(req.query.limit);

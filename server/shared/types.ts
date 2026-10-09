@@ -483,6 +483,19 @@ export type WorkflowAgentProgress = {
  * `activityCount` is the full length of the timeline; `activity` is capped
  * for transport like a subagent's `subagentTools`.
  */
+/** One subagent (Agent tool) a session spawned, as its transcript and sidecar meta describe it. */
+export type SessionSubagent = {
+  agentId: string;
+  description?: string;
+  agentType?: string;
+  /** Launched to run in the background, outliving the turn that spawned it. */
+  background: boolean;
+  /** Its transcript was written moments ago. */
+  running: boolean;
+  startedAt: string | null;
+  updatedAt: string;
+};
+
 export type WorkflowAgentActivity = {
   agent: {
     id: string;
