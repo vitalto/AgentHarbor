@@ -408,6 +408,11 @@ export const api = {
       projectPath: string;
       initialMessage?: unknown;
     }) => post('/api/providers/sessions', payload),
+    agentWindows: () => get('/api/providers/agents/windows'),
+    openAgentWindow: (sessionId: string) =>
+      post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/window`),
+    closeAgentWindow: (sessionId: string) =>
+      del(`/api/providers/sessions/${encodeURIComponent(sessionId)}/window`),
     sessionMessages: (
       sessionId: string,
       pagination: { limit?: number | null; offset?: number } = {},

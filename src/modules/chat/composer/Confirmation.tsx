@@ -8,7 +8,7 @@ import { cn } from '@/shared/utils';
  * The inline tool-permission request in the chat transcript, and its outcome.
  *
  * It lived in shared/ui, but its whole vocabulary is the permission-request
- * domain — approval pending, allow, deny — and PermissionRequestsBanner has
+ * domain — approval pending, allow, deny — and TuiPromptPanel has
  * always been its only consumer. Card, Collapsible and Shimmer stay in shared/ui
  * because they are genuinely generic; this is a composition, like PromptInput.
  */
@@ -56,7 +56,7 @@ export type ConfirmationProps = {
   approval?: ApprovalState;
 } & React.HTMLAttributes<HTMLDivElement>;
 
-/** Renders an inline tool-permission request and its outcome; used by PermissionRequestsBanner. */
+/** Renders an inline tool-permission request and its outcome; used by TuiPromptPanel. */
 export const Confirmation: React.FC<ConfirmationProps> = ({
   className,
   approval = 'pending',
@@ -84,7 +84,7 @@ Confirmation.displayName = 'Confirmation';
 
 export type ConfirmationTitleProps = React.HTMLAttributes<HTMLDivElement>;
 
-/** Title slot of Confirmation, used by PermissionRequestsBanner. */
+/** Title slot of Confirmation, used by TuiPromptPanel. */
 export const ConfirmationTitle: React.FC<ConfirmationTitleProps> = ({
   className,
   ...props
@@ -103,7 +103,7 @@ export type ConfirmationRequestProps = {
   children?: React.ReactNode;
 };
 
-/** Pending-state slot of Confirmation, used by PermissionRequestsBanner. */
+/** Pending-state slot of Confirmation, used by TuiPromptPanel. */
 export const ConfirmationRequest: React.FC<ConfirmationRequestProps> = ({ children }) => {
   const { approval } = useConfirmation();
   if (approval !== 'pending') return null;
@@ -115,7 +115,7 @@ ConfirmationRequest.displayName = 'ConfirmationRequest';
 
 export type ConfirmationActionsProps = React.HTMLAttributes<HTMLDivElement>;
 
-/** Button row of Confirmation, used by PermissionRequestsBanner. */
+/** Button row of Confirmation, used by TuiPromptPanel. */
 export const ConfirmationActions: React.FC<ConfirmationActionsProps> = ({
   className,
   ...props
@@ -139,7 +139,7 @@ export type ConfirmationActionProps = React.ButtonHTMLAttributes<HTMLButtonEleme
   variant?: 'default' | 'outline' | 'ghost' | 'destructive';
 };
 
-/** Single allow/deny button inside ConfirmationActions, used by PermissionRequestsBanner. */
+/** Single allow/deny button inside ConfirmationActions, used by TuiPromptPanel. */
 export const ConfirmationAction: React.FC<ConfirmationActionProps> = ({
   variant = 'default',
   ...props

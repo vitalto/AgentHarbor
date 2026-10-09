@@ -10,9 +10,9 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { PaperclipIcon, MessageSquareIcon, XIcon, ArrowUpIcon, PencilIcon } from 'lucide-react';
+import { PaperclipIcon, MessageSquareIcon, XIcon, ArrowUpIcon } from 'lucide-react';
 
-import type { QueuedDraft, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
+import type { QueuedDraft, SlashCommand, SessionActivity } from '@/shared/types';
 import {
   PromptInput,
   PromptInputHeader,
@@ -26,11 +26,11 @@ import {
 import CommandMenu from '@/modules/chat/composer/CommandMenu';
 import ActivityIndicator from '@/modules/chat/composer/ActivityIndicator';
 import ComposerAttachment from '@/modules/chat/composer/ComposerAttachment';
-import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequestsBanner';
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
-import ComposerModelMenu from '@/modules/chat/composer/ComposerModelMenu';
-import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMenu';
+import TuiKeyBar from '@/modules/chat/composer/TuiKeyBar';
+import TuiPromptPanel from '@/modules/chat/composer/TuiPromptPanel';
+import type { TuiKey, TuiPrompt } from '@/modules/chat/utils/tuiPrompt';
 
 type MentionableFile = {
   name: string;
@@ -38,26 +38,15 @@ type MentionableFile = {
 };
 
 type ChatComposerProps = {
-  pendingPermissionRequests: PendingPermissionRequest[];
-  handlePermissionDecision: (
-    requestIds: string | string[],
-    decision: { allow?: boolean; message?: string; rememberEntry?: string | null; updatedInput?: unknown },
-  ) => void;
-  handleGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
+  /** A menu the session's Claude TUI is showing right now, if any. */
+  tuiPrompt: TuiPrompt | null;
+  onTuiChoose: (optionIndex: number) => void;
+  onTuiKey: (key: TuiKey) => void;
+  /** The session has a live Claude window to send keys to. */
+  hasLiveWindow: boolean;
   activity: SessionActivity | null;
   isLoading: boolean;
   onAbortSession: () => void;
-  permissionMode: PermissionMode;
-  availablePermissionModes: PermissionMode[];
-  onSelectPermissionMode: (mode: PermissionMode) => void;
-  providerLabel: string;
-  effort: string;
-  availableEffortOptions: NonNullable<ProviderModelOption['effort']>['values'];
-  onSelectEffort: (effort: string) => void;
-  model: string;
-  availableModelOptions: ProviderModelOption[];
-  onSelectModel: (model: string) => void;
-  modelsLoading: boolean;
   tokenBudget: Record<string, unknown> | null;
   onShowTokenUsage: () => void;
   slashCommandsCount: number;
@@ -67,9 +56,6 @@ type ChatComposerProps = {
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
   isDragActive: boolean;
   queuedDraft: QueuedDraft | null;
-  /** Set while the composer is replacing an already-sent message. */
-  isEditingSentMessage: boolean;
-  onCancelEditMessage: () => void;
   /** Messages waiting to be sent to this session later. */
   onEditQueuedDraft: () => void;
   onDeleteQueuedDraft: () => void;
@@ -108,27 +94,17 @@ type ChatComposerProps = {
 
 /**
  * Rendered by chat's ChatInterface as the whole input area: textarea, pending
- * attachments, queued message, permission banner and the
- * model/permission popovers that drive the next turn.
+ * attachments, queued message, the live TUI menu (as buttons) and the key
+ * bar for the session's Claude window.
  */
 export default function ChatComposer({
-  pendingPermissionRequests,
-  handlePermissionDecision,
-  handleGrantToolPermission,
+  tuiPrompt,
+  onTuiChoose,
+  onTuiKey,
+  hasLiveWindow,
   activity,
   isLoading,
   onAbortSession,
-  permissionMode,
-  availablePermissionModes,
-  onSelectPermissionMode,
-  providerLabel,
-  effort,
-  availableEffortOptions,
-  onSelectEffort,
-  model,
-  availableModelOptions,
-  onSelectModel,
-  modelsLoading,
   tokenBudget,
   onShowTokenUsage,
   slashCommandsCount,
@@ -138,8 +114,6 @@ export default function ChatComposer({
   onSubmit,
   isDragActive,
   queuedDraft,
-  isEditingSentMessage,
-  onCancelEditMessage,
   onEditQueuedDraft,
   onDeleteQueuedDraft,
   attachedFiles,
@@ -208,14 +182,9 @@ export default function ChatComposer({
     }
   }, [selectedFileIndex, showFileDropdown]);
 
-  // Detect if the AskUserQuestion interactive panel is active
-  const hasQuestionPanel = pendingPermissionRequests.some(
-    (r) => r.toolName === 'AskUserQuestion'
-  );
-
-  // Hide the thinking/status bar while any permission request is pending
-  const hasPendingPermissions = pendingPermissionRequests.length > 0;
-  const hasActivityIndicator = Boolean(activity && !hasPendingPermissions);
+  // Hide the thinking/status bar while the TUI waits on a menu answer
+  const hasPendingPrompt = Boolean(tuiPrompt);
+  const hasActivityIndicator = Boolean(activity && !hasPendingPrompt);
 
   const hasQueuedDraft = Boolean(queuedDraft);
   const canQueueDraft = isLoading && Boolean(input.trim() || attachedFiles.length > 0);
@@ -236,37 +205,15 @@ export default function ChatComposer({
 
   return (
     <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
-      {!hasPendingPermissions && (
+      {!hasPendingPrompt && (
         <div className="pointer-events-none absolute bottom-full left-1/2 z-10 w-[calc(100%-1rem)] max-w-[54.25rem] -translate-x-1/2 translate-y-px bg-transparent sm:w-[calc(100%-2rem)]">
           <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
         </div>
       )}
 
-      {pendingPermissionRequests.length > 0 && (
-        <div className="mx-auto mb-3 max-w-[54.25rem]">
-          <PermissionRequestsBanner
-            pendingPermissionRequests={pendingPermissionRequests}
-            handlePermissionDecision={handlePermissionDecision}
-            handleGrantToolPermission={handleGrantToolPermission}
-          />
-        </div>
-      )}
-
-      {isEditingSentMessage && (
-        <div className="mx-auto mb-2 flex max-w-[54.25rem] items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
-          <PencilIcon className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <span className="min-w-0 flex-1">
-            {t('composer.editing.title')}
-            {' — '}
-            <span className="text-muted-foreground">{t('composer.editing.filesNotReverted')}</span>
-          </span>
-          <button
-            type="button"
-            onClick={onCancelEditMessage}
-            className="shrink-0 rounded-md px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            {t('composer.editing.cancel')}
-          </button>
+      {tuiPrompt && (
+        <div className="mx-auto max-w-[54.25rem]">
+          <TuiPromptPanel prompt={tuiPrompt} onChoose={onTuiChoose} onCancel={() => onTuiKey('Escape')} />
         </div>
       )}
 
@@ -281,7 +228,7 @@ export default function ChatComposer({
         />
       )}
 
-      {!hasQuestionPanel && <div className="relative mx-auto max-w-[54.25rem]">
+      <div className="relative mx-auto max-w-[54.25rem]">
         {showFileDropdown && filteredFiles.length > 0 && (
           <div
             ref={fileDropdownRef}
@@ -430,22 +377,7 @@ export default function ChatComposer({
           </PromptInputTools>
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <ComposerModelMenu
-              effort={effort}
-              effortOptions={availableEffortOptions}
-              onSelectEffort={onSelectEffort}
-              model={model}
-              modelOptions={availableModelOptions}
-              onSelectModel={onSelectModel}
-              modelsLoading={modelsLoading}
-            />
-
-            <ComposerPermissionMenu
-              permissionMode={permissionMode}
-              permissionModes={availablePermissionModes}
-              onSelectPermissionMode={onSelectPermissionMode}
-              providerLabel={providerLabel}
-            />
+            {hasLiveWindow && <TuiKeyBar onKey={onTuiKey} />}
 
             <PromptInputSubmit
               onClick={
@@ -476,7 +408,7 @@ export default function ChatComposer({
           </div>
         </PromptInputFooter>
       </PromptInput>
-      </div>}
+      </div>
     </div>
   );
 }

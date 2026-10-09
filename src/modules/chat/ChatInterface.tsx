@@ -4,6 +4,10 @@ import { ArrowDownIcon } from 'lucide-react';
 
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
+import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
+import { useTuiSessionState } from '@/modules/chat/hooks/useTuiSessionState';
+import LiveScreen from '@/modules/chat/transcript/LiveScreen';
+import type { TuiKey } from '@/modules/chat/utils/tuiPrompt';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
 import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
@@ -67,6 +71,8 @@ function ChatInterface({
   newSessionTrigger,
 }: ChatInterfaceProps) {
   const { subscribe } = useWebSocket();
+  const { handleTuiEvent, getTuiState } = useTuiSessionState();
+  const { findWindow } = useAgentWindows();
   const { t } = useTranslation('chat');
   const processingSessions = useProcessingSessions();
   const {
@@ -101,14 +107,10 @@ function ChatInterface({
     providerModels,
     setStoredProviderModel,
     currentProviderEffort,
-    currentProviderEffortOptions,
     currentProviderModel,
-    currentProviderModelOptions,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
-    availablePermissionModes,
-    selectPermissionMode,
     cyclePermissionMode,
     providerModelCatalog,
     providerModelsLoading,
@@ -226,9 +228,7 @@ function ChatInterface({
     commandModalPayload,
     closeCommandModal,
     showCostModal,
-    editingAnchorId,
     beginEditMessage,
-    cancelEditMessage,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -272,6 +272,19 @@ function ChatInterface({
     });
   }, [isActive, requestLatestMessages, selectedProject, selectedSession, sendMessage]);
 
+  const viewedSessionId = selectedSession?.id || currentSessionId || null;
+  const viewedTui = getTuiState(viewedSessionId);
+  const chooseTuiOption = useCallback((optionIndex: number) => {
+    if (viewedSessionId) {
+      sendMessage({ type: 'chat.tui-keys', sessionId: viewedSessionId, optionIndex });
+    }
+  }, [sendMessage, viewedSessionId]);
+  const pressTuiKey = useCallback((key: TuiKey) => {
+    if (viewedSessionId) {
+      sendMessage({ type: 'chat.tui-keys', sessionId: viewedSessionId, keys: [key] });
+    }
+  }, [sendMessage, viewedSessionId]);
+
   useChatRealtimeHandlers({
     isActive,
     subscribe,
@@ -292,6 +305,7 @@ function ChatInterface({
     onWebSocketReconnect: handleWebSocketReconnect,
     requestLatestMessages,
     sessionStore,
+    onTuiEvent: handleTuiEvent,
   });
 
   // Lets other modules (the quick settings Commands tab) hand text to the
@@ -376,28 +390,10 @@ function ChatInterface({
   // Lets a workflow card fetch its agents' timelines for this session.
   const transcriptSessionValue = useMemo(() => ({ sessionId: currentSessionId }), [currentSessionId]);
 
-  // A composer pick becomes the default for new chats and, when a session is
-  // open, is recorded against that session so reopening it restores this model.
-  const handleSelectComposerModel = useCallback(async (model: string) => {
-    try {
-      await selectProviderModel(provider, model, currentSessionId || selectedSession?.id || null);
-    } catch (error) {
-      console.error('Error changing the active session model:', error);
-    }
-  }, [currentSessionId, provider, selectProviderModel, selectedSession?.id]);
-
-  const handleSelectComposerEffort = useCallback(async (effort: string) => {
-    try {
-      await selectProviderEffort(provider, effort, currentSessionId || selectedSession?.id || null);
-    } catch (error) {
-      console.error('Error changing the active session reasoning effort:', error);
-    }
-  }, [currentSessionId, provider, selectProviderEffort, selectedSession?.id]);
-
   // Mirrors ChatComposer's own visibility check so the message pane can
   // reserve enough bottom space to keep the floating status tab from
   // overlapping the last message.
-  const hasActivityIndicator = Boolean(sessionActivity && pendingPermissionRequests.length === 0);
+  const hasActivityIndicator = Boolean(sessionActivity && !viewedTui.prompt);
 
   const selectedProviderLabel = t('messageTypes.claude');
 
@@ -492,28 +488,18 @@ function ChatInterface({
             </div>
           )}
 
+          {isProcessing && !viewedTui.prompt && <LiveScreen lines={viewedTui.screen} />}
+
           <ChatComposer
-          pendingPermissionRequests={pendingPermissionRequests}
-          handlePermissionDecision={handlePermissionDecision}
-          handleGrantToolPermission={handleGrantToolPermission}
+          tuiPrompt={viewedTui.prompt}
+          onTuiChoose={chooseTuiOption}
+          onTuiKey={pressTuiKey}
+          hasLiveWindow={Boolean(findWindow(viewedSessionId))}
           activity={sessionActivity}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
-          permissionMode={permissionMode}
-          availablePermissionModes={availablePermissionModes}
-          onSelectPermissionMode={selectPermissionMode}
-          providerLabel={selectedProviderLabel}
-          effort={currentProviderEffort}
-          availableEffortOptions={currentProviderEffortOptions}
-          onSelectEffort={handleSelectComposerEffort}
-          model={currentProviderModel}
-          availableModelOptions={currentProviderModelOptions}
-          onSelectModel={handleSelectComposerModel}
-          modelsLoading={providerModelsLoading}
           tokenBudget={tokenBudget}
           onShowTokenUsage={showCostModal}
-          isEditingSentMessage={Boolean(editingAnchorId)}
-          onCancelEditMessage={cancelEditMessage}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}

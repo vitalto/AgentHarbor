@@ -7,6 +7,7 @@ import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
 import { collectRunningBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
+import type { TuiEvent } from '@/modules/chat/hooks/useTuiSessionState';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
   return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';
@@ -44,6 +45,8 @@ type UseChatRealtimeHandlersArgs = {
   onWebSocketReconnect?: () => void;
   requestLatestMessages: (sessionId: string, allowNetwork?: boolean) => Promise<void>;
   sessionStore: SessionStore;
+  /** Live TUI frames (menus, screen tail) of the session's Claude window. */
+  onTuiEvent?: (sessionId: string, event: TuiEvent) => void;
 };
 
 /* ------------------------------------------------------------------ */
@@ -79,6 +82,7 @@ export function useChatRealtimeHandlers({
   onWebSocketReconnect,
   requestLatestMessages,
   sessionStore,
+  onTuiEvent,
 }: UseChatRealtimeHandlersArgs) {
   // Session switches can send `chat.subscribe` before this effect has a chance
   // to rebind the websocket listener. Read the visible session id from a ref
@@ -191,6 +195,34 @@ export function useChatRealtimeHandlers({
           }
           return;
         }
+
+        case 'tui_prompt':
+          if (sid) {
+            if (isActiveRef.current) {
+              void playNotificationSound();
+            }
+            onTuiEvent?.(sid, { kind: 'tui_prompt', prompt: msg.prompt as Extract<TuiEvent, { kind: 'tui_prompt' }>['prompt'] });
+          }
+          return;
+
+        case 'tui_prompt_cleared':
+          if (sid) {
+            onTuiEvent?.(sid, { kind: 'tui_prompt_cleared' });
+          }
+          return;
+
+        case 'tui_screen':
+          if (sid) {
+            onTuiEvent?.(sid, { kind: 'tui_screen', lines: Array.isArray(msg.lines) ? (msg.lines as string[]) : [] });
+          }
+          return;
+
+        case 'transcript_reset':
+          // The transcript was rewritten under the live tail (e.g. compaction); reload it.
+          if (sid && sid === activeViewSessionId) {
+            void requestLatestMessages(sid, isActiveRef.current);
+          }
+          return;
 
         // Sidebar/global events — owned by useProjectsState.
         case 'session_upserted':
@@ -418,5 +450,6 @@ export function useChatRealtimeHandlers({
     onWebSocketReconnect,
     requestLatestMessages,
     sessionStore,
+    onTuiEvent,
   ]);
 }
