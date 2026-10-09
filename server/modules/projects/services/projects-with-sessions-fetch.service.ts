@@ -181,7 +181,7 @@ export async function getProjectsWithSessions(
   options: GetProjectsWithSessionsOptions = {}
 ): Promise<ProjectListItem[]> {
   if (!options.skipSynchronization) {
-    await sessionSynchronizerService.synchronizeSessions();
+    await sessionSynchronizerService.synchronizeSessions({ reuseRecentScan: true });
   }
 
   const projectRows = projectsDb.getProjectPaths() as Array<{

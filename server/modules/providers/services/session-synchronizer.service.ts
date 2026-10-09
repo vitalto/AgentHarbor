@@ -74,6 +74,14 @@ const pruneOrphanedSessions = async (): Promise<number> => {
 let inFlightSynchronization: Promise<SessionSynchronizeResult> | null = null;
 
 /**
+ * A full scan walks every transcript; over a WSL /mnt/<drive> mount that is
+ * seconds of 9p I/O, and the sidebar asks on every load. The polling watcher
+ * indexes changed files in between, so a full rescan is needed only rarely.
+ */
+const FULL_RESCAN_INTERVAL_MS = 60_000;
+let lastSynchronization: { completedAt: number; result: SessionSynchronizeResult } | null = null;
+
+/**
  * Runs all provider synchronizers and updates scan_state.last_scanned_at.
  */
 async function runSessionSynchronization(): Promise<SessionSynchronizeResult> {
@@ -128,14 +136,22 @@ export const sessionSynchronizerService = {
    * Scans every provider for new or changed sessions, coalescing concurrent
    * callers onto a single scan.
    */
-  async synchronizeSessions(): Promise<SessionSynchronizeResult> {
+  async synchronizeSessions(options: { reuseRecentScan?: boolean } = {}): Promise<SessionSynchronizeResult> {
     if (inFlightSynchronization) {
       return inFlightSynchronization;
     }
+    if (options.reuseRecentScan && lastSynchronization && Date.now() - lastSynchronization.completedAt < FULL_RESCAN_INTERVAL_MS) {
+      return lastSynchronization.result;
+    }
 
-    inFlightSynchronization = runSessionSynchronization().finally(() => {
-      inFlightSynchronization = null;
-    });
+    inFlightSynchronization = runSessionSynchronization()
+      .then((result) => {
+        lastSynchronization = { completedAt: Date.now(), result };
+        return result;
+      })
+      .finally(() => {
+        inFlightSynchronization = null;
+      });
 
     return inFlightSynchronization;
   },
