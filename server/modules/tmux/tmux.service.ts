@@ -10,13 +10,14 @@ export type AgentPane = {
   panePid: number;
   cwd: string;
   dead: boolean;
+  /** The command the pane was started with (pane_start_command), e.g. the claude launch line. */
   command: string;
 };
 
 export type TmuxService = ReturnType<typeof createTmuxService>;
 
 const FIELD_SEPARATOR = '\u001f';
-const PANE_FORMAT = ['#{window_id}', '#{window_name}', '#{pane_id}', '#{pane_pid}', '#{pane_current_path}', '#{pane_dead}', '#{pane_current_command}']
+const PANE_FORMAT = ['#{window_id}', '#{window_name}', '#{pane_id}', '#{pane_pid}', '#{pane_current_path}', '#{pane_dead}', '#{pane_start_command}']
   .join(FIELD_SEPARATOR);
 
 function parsePaneLine(line: string): AgentPane | null {
