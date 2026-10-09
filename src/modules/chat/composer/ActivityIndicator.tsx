@@ -85,7 +85,7 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
   const label = isBackground
     ? t('claudeStatus.backgroundWork', 'Background work')
     : (renderedActivity.statusText || actionWords[Math.floor(elapsedSeconds / 4) % actionWords.length])
-      .replace(/\.+$/, '');
+      .replace(/[.…\s]+$/u, '');
   const detail = isBackground ? describeBackgroundTasks(renderedActivity.tasks ?? [], t) : '';
 
   const minutes = Math.floor(elapsedSeconds / 60);

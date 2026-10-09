@@ -85,3 +85,14 @@ test('a response in flight still shows the Stop button and the primary dot', () 
   assert.ok(container.querySelector('.bg-primary'));
   assert.equal(container.querySelector('.bg-purple-500'), null);
 });
+
+test('the TUI spinner word keeps a single ellipsis whether it ends in "…" or "..."', () => {
+  for (const statusText of ['Fermenting…', 'Fermenting...']) {
+    const { container, unmount } = render(
+      <ActivityIndicator activity={{ statusText, canInterrupt: true, startedAt: Date.now() }} />,
+    );
+    assert.match(container.textContent ?? '', /Fermenting…/);
+    assert.doesNotMatch(container.textContent ?? '', /Fermenting(…|\.\.\.)[.…]/);
+    unmount();
+  }
+});
