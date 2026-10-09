@@ -34,14 +34,14 @@ export default function TuiPromptPanel({ prompt, onChoose, onCancel }: TuiPrompt
         </details>
       )}
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex w-full flex-col gap-1.5">
         {prompt.options.map((option, index) => (
           <button
             key={`${index}-${option.label}`}
             type="button"
             onClick={() => onChoose(index)}
             className={cn(
-              'rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-accent',
+              'w-full rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-accent',
               option.selected ? 'border-primary bg-primary/5' : 'border-border',
             )}
           >
