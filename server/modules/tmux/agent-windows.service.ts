@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { getAgentConfig } from '@/modules/tmux/agent-config.js';
-import { readClaudeProcesses, readClaudeStatuses, type ClaudeProcess, type ClaudeStatus } from '@/modules/tmux/claude-status.js';
+import { findSessionHolders, readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
 import { buildAgentLaunch, writeHookSettings } from '@/modules/tmux/agent-launch.js';
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { toLocalPath } from '@/modules/tmux/path-translation.js';
@@ -71,8 +71,8 @@ export async function findAgentWindow(appSessionId: string): Promise<PaneSession
  * it then runs somewhere else (a Windows console, another terminal). Resuming
  * would start a second process writing the same transcript.
  */
-export function assertNotOpenElsewhere(providerSessionId: string, statuses: Map<string, ClaudeStatus>): void {
-  const running = statuses.get(providerSessionId);
+export function assertNotOpenElsewhere(holders: ClaudeProcess[]): void {
+  const running = holders[0];
   if (!running) {
     return;
   }
@@ -101,7 +101,7 @@ async function launchAgentWindow(appSessionId: string): Promise<StartingWindow> 
   let providerSessionId = session.provider_session_id;
   const isNewConversation = !providerSessionId;
   if (providerSessionId) {
-    assertNotOpenElsewhere(providerSessionId, await readClaudeStatuses(config));
+    assertNotOpenElsewhere(await findSessionHolders(providerSessionId, config));
   }
   if (!providerSessionId) {
     providerSessionId = randomUUID();
@@ -219,7 +219,7 @@ export async function moveSessionToTmux(appSessionId: string): Promise<PaneSessi
   }
 
   const pane = await findAgentWindow(appSessionId);
-  const holders = (await readClaudeProcesses()).filter((claude) => claude.providerSessionId === providerSessionId);
+  const holders = await findSessionHolders(providerSessionId);
   const outside = pane
     ? pickProcessesOutsideTmux(holders, await localProcessStartedAt(pane.pane.panePid))
     : holders;

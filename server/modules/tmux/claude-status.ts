@@ -84,6 +84,56 @@ async function readWindowsClaudePids(): Promise<Set<number> | null> {
   return pids;
 }
 
+const POWERSHELL = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe';
+const LIST_CLAUDE_COMMAND_LINES = "Get-CimInstance Win32_Process -Filter \"Name='claude.exe'\" | "
+  + "ForEach-Object { '{0}|{1}|{2}' -f $_.ProcessId, $_.CreationDate.ToUniversalTime().ToString('o'), $_.CommandLine }";
+
+/**
+ * Windows claude.exe processes whose command line names the session
+ * (`--resume <id>`, `--session-id <id>`). Claude writes its status file only
+ * after its first activity, so a session merely opened in a Windows console is
+ * found only this way. Slow (PowerShell): for one-off checks, not polling.
+ */
+export async function findWindowsClaudeByCommandLine(providerSessionId: string): Promise<ClaudeProcess[]> {
+  const output = await new Promise<string>((resolve) => {
+    execFile(POWERSHELL, ['-NoProfile', '-NonInteractive', '-Command', LIST_CLAUDE_COMMAND_LINES], { timeout: 15_000 }, (error, stdout) => {
+      resolve(error ? '' : stdout);
+    });
+  });
+  const found: ClaudeProcess[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const [pidText, createdText, ...commandParts] = line.split('|');
+    const pid = Number(pidText);
+    if (!Number.isInteger(pid) || pid <= 0 || !commandParts.join('|').includes(providerSessionId)) {
+      continue;
+    }
+    const startedAt = Date.parse(createdText);
+    found.push({
+      providerSessionId,
+      activity: 'idle',
+      pid,
+      windowsPid: true,
+      cwd: null,
+      updatedAt: 0,
+      startedAt: Number.isFinite(startedAt) ? startedAt : null,
+    });
+  }
+  return found;
+}
+
+/**
+ * Every Claude process holding the session: those with a status file plus,
+ * for a Windows Claude, idle ones found by their command line.
+ */
+export async function findSessionHolders(providerSessionId: string, config: AgentConfig = getAgentConfig()): Promise<ClaudeProcess[]> {
+  const holders = (await readClaudeProcesses(config)).filter((claude) => claude.providerSessionId === providerSessionId);
+  if (!config.windowsClaude) {
+    return holders;
+  }
+  const known = new Set(holders.map((claude) => claude.pid));
+  return [...holders, ...(await findWindowsClaudeByCommandLine(providerSessionId)).filter((claude) => !known.has(claude.pid))];
+}
+
 /** Every live Claude process with a status file; files left behind by crashed processes are skipped. */
 export async function readClaudeProcesses(config: AgentConfig = getAgentConfig()): Promise<ClaudeProcess[]> {
   const directory = path.join(config.claudeHome, 'sessions');
