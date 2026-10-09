@@ -58,6 +58,11 @@ const __dirname = getModuleDirectory(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findApplicationRoot(__dirname);
+// Windows Claude driven from WSL: git in repos on Windows drives goes to git.exe (see scripts/wsl/git),
+// both for speed over the 9p mount and so Claude's git and ours do not keep invalidating each other's index.
+if (getAgentConfig().windowsClaude) {
+    process.env.PATH = `${path.join(APP_ROOT, 'scripts', 'wsl')}${path.delimiter}${process.env.PATH ?? ''}`;
+}
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
 // Version of the code that is actually running, captured once at process
 // startup. This intentionally does NOT re-read package.json per request: after
