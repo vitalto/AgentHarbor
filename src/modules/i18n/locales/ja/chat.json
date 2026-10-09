@@ -166,28 +166,16 @@
     },
     "status": {
       "newSession": "新しいセッション",
-      "initializing": "初期化中...",
-      "restarting": "再起動中...",
-      "themeRestartHint": "再起動すると Claude Code に新しいテーマが適用されます"
+      "initializing": "初期化中..."
     },
     "actions": {
       "disconnect": "切断",
       "disconnectTitle": "シェルから切断",
-      "restart": "再起動",
-      "restartTitle": "シェルを再起動（先に切断してください）",
       "connect": "シェルで続行",
-      "connectTitle": "シェルに接続",
-      "bypass": "バイパス",
-      "bypassOnTitle": "権限バイパスが有効 — クリックで無効化（CLIを再起動）",
-      "bypassOffTitle": "権限バイパスが無効 — クリックで有効化（CLIを再起動）"
+      "connectTitle": "シェルに接続"
     },
     "loading": "ターミナルを読み込んでいます...",
-    "connecting": "シェルに接続しています...",
-    "startSession": "新しいClaudeセッションを開始",
-    "resumeSession": "セッションを再開: {{displayName}}...",
-    "runCommand": "{{projectName}}で{{command}}を実行",
-    "startCli": "{{projectName}}でClaude CLIを起動しています",
-    "defaultCommand": "コマンド"
+    "connecting": "シェルに接続しています..."
   },
   "claudeStatus": {
     "actions": {

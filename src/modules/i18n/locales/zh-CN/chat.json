@@ -193,28 +193,16 @@
     },
     "status": {
       "newSession": "新会话",
-      "initializing": "初始化中...",
-      "restarting": "重启中...",
-      "themeRestartHint": "重启以将新主题应用到 Claude Code"
+      "initializing": "初始化中..."
     },
     "actions": {
       "disconnect": "断开连接",
       "disconnectTitle": "断开 Shell 连接",
-      "restart": "重启",
-      "restartTitle": "重启 Shell（请先断开连接）",
       "connect": "在 Shell 中继续",
-      "connectTitle": "连接到 Shell",
-      "bypass": "绕过",
-      "bypassOnTitle": "权限绕过已开启 — 点击关闭（将重启 CLI）",
-      "bypassOffTitle": "权限绕过已关闭 — 点击开启（将重启 CLI）"
+      "connectTitle": "连接到 Shell"
     },
     "loading": "正在加载终端...",
-    "connecting": "正在连接到 Shell...",
-    "startSession": "启动新的 Claude 会话",
-    "resumeSession": "恢复会话：{{displayName}}...",
-    "runCommand": "在 {{projectName}} 中运行 {{command}}",
-    "startCli": "在 {{projectName}} 中启动 Claude CLI",
-    "defaultCommand": "命令"
+    "connecting": "正在连接到 Shell..."
   },
   "claudeStatus": {
     "actions": {

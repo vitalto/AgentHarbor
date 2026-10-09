@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { act, render, renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import React from 'react';
 import type { MutableRefObject } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
@@ -8,7 +8,6 @@ import type { ITheme, Terminal } from '@xterm/xterm';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import { useShellConnection } from '@/modules/shell/hooks/useShellConnection';
-import { useShellRuntime } from '@/modules/shell/hooks/useShellRuntime';
 import { useShellTerminal } from '@/modules/shell/hooks/useShellTerminal';
 import { ThemeProvider, useTheme } from '@/shared/context/ThemeContext';
 import { TERMINAL_INIT_DELAY_MS } from '@/shared/constants';
@@ -17,11 +16,11 @@ import { resetUserPreferences, writeUserPreference } from '@/shared/userSettings
 
 /**
  * The Shell tab used to build xterm from one hard-coded dark palette, so the
- * app's light/dark toggle never reached the terminal (#1335). Three things have
- * to hold: a terminal opens in the app's current theme, a toggle repaints the
- * terminal that is already open instead of rebuilding it (which would close the
- * socket and drop the running session), and the CLI started behind it is told
- * which scheme it is being drawn in.
+ * app's light/dark toggle never reached the terminal (#1335). Two things have
+ * to hold: a terminal opens in the app's current theme, and a toggle repaints
+ * the terminal that is already open instead of rebuilding it (which would close
+ * the socket and detach the tmux viewer). The init frame tests at the end cover
+ * which tmux window the terminal asks for.
  */
 
 type FakeTerminal = {
@@ -260,22 +259,16 @@ test('every ANSI colour of the light palette stays readable on its background', 
   }
 });
 
-test('the shell init message tells the server which colour scheme the terminal is in', () => {
+function connectWith(selectedSession: ProjectSession | null, isPlainShell: boolean): Record<string, unknown> {
   vi.useFakeTimers();
-  const isDarkModeRef = ref(false);
-
   const view = renderHook(() =>
     useShellConnection({
       wsRef: ref<WebSocket | null>(null),
-      terminalRef: ref({ write: vi.fn(), cols: 80, rows: 24 } as unknown as Terminal | null),
+      terminalRef: ref({ write: vi.fn(), cols: 120, rows: 40 } as unknown as Terminal | null),
       fitAddonRef: ref({ fit: vi.fn() } as unknown as FitAddon | null),
       selectedProjectRef: ref<Project | null | undefined>(project),
-      selectedSessionRef: ref<ProjectSession | null | undefined>(null),
-      initialCommandRef: ref<string | null | undefined>(null),
-      isPlainShellRef: ref(false),
-      bypassPermissionsRef: ref(false),
-      isDarkModeRef,
-      onProcessCompleteRef: ref<((exitCode: number) => void) | null | undefined>(null),
+      selectedSessionRef: ref<ProjectSession | null | undefined>(selectedSession),
+      isPlainShellRef: ref(isPlainShell),
       isInitialized: true,
       autoConnect: false,
       closeSocket: vi.fn(),
@@ -291,118 +284,26 @@ test('the shell init message tells the server which colour scheme the terminal i
     vi.advanceTimersByTime(TERMINAL_INIT_DELAY_MS);
   });
 
-  const initFrame = JSON.parse(FakeSocket.last?.sent[0] ?? '{}') as Record<string, unknown>;
-  assert.equal(initFrame.type, 'init');
-  assert.equal(initFrame.colorScheme, 'light');
-});
+  return JSON.parse(FakeSocket.last?.sent[0] ?? '{}') as Record<string, unknown>;
+}
 
-type ShellRuntimeView = {
-  runtime: ReturnType<typeof useShellRuntime>;
-  theme: ReturnType<typeof useTheme>;
-};
+test('a session terminal asks the server to attach to that session window', () => {
+  const initFrame = connectWith({ id: 'session-1' } as ProjectSession, false);
 
-/** Renders the shell runtime with a real terminal container, the way Shell does. */
-function ShellRuntimeHarness({ onRender }: { onRender: (view: ShellRuntimeView) => void }) {
-  const theme = useTheme();
-  const runtime = useShellRuntime({
-    selectedProject: project,
-    selectedSession: null,
-    initialCommand: null,
+  assert.deepEqual(initFrame, {
+    type: 'init',
+    projectPath: '/tmp/demo',
+    sessionId: 'session-1',
     isPlainShell: false,
-    bypassPermissions: false,
-    minimal: false,
-    autoConnect: false,
-    isRestarting: false,
+    cols: 120,
+    rows: 40,
   });
-  React.useEffect(() => {
-    onRender({ runtime, theme });
-  });
-  return React.createElement('div', { ref: runtime.terminalContainerRef });
-}
-
-/** Mounts the harness; the returned getter reads the latest committed render. */
-function renderShellRuntime(): () => ShellRuntimeView {
-  let latest: ShellRuntimeView | null = null;
-  const onRender = (view: ShellRuntimeView) => {
-    latest = view;
-  };
-  render(React.createElement(ThemeProvider, null, React.createElement(ShellRuntimeHarness, { onRender })));
-  return () => latest as unknown as ShellRuntimeView;
-}
-
-/** Opens a shell socket and returns a function that plays the server's launch-theme frame. */
-function connectShell(current: () => ShellRuntimeView) {
-  act(() => {
-    current().runtime.connectToShell();
-  });
-  const socket = FakeSocket.last as FakeSocket;
-  act(() => {
-    socket.onopen?.();
-    vi.advanceTimersByTime(TERMINAL_INIT_DELAY_MS);
-  });
-  const reportLaunchTheme = (colorScheme: string) =>
-    act(() => {
-      socket.onmessage?.({ data: JSON.stringify({ type: 'claude_theme', colorScheme }) });
-    });
-  return { socket, reportLaunchTheme };
-}
-
-// A running Claude CLI keeps the colours it was launched with, so right after a
-// toggle it still shows the look the theme was changed away from (#1335).
-test('a Claude CLI launched in the other theme asks for a restart until the themes match', () => {
-  vi.useFakeTimers();
-  writeUserPreference('theme', 'light');
-  const current = renderShellRuntime();
-  const { socket, reportLaunchTheme } = connectShell(current);
-  const toggle = () =>
-    act(() => {
-      current().theme.toggleDarkMode();
-    });
-
-  reportLaunchTheme('light');
-  assert.equal(current().runtime.isClaudeThemeOutdated, false, 'launched in the current theme');
-
-  toggle();
-  assert.equal(current().runtime.isClaudeThemeOutdated, true, 'the CLI still draws its light theme');
-
-  toggle();
-  assert.equal(current().runtime.isClaudeThemeOutdated, false, 'back in the theme it launched in');
-
-  toggle();
-  assert.equal(current().runtime.isClaudeThemeOutdated, true);
-
-  // Restart: the old socket closes, and the new launch reports the current theme.
-  act(() => {
-    socket.onclose?.();
-  });
-  assert.equal(current().runtime.isClaudeThemeOutdated, false, 'no CLI is running');
-  connectShell(current).reportLaunchTheme('dark');
-  assert.equal(current().runtime.isClaudeThemeOutdated, false, 'the restarted CLI matches');
 });
 
-test('a reattached CLI started in the other theme asks for a restart at once', () => {
-  vi.useFakeTimers();
-  writeUserPreference('theme', 'light');
-  const current = renderShellRuntime();
-
-  // The server reports the theme of the pty it reattached to, not the one just sent.
-  connectShell(current).reportLaunchTheme('dark');
-
-  assert.equal(current().runtime.isClaudeThemeOutdated, true);
-});
-
-test('shells that are not a themed Claude launch never ask for a restart', () => {
-  vi.useFakeTimers();
-  writeUserPreference('theme', 'light');
-  const current = renderShellRuntime();
-  // The server sends no launch theme for plain shells and the like.
-  const { reportLaunchTheme } = connectShell(current);
-
-  act(() => {
-    current().theme.toggleDarkMode();
-  });
-  assert.equal(current().runtime.isClaudeThemeOutdated, false);
-
-  reportLaunchTheme('sepia');
-  assert.equal(current().runtime.isClaudeThemeOutdated, false, 'an unknown value is ignored');
+test('a plain shell, or a terminal without a session, asks for the project shell window', () => {
+  for (const [session, isPlainShell] of [[{ id: 'session-1' } as ProjectSession, true], [null, false]] as const) {
+    const initFrame = connectWith(session, isPlainShell);
+    assert.equal(initFrame.sessionId, null);
+    assert.equal(initFrame.isPlainShell, true);
+  }
 });

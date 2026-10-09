@@ -1,21 +1,15 @@
 import { IS_PLATFORM } from '@/shared/utils';
 import { getStoredAuthToken } from '@/shared/authToken';
 
+// A session terminal attaches to the session's tmux window (sessionId); a
+// plain shell attaches to the project's shell window (isPlainShell).
 type ShellInitMessage = {
   type: 'init';
   projectPath: string;
   sessionId: string | null;
-  hasSession: boolean;
-  provider: string;
+  isPlainShell: boolean;
   cols: number;
   rows: number;
-  initialCommand: string | null | undefined;
-  isPlainShell: boolean;
-  forceRestart?: boolean;
-  bypassPermissions?: boolean;
-  // The app theme at launch, so the server can start a CLI in the colour scheme
-  // the terminal is painted in.
-  colorScheme?: 'light' | 'dark';
 };
 
 type ShellResizeMessage = {
@@ -33,13 +27,9 @@ type ShellOutgoingMessage = ShellInitMessage | ShellResizeMessage | ShellInputMe
 
 type ShellIncomingMessage =
   | { type: 'output'; data: string }
-  // Sent instead of starting a PTY when the project path or session id is
-  // rejected, so this is the only signal that the terminal will never start.
+  // Sent instead of attaching when the tmux window cannot be found or opened,
+  // so this is the only signal that the terminal will never start.
   | { type: 'error'; message?: string }
-  | { type: 'auth_url'; url?: string }
-  // The app theme the Claude CLI in the pty was launched for. A running CLI
-  // keeps those colours, including one a reconnect reattaches to.
-  | { type: 'claude_theme'; colorScheme?: string }
   | { type: string; [key: string]: unknown };
 
 export function getShellWebSocketUrl(): string | null {

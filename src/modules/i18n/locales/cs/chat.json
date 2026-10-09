@@ -250,27 +250,16 @@
     },
     "status": {
       "newSession": "Nová relace",
-      "initializing": "Inicializace...",
-      "restarting": "Restartování..."
+      "initializing": "Inicializace..."
     },
     "actions": {
       "disconnect": "Odpojit",
       "disconnectTitle": "Odpojit od shellu",
-      "restart": "Restartovat",
-      "restartTitle": "Restartovat shell",
       "connect": "Pokračovat v Shellu",
-      "connectTitle": "Připojit k shellu",
-      "bypass": "Obejít",
-      "bypassOnTitle": "Obcházení oprávnění je zapnuté – kliknutím ho vypnete (restartuje CLI)",
-      "bypassOffTitle": "Obcházení oprávnění je vypnuté – kliknutím ho zapnete (restartuje CLI)"
+      "connectTitle": "Připojit k shellu"
     },
     "loading": "Načítání terminálu...",
-    "connecting": "Připojování k shellu...",
-    "startSession": "Zahájit novou relaci Claude",
-    "resumeSession": "Pokračovat v relaci: {{displayName}}...",
-    "runCommand": "Spustit {{command}} v projektu {{projectName}}",
-    "startCli": "Spouštění Claude CLI v projektu {{projectName}}",
-    "defaultCommand": "příkaz"
+    "connecting": "Připojování k shellu..."
   },
   "claudeStatus": {
     "actions": {

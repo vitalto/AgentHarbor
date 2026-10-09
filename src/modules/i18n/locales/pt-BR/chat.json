@@ -233,28 +233,16 @@
     },
     "status": {
       "newSession": "Nova sessão",
-      "initializing": "Inicializando...",
-      "restarting": "Reiniciando...",
-      "themeRestartHint": "Reinicie para aplicar o novo tema ao Claude Code"
+      "initializing": "Inicializando..."
     },
     "actions": {
       "disconnect": "Desconectar",
       "disconnectTitle": "Desconectar do shell",
-      "restart": "Reiniciar",
-      "restartTitle": "Reiniciar Shell",
       "connect": "Continuar no Shell",
-      "connectTitle": "Conectar ao shell",
-      "bypass": "Ignorar",
-      "bypassOnTitle": "Ignorar permissões ativado — clique para desativar (reinicia o CLI)",
-      "bypassOffTitle": "Ignorar permissões desativado — clique para ativar (reinicia o CLI)"
+      "connectTitle": "Conectar ao shell"
     },
     "loading": "Carregando terminal...",
-    "connecting": "Conectando ao shell...",
-    "startSession": "Iniciar nova sessão do Claude",
-    "resumeSession": "Retomar sessão: {{displayName}}...",
-    "runCommand": "Executar {{command}} em {{projectName}}",
-    "startCli": "Iniciando CLI do Claude em {{projectName}}",
-    "defaultCommand": "comando"
+    "connecting": "Conectando ao shell..."
   },
   "claudeStatus": {
     "actions": {

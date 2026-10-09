@@ -36,7 +36,7 @@ Benefits:
 | `services/chat-websocket.service.ts` | Handles the `/ws` chat protocol (`chat.send` / `chat.abort` / `chat.stop-task` / `chat.subscribe` / `chat.permission-response`) |
 | `services/chat-run-registry.service.ts` | Tracks live provider runs per app session id: seq numbering, event replay buffer, provider-id mapping, completion state |
 | `services/chat-session-writer.service.ts` | Gateway writer handed to provider runtimes: remaps provider session ids to app ids, swallows `session_created`, assigns `seq` |
-| `services/shell-websocket.service.ts` | Handles `/shell` PTY lifecycle, reconnect buffering, auth URL detection |
+| `services/shell-websocket.service.ts` | Handles `/shell`: attaches a grouped tmux viewer (node-pty) to a session's or project's tmux window |
 | `services/plugin-websocket-proxy.service.ts` | Bridges client socket to plugin socket |
 | `services/websocket-writer.service.ts` | Adapts raw WebSocket to writer interface (`send`, `setSessionId`, `getSessionId`) for non-chat writer consumers |
 | `services/websocket-state.service.ts` | Holds shared chat client set and open-state constant |
@@ -55,7 +55,7 @@ flowchart LR
 
   E --> I[connectedClients Set]
   E --> J[chatRunRegistry + ChatSessionWriter]
-  F --> K[ptySessionsMap]
+  F --> K[tmux viewer session]
   G --> L[Upstream Plugin ws://127.0.0.1:port/ws]
 
   I --> M[projects.service loading_progress]
@@ -93,7 +93,7 @@ sequenceDiagram
     alt pathname == /ws
       Router->>Chat: handleChatConnection(ws, request, deps.chat)
     else pathname == /shell
-      Router->>Shell: handleShellConnection(ws, deps.shell)
+      Router->>Shell: handleShellConnection(ws)
     else pathname startsWith /plugin-ws/
       Router->>Proxy: handlePluginWsProxy(ws, pathname, getPluginPort)
     else unknown
@@ -147,54 +147,17 @@ flowchart TD
 
 ## `/shell` Terminal Flow
 
-The shell handler manages persistent PTY sessions keyed by:
+The terminal shows a live tmux window; it never starts Claude or a shell itself.
 
-`<projectPath>_<sessionIdOrDefault>[_cmd_<hash>]`
-
-This enables reconnect behavior and isolates command-specific plain-shell sessions.
-
-### Shell Lifecycle
-
-```mermaid
-stateDiagram-v2
-  [*] --> WaitingInit
-  WaitingInit --> ValidateInit: message.type == init
-  ValidateInit --> ReconnectExisting: session key exists and not login reset
-  ValidateInit --> SpawnNewPTY: valid path + valid sessionId
-  ValidateInit --> EmitError: invalid payload/path/sessionId
-
-  ReconnectExisting --> Running: attach ws, replay buffer
-  SpawnNewPTY --> Running: pty.spawn + wire onData/onExit
-
-  Running --> Running: input -> pty.write
-  Running --> Running: resize -> pty.resize
-  Running --> Running: onData -> buffer + output + auth_url detection
-  Running --> Exited: onExit
-  Running --> Detached: ws close
-
-  Detached --> Running: reconnect before timeout
-  Detached --> Killed: timeout reached -> pty.kill
-  Exited --> [*]
-  Killed --> [*]
-  EmitError --> WaitingInit
-```
-
-### Shell Behaviors in Detail
-
-1. `init`:
-Reads `projectPath`, `sessionId`, `provider`, `hasSession`, `initialCommand`, `isPlainShell`.
-2. Login reset:
-For login-like commands, existing keyed PTY session is killed and recreated.
-3. Validation:
-Path must exist and be a directory; `sessionId` must match safe pattern.
-4. Command build:
-Provider-specific command construction with resume semantics.
-5. PTY output buffering:
-Stores up to 5000 chunks for replay on reconnect.
-6. URL detection:
-Strips ANSI, accumulates text buffer, extracts URLs, emits `auth_url` once per normalized URL, supports `autoOpen`.
-7. Close behavior:
-Socket disconnect does not instantly kill PTY; session is kept alive and terminated on timeout.
+1. `init { projectPath, sessionId, isPlainShell, cols, rows }` picks the window:
+   - session terminal (`sessionId`, not plain): `ensureAgentWindow(sessionId)` from the tmux module, which opens `claude --resume` in a new window when the session has none;
+   - plain shell: the window named `sh:<basename(projectPath)>` (reused while alive), else a new one running `$SHELL -l` in the project directory.
+2. node-pty runs `tmux new-session -t <AH_TMUX_SESSION> -s ah-v-<random> ; set-option destroy-unattached on ; select-window -t <windowId>`
+   with TMUX/TMUX_PANE removed from the environment. The grouped session gives every viewer its own current window, so
+   switching windows in the browser does not move other clients; tmux redraws the window on attach (no replay buffer).
+3. `input` → `pty.write`, `resize` → `pty.resize`, viewer output → `{ type: "output", data }`.
+4. Socket close kills the viewer PTY at once; tmux then destroys the viewer session. The window itself survives.
+5. A missing tmux session, an invalid session id or an `AgentWindowError` is sent as `{ type: "error", message }`.
 
 ## `/plugin-ws/:pluginName` Proxy Flow
 
@@ -261,7 +224,7 @@ Current explicit close codes in this module:
 Other errors:
 
 1. Chat handler catches and emits `{ kind: "protocol_error", code, error }`.
-2. Shell handler catches and writes terminal-visible error output.
+2. Shell handler sends `{ type: "error", message }`, which the client writes into the terminal.
 3. Unknown websocket paths are closed immediately.
 
 ## Extending This Module

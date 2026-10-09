@@ -25,31 +25,31 @@ type ProviderLoginModalProps = {
   isOpen: boolean;
   onClose: () => void;
   provider?: LLMProvider;
+  /** Called with exit code 0 when the modal closes, so callers re-check the login status. */
   onComplete?: (exitCode: number) => void;
-  customCommand?: string;
   isAuthenticated?: boolean;
 };
 
-const CLAUDE_LOGIN_COMMAND = 'claude --dangerously-skip-permissions /login';
 const CLAUDE_LOGIN_TITLE = 'Claude CLI Login';
+const CLAUDE_LOGIN_HINT = 'Run "claude /login" in this shell, or type /login inside any Claude session window.';
 
-/** Used by the onboarding and settings modules to run a provider's CLI login command in an embedded shell. */
+/**
+ * Used by the onboarding and settings modules to open a login shell (a tmux window in the home
+ * directory). Commands are no longer launched for the user, so the modal only explains what to run.
+ */
 export default function ProviderLoginModal({
   isOpen,
   onClose,
   onComplete,
-  customCommand,
 }: ProviderLoginModalProps) {
   const { t } = useTranslation();
   if (!isOpen) {
     return null;
   }
 
-  const command = customCommand || CLAUDE_LOGIN_COMMAND;
-
-  const handleComplete = (exitCode: number) => {
-    onComplete?.(exitCode);
-    // Keep the modal open so users can read terminal output before closing.
+  const handleClose = () => {
+    onComplete?.(0);
+    onClose();
   };
 
   return (
@@ -61,7 +61,7 @@ export default function ProviderLoginModal({
         <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{CLAUDE_LOGIN_TITLE}</h3>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300"
             aria-label={t('common:misc.closeLoginModal')}
           >
@@ -69,8 +69,10 @@ export default function ProviderLoginModal({
           </button>
         </div>
 
+        <p className="border-b border-gray-200 px-4 py-2 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-300">{CLAUDE_LOGIN_HINT}</p>
+
         <div className="flex-1 overflow-hidden">
-          <StandaloneShell project={DEFAULT_PROJECT_FOR_EMPTY_SHELL} command={command} onComplete={handleComplete} minimal={true} />
+          <StandaloneShell project={DEFAULT_PROJECT_FOR_EMPTY_SHELL} isPlainShell={true} minimal={true} />
         </div>
       </div>
     </div>

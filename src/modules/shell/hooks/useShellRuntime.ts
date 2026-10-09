@@ -3,7 +3,6 @@ import type { MutableRefObject, RefObject } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 
-import { useTheme } from '@/shared/context/ThemeContext';
 import type { Project, ProjectSession } from '@/shared/types';
 import { useShellConnection } from '@/modules/shell/hooks/useShellConnection';
 import { useShellTerminal } from '@/modules/shell/hooks/useShellTerminal';
@@ -11,13 +10,10 @@ import { useShellTerminal } from '@/modules/shell/hooks/useShellTerminal';
 type UseShellRuntimeOptions = {
   selectedProject: Project | null | undefined;
   selectedSession: ProjectSession | null | undefined;
-  initialCommand: string | null | undefined;
   isPlainShell: boolean;
-  bypassPermissions: boolean;
   minimal: boolean;
   autoConnect: boolean;
   isRestarting: boolean;
-  onProcessComplete?: ((exitCode: number) => void) | null;
   onOutputRef?: MutableRefObject<(() => void) | null>;
 };
 
@@ -28,26 +24,19 @@ type UseShellRuntimeResult = {
   isConnected: boolean;
   isInitialized: boolean;
   isConnecting: boolean;
-  // A live Claude CLI was launched in the other theme and keeps those colours
-  // until it is restarted.
-  isClaudeThemeOutdated: boolean;
-  connectToShell: (options?: { forceRestart?: boolean }) => void;
+  connectToShell: () => void;
   disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
 };
 
 export function useShellRuntime({
   selectedProject,
   selectedSession,
-  initialCommand,
   isPlainShell,
-  bypassPermissions,
   minimal,
   autoConnect,
   isRestarting,
-  onProcessComplete,
   onOutputRef,
 }: UseShellRuntimeOptions): UseShellRuntimeResult {
-  const { isDarkMode } = useTheme();
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -55,23 +44,15 @@ export function useShellRuntime({
 
   const selectedProjectRef = useRef(selectedProject);
   const selectedSessionRef = useRef(selectedSession);
-  const initialCommandRef = useRef(initialCommand);
   const isPlainShellRef = useRef(isPlainShell);
-  const bypassPermissionsRef = useRef(bypassPermissions);
-  const isDarkModeRef = useRef(isDarkMode);
-  const onProcessCompleteRef = useRef(onProcessComplete);
   const lastSessionIdRef = useRef<string | null>(selectedSession?.id ?? null);
 
   // Keep mutable values in refs so websocket handlers always read current data.
   useEffect(() => {
     selectedProjectRef.current = selectedProject;
     selectedSessionRef.current = selectedSession;
-    initialCommandRef.current = initialCommand;
     isPlainShellRef.current = isPlainShell;
-    bypassPermissionsRef.current = bypassPermissions;
-    isDarkModeRef.current = isDarkMode;
-    onProcessCompleteRef.current = onProcessComplete;
-  }, [selectedProject, selectedSession, initialCommand, isPlainShell, bypassPermissions, isDarkMode, onProcessComplete]);
+  }, [selectedProject, selectedSession, isPlainShell]);
 
   const closeSocket = useCallback(() => {
     const activeSocket = wsRef.current;
@@ -103,7 +84,6 @@ export function useShellRuntime({
   const {
     isConnected,
     isConnecting,
-    claudeLaunchColorScheme,
     connectToShell,
     disconnectFromShell,
   } = useShellConnection({
@@ -112,22 +92,13 @@ export function useShellRuntime({
     fitAddonRef,
     selectedProjectRef,
     selectedSessionRef,
-    initialCommandRef,
     isPlainShellRef,
-    bypassPermissionsRef,
-    isDarkModeRef,
-    onProcessCompleteRef,
     isInitialized,
     autoConnect,
     closeSocket,
     clearTerminalScreen,
     onOutputRef,
   });
-
-  const isClaudeThemeOutdated =
-    isConnected &&
-    claudeLaunchColorScheme !== null &&
-    claudeLaunchColorScheme !== (isDarkMode ? 'dark' : 'light');
 
   useEffect(() => {
     if (!isRestarting) {
@@ -163,7 +134,6 @@ export function useShellRuntime({
     isConnected,
     isInitialized,
     isConnecting,
-    isClaudeThemeOutdated,
     connectToShell,
     disconnectFromShell,
   };

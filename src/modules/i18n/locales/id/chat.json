@@ -221,28 +221,16 @@
     },
     "status": {
       "newSession": "Sesi Baru",
-      "initializing": "Menginisialisasi...",
-      "restarting": "Memulai ulang...",
-      "themeRestartHint": "Mulai ulang untuk menerapkan tema baru ke Claude Code"
+      "initializing": "Menginisialisasi..."
     },
     "actions": {
       "disconnect": "Putuskan",
       "disconnectTitle": "Putuskan dari shell",
-      "restart": "Mulai Ulang",
-      "restartTitle": "Mulai Ulang Shell",
       "connect": "Lanjutkan di Shell",
-      "connectTitle": "Hubungkan ke shell",
-      "bypass": "Bypass",
-      "bypassOnTitle": "Bypass izin aktif — klik untuk menonaktifkan (memulai ulang CLI)",
-      "bypassOffTitle": "Bypass izin nonaktif — klik untuk mengaktifkan (memulai ulang CLI)"
+      "connectTitle": "Hubungkan ke shell"
     },
     "loading": "Memuat terminal...",
-    "connecting": "Menghubungkan ke shell...",
-    "startSession": "Mulai sesi Claude baru",
-    "resumeSession": "Lanjutkan sesi: {{displayName}}...",
-    "runCommand": "Jalankan {{command}} di {{projectName}}",
-    "startCli": "Memulai Claude CLI di {{projectName}}",
-    "defaultCommand": "perintah"
+    "connecting": "Menghubungkan ke shell..."
   },
   "claudeStatus": {
     "actions": {

@@ -181,28 +181,16 @@
     },
     "status": {
       "newSession": "Nouvelle session",
-      "initializing": "Initialisation...",
-      "restarting": "Redémarrage...",
-      "themeRestartHint": "Redémarrez pour appliquer le nouveau thème à Claude Code"
+      "initializing": "Initialisation..."
     },
     "actions": {
       "disconnect": "Déconnecter",
       "disconnectTitle": "Se déconnecter du shell",
-      "restart": "Redémarrer",
-      "restartTitle": "Redémarrer le shell",
       "connect": "Continuer dans le shell",
-      "connectTitle": "Se connecter au shell",
-      "bypass": "Bypass",
-      "bypassOnTitle": "Contournement des permissions activé — cliquez pour désactiver (redémarre la CLI)",
-      "bypassOffTitle": "Contournement des permissions désactivé — cliquez pour activer (redémarre la CLI)"
+      "connectTitle": "Se connecter au shell"
     },
     "loading": "Chargement du terminal...",
-    "connecting": "Connexion au shell...",
-    "startSession": "Démarrer une nouvelle session Claude",
-    "resumeSession": "Reprendre la session : {{displayName}}...",
-    "runCommand": "Exécuter {{command}} dans {{projectName}}",
-    "startCli": "Démarrage du CLI Claude dans {{projectName}}",
-    "defaultCommand": "commande"
+    "connecting": "Connexion au shell..."
   },
   "claudeStatus": {
     "actions": {

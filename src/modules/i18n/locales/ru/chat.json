@@ -191,28 +191,16 @@
     },
     "status": {
       "newSession": "Новый сеанс",
-      "initializing": "Инициализация...",
-      "restarting": "Перезапуск...",
-      "themeRestartHint": "Перезапустите, чтобы применить новую тему к Claude Code"
+      "initializing": "Инициализация..."
     },
     "actions": {
       "disconnect": "Отключиться",
       "disconnectTitle": "Отключиться от оболочки",
-      "restart": "Перезапустить",
-      "restartTitle": "Перезапустить оболочку (сначала отключитесь)",
       "connect": "Продолжить в оболочке",
-      "connectTitle": "Подключиться к оболочке",
-      "bypass": "Обход",
-      "bypassOnTitle": "Обход разрешений включен — нажмите, чтобы отключить (перезапустит CLI)",
-      "bypassOffTitle": "Обход разрешений выключен — нажмите, чтобы включить (перезапустит CLI)"
+      "connectTitle": "Подключиться к оболочке"
     },
     "loading": "Загрузка терминала...",
-    "connecting": "Подключение к оболочке...",
-    "startSession": "Начать новый сеанс Claude",
-    "resumeSession": "Возобновить сеанс: {{displayName}}...",
-    "runCommand": "Выполнить {{command}} в {{projectName}}",
-    "startCli": "Запуск Claude CLI в {{projectName}}",
-    "defaultCommand": "команда"
+    "connecting": "Подключение к оболочке..."
   },
   "claudeStatus": {
     "actions": {

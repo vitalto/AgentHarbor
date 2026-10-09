@@ -213,27 +213,16 @@
     },
     "status": {
       "newSession": "סשן חדש",
-      "initializing": "מאתחל…",
-      "restarting": "מפעיל מחדש…"
+      "initializing": "מאתחל…"
     },
     "actions": {
       "disconnect": "ניתוק",
       "disconnectTitle": "ניתוק מה-shell",
-      "restart": "הפעלה מחדש",
-      "restartTitle": "הפעלה מחדש של ה-shell",
       "connect": "המשך ב-shell",
-      "connectTitle": "התחברות ל-shell",
-      "bypass": "עקיפה",
-      "bypassOnTitle": "עקיפת הרשאות פעילה — לחיצה לכיבוי (מפעיל מחדש את ה-CLI)",
-      "bypassOffTitle": "עקיפת הרשאות כבויה — לחיצה להפעלה (מפעיל מחדש את ה-CLI)"
+      "connectTitle": "התחברות ל-shell"
     },
     "loading": "טוען טרמינל…",
-    "connecting": "מתחבר ל-shell…",
-    "startSession": "התחלת סשן Claude חדש",
-    "resumeSession": "המשך סשן: {{displayName}}…",
-    "runCommand": "הרצת {{command}} ב-{{projectName}}",
-    "startCli": "מפעיל את Claude CLI ב-{{projectName}}",
-    "defaultCommand": "פקודה"
+    "connecting": "מתחבר ל-shell…"
   },
   "claudeStatus": {
     "actions": {

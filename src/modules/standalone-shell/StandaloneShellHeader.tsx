@@ -2,14 +2,12 @@ import { useTranslation } from 'react-i18next';
 
 type StandaloneShellHeaderProps = {
   title: string;
-  isCompleted: boolean;
   onClose?: (() => void) | null;
 };
 
-/** Rendered by StandaloneShell's non-minimal layout to show the shell title, completion state and close button. */
+/** Rendered by StandaloneShell's non-minimal layout to show the shell title and close button. */
 export default function StandaloneShellHeader({
   title,
-  isCompleted,
   onClose = null,
 }: StandaloneShellHeaderProps) {
   const { t } = useTranslation();
@@ -18,7 +16,6 @@ export default function StandaloneShellHeader({
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <h3 className="text-sm font-medium text-gray-200">{title}</h3>
-          {isCompleted && <span className="text-xs text-green-400">{t('misc.completedBadge')}</span>}
         </div>
 
         {onClose && (

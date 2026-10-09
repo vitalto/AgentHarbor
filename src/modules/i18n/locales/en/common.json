@@ -345,7 +345,6 @@
     "openMenu": "Open menu",
     "noProjectSelected": "No Project Selected",
     "projectRequiredForShell": "A project is required to open a shell",
-    "completedBadge": "(Completed)",
     "close": "Close",
     "hideToken": "Hide token",
     "showToken": "Show token",
