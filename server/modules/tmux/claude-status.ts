@@ -69,6 +69,11 @@ function processExists(pid: number): boolean {
 
 let windowsClaudePids: { readAt: number; pids: Set<number> | null } | null = null;
 
+/** Drops the cached claude.exe pid list, e.g. right after ending a process, so the next read asks Windows again. */
+export function forgetWindowsProcessCache(): void {
+  windowsClaudePids = null;
+}
+
 /**
  * Live claude.exe pids via WSL interop (works from a systemd service too), or
  * null when Windows cannot be asked — then every Windows status file is trusted.

@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { getAgentConfig } from '@/modules/tmux/agent-config.js';
-import { findSessionHolders, readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
+import { findSessionHolders, forgetWindowsProcessCache, readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
 import { buildAgentLaunch, writeHookSettings } from '@/modules/tmux/agent-launch.js';
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { toLocalPath } from '@/modules/tmux/path-translation.js';
@@ -317,9 +317,9 @@ export async function typeIntoAgent(paneId: string, text: string): Promise<void>
  * itself stays and can be resumed.
  */
 export async function closeAgentWindow(appSessionId: string, options: { force?: boolean } = {}): Promise<boolean> {
+  const providerSessionId = sessionsDb.getSessionById(appSessionId)?.provider_session_id ?? null;
   const pane = await findAgentWindow(appSessionId);
   if (!pane) {
-    const providerSessionId = sessionsDb.getSessionById(appSessionId)?.provider_session_id;
     const outside = providerSessionId ? await findSessionHolders(providerSessionId) : [];
     const working = outside.find((claude) => claude.activity !== 'idle');
     if (working && !options.force) {
@@ -328,6 +328,7 @@ export async function closeAgentWindow(appSessionId: string, options: { force?: 
     for (const claude of outside) {
       await stopClaudeProcess(claude);
     }
+    await waitUntilNoProcessHolds(providerSessionId);
     return outside.length > 0;
   }
   try {
@@ -337,5 +338,28 @@ export async function closeAgentWindow(appSessionId: string, options: { force?: 
       throw error;
     }
   }
+  await waitUntilNoProcessHolds(providerSessionId);
   return true;
+}
+
+const PROCESS_GONE_TIMEOUT_MS = 5000;
+
+/**
+ * Claude exits a moment after its window is killed, and its status file stays
+ * behind. Until the process is gone it would read as a session still running
+ * somewhere else, so callers that list agents right after a close wait here.
+ */
+async function waitUntilNoProcessHolds(providerSessionId: string | null): Promise<void> {
+  if (!providerSessionId) {
+    return;
+  }
+  const deadline = Date.now() + PROCESS_GONE_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    forgetWindowsProcessCache();
+    const holders = (await readClaudeProcesses()).filter((claude) => claude.providerSessionId === providerSessionId);
+    if (holders.length === 0) {
+      return;
+    }
+    await delay(POLL_MS);
+  }
 }

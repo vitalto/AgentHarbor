@@ -10,13 +10,12 @@ type ClearConversationButtonProps = {
 
 /**
  * `/clear` for the session's Claude window: the same process starts a fresh
- * conversation (the old one stays in history) and the chat moves to it. The
- * first click asks.
+ * conversation (the old one stays in history) and the chat moves to it.
  */
 export default function ClearConversationButton({ agent }: ClearConversationButtonProps) {
   const { clearConversation } = useAgentWindows();
   const navigate = useNavigate();
-  const [phase, setPhase] = useState<'idle' | 'confirm' | 'clearing'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'clearing'>('idle');
   const [error, setError] = useState<string | null>(null);
 
   const clear = async () => {
@@ -34,28 +33,16 @@ export default function ClearConversationButton({ agent }: ClearConversationButt
 
   return (
     <span className="relative inline-flex shrink-0">
-      {phase === 'confirm' ? (
-        <button
-          type="button"
-          onClick={() => void clear()}
-          onBlur={() => setPhase('idle')}
-          autoFocus
-          className="rounded bg-amber-600 px-2 py-0.5 text-[11px] font-medium text-white"
-        >
-          New conversation?
-        </button>
-      ) : (
-        <button
-          type="button"
-          aria-label="Clear: start a new conversation in this Claude window"
-          title="Clear (/clear): start a new conversation in this window; this one stays in history"
-          disabled={phase === 'clearing'}
-          onClick={() => setPhase('confirm')}
-          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:animate-pulse disabled:opacity-50"
-        >
-          <Eraser className="h-3.5 w-3.5" />
-        </button>
-      )}
+      <button
+        type="button"
+        aria-label="Clear: start a new conversation in this Claude window"
+        title="Clear (/clear): start a new conversation in this window; this one stays in history"
+        disabled={phase === 'clearing'}
+        onClick={() => void clear()}
+        className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:animate-pulse disabled:opacity-50"
+      >
+        <Eraser className="h-3.5 w-3.5" />
+      </button>
       {error && (
         <button
           type="button"

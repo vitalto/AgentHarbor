@@ -11,12 +11,12 @@ type CloseAgentButtonProps = {
   className?: string;
 };
 
-type Phase = 'idle' | 'confirm' | 'closing' | 'busy';
+type Phase = 'idle' | 'closing' | 'busy';
 
 /**
  * Ends the session's Claude (its tmux window, or the process in another
- * terminal); the conversation stays and can be resumed. The first click asks;
- * a copy busy outside tmux needs an explicit "Close anyway".
+ * terminal); the conversation stays and can be resumed, so one click does it.
+ * A copy busy outside tmux needs an explicit "Close anyway".
  */
 export default function CloseAgentButton({ agent, icon = 'x', className }: CloseAgentButtonProps) {
   const { closeWindow } = useAgentWindows();
@@ -44,28 +44,16 @@ export default function CloseAgentButton({ agent, icon = 'x', className }: Close
 
   return (
     <span className="relative inline-flex shrink-0">
-      {phase === 'confirm' ? (
-        <button
-          type="button"
-          onClick={() => void close(false)}
-          onBlur={() => setPhase('idle')}
-          autoFocus
-          className="rounded bg-red-600 px-2 py-0.5 text-[11px] font-medium text-white"
-        >
-          Close?
-        </button>
-      ) : (
-        <button
-          type="button"
-          aria-label={`Close Claude for ${label}`}
-          title="Close this Claude (the conversation stays)"
-          disabled={phase === 'closing'}
-          onClick={() => setPhase('confirm')}
-          className={cn('rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30', className)}
-        >
-          <Icon className="h-3.5 w-3.5" />
-        </button>
-      )}
+      <button
+        type="button"
+        aria-label={`Close Claude for ${label}`}
+        title="Close this Claude (the conversation stays)"
+        disabled={phase === 'closing'}
+        onClick={() => void close(false)}
+        className={cn('rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:animate-pulse disabled:opacity-40', className)}
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </button>
       {phase === 'busy' && (
         <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-md border border-red-500/30 bg-background p-2 text-[11px] text-foreground shadow-lg">
           {busyMessage}
