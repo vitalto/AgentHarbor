@@ -33,6 +33,8 @@ import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
 
 type UseChatComposerStateArgs = {
+  /** The session runs in a tmux window whose TUI takes input while Claude works: send instead of queueing. */
+  sendWhileBusy?: boolean;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
@@ -168,6 +170,7 @@ const getNotificationSessionSummary = (
 const SAFARI_IME_RACE_WINDOW_MS = 30;
 
 export function useChatComposerState({
+  sendWhileBusy = false,
   selectedProject,
   selectedSession,
   currentSessionId,
@@ -685,7 +688,7 @@ export function useChatComposerState({
       // A turn is already in flight: stash this message instead of sending it.
       // Upload attached files now so the queued record contains durable image
       // descriptors that can be sent even if another session is open later.
-      if (isLoading) {
+      if (isLoading && !sendWhileBusy) {
         // A run can restart in the tiny gap between scheduling and flushing a
         // queued submission. Put the same durable draft back without uploading
         // its files again.
@@ -954,6 +957,7 @@ export function useChatComposerState({
       editingAnchorId,
       executeCommand,
       isLoading,
+      sendWhileBusy,
       onSessionProcessing,
       onSessionEstablished,
       provider,

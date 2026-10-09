@@ -42,7 +42,7 @@ type ChatComposerProps = {
   tuiPrompt: TuiPrompt | null;
   onTuiChoose: (optionIndex: number) => void;
   onTuiKey: (key: TuiKey) => void;
-  /** The session has a live Claude window to send keys to. */
+  /** The session has a live Claude window to send keys to; its TUI also takes messages while Claude works. */
   hasLiveWindow: boolean;
   activity: SessionActivity | null;
   isLoading: boolean;
@@ -187,15 +187,22 @@ export default function ChatComposer({
   const hasActivityIndicator = Boolean(activity && !hasPendingPrompt);
 
   const hasQueuedDraft = Boolean(queuedDraft);
-  const canQueueDraft = isLoading && Boolean(input.trim() || attachedFiles.length > 0);
-  const submitHint = canQueueDraft
+  const hasDraft = Boolean(input.trim() || attachedFiles.length > 0);
+  // A live TUI takes the message right away (Claude reads it once the current step ends), so nothing is queued.
+  const canSendWhileBusy = isLoading && hasLiveWindow && hasDraft;
+  const canQueueDraft = isLoading && !hasLiveWindow && hasDraft;
+  const submitHint = canSendWhileBusy
+    ? t('input.hintText.sendWhileBusy', { defaultValue: 'Enter to send now — Claude reads it as soon as the current step ends' })
+    : canQueueDraft
     ? hasQueuedDraft
       ? t('input.hintText.updateQueued', { defaultValue: 'Enter to update queued message' })
       : t('input.hintText.queue', { defaultValue: 'Enter to queue your next message' })
     : sendByCtrlEnter
       ? t('input.hintText.ctrlEnter')
       : t('input.hintText.enter');
-  const submitAriaLabel = canQueueDraft
+  const submitAriaLabel = canSendWhileBusy
+    ? t('input.send')
+    : canQueueDraft
     ? hasQueuedDraft
       ? t('input.queue.update', { defaultValue: 'Update queued message' })
       : t('input.queue.sendNext', { defaultValue: 'Queue next message' })
@@ -381,7 +388,7 @@ export default function ChatComposer({
 
             <PromptInputSubmit
               onClick={
-                canQueueDraft
+                canQueueDraft || canSendWhileBusy
                   ? (e: MouseEvent<HTMLButtonElement>) => {
                       e.preventDefault();
                       onSubmit(e);
@@ -395,13 +402,13 @@ export default function ChatComposer({
               title={submitAriaLabel}
               className="h-10 w-10 sm:h-10 sm:w-10"
             >
-              {canQueueDraft ? <ArrowUpIcon className="h-4 w-4" /> : undefined}
+              {canQueueDraft || canSendWhileBusy ? <ArrowUpIcon className="h-4 w-4" /> : undefined}
             </PromptInputSubmit>
           </div>
 
           <div
             className={`order-last hidden basis-full px-2 text-center text-xs leading-4 text-muted-foreground/50 transition-opacity duration-200 lg:block ${
-              input.trim() && !canQueueDraft ? 'opacity-0' : 'opacity-100'
+              input.trim() && !canQueueDraft && !canSendWhileBusy ? 'opacity-0' : 'opacity-100'
             }`}
           >
             {submitHint}

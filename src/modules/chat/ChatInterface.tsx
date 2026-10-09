@@ -230,6 +230,7 @@ function ChatInterface({
     showCostModal,
     beginEditMessage,
   } = useChatComposerState({
+    sendWhileBusy: findWindow(selectedSession?.id || currentSessionId)?.location === 'tmux',
     selectedProject,
     selectedSession,
     currentSessionId,
