@@ -74,7 +74,6 @@ const RUNNING_VERSION = (() => {
 const systemRoutes = createSystemModule({
     appRoot: APP_ROOT,
     installMode,
-    isPlatform: IS_PLATFORM,
 });
 console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
@@ -171,7 +170,7 @@ app.use('/api/file-tree', authenticateToken, fileTreeRoutes);
 // Projects API Routes (protected)
 app.use('/api/projects', authenticateToken, projectModuleRoutes);
 
-// Chat attachment upload/serving (global ~/.cloudcli/assets store, protected)
+// Chat attachment upload/serving (global ~/.agentharbor/assets store, protected)
 app.use('/api/assets', authenticateToken, assetsRoutes);
 
 // Git API Routes (protected)
@@ -223,7 +222,7 @@ app.use(express.static(path.join(APP_ROOT, 'dist'), {
 // Frontend now uses window.location for WebSocket URLs
 
 // Chat uploads live under /api/assets (server/modules/assets), which stores
-// images and general files in the global ~/.cloudcli/assets folder.
+// images and general files in the global ~/.agentharbor/assets folder.
 
 // Serve React app for all other routes (excluding static files)
 app.get('*', (req, res) => {
@@ -278,7 +277,7 @@ const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
-const LOCAL_SERVER_MARKER_PATH = path.join(os.homedir(), '.cloudcli', 'local-server.json');
+const LOCAL_SERVER_MARKER_PATH = path.join(os.homedir(), '.agentharbor', 'local-server.json');
 
 function getErrorCode(error: unknown): string | undefined {
     if (typeof error !== 'object' || error === null || !('code' in error)) {
@@ -355,12 +354,12 @@ async function startServer() {
 
             console.log('');
             console.log(terminalTextStyles.dim('═'.repeat(63)));
-            console.log(`  ${terminalTextStyles.bright('CloudCLI Server - Ready')}`);
+            console.log(`  ${terminalTextStyles.bright('AgentHarbor Server - Ready')}`);
             console.log(terminalTextStyles.dim('═'.repeat(63)));
             console.log('');
             console.log(`${terminalTextStyles.info('[INFO]')} Server URL:  ${terminalTextStyles.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
             console.log(`${terminalTextStyles.info('[INFO]')} Installed at: ${terminalTextStyles.dim(appInstallPath)}`);
-            console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
+            console.log(`${terminalTextStyles.tip('[TIP]')}  Run "agentharbor status" for full configuration details`);
             console.log('');
 
             // Start watching the projects folder for changes

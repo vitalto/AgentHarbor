@@ -9,10 +9,8 @@ function createDependencies(
   overrides: Partial<SystemUpdateDependencies> = {},
 ): SystemUpdateDependencies {
   return {
-    appRoot: '/app/cloudcli',
-    homeDirectory: '/home/cloudcli',
+    appRoot: '/app/agentharbor',
     installMode: 'git',
-    isPlatform: false,
     environment: { TEST_ENVIRONMENT: 'true' },
     runShellCommand: async () => ({ exitCode: 0, output: 'updated', errorOutput: '' }),
     logInfo: () => undefined,
@@ -21,7 +19,7 @@ function createDependencies(
   };
 }
 
-test('git installations update from the application root', async () => {
+test('git installations pull, install and rebuild from the application root', async () => {
   const calls: unknown[][] = [];
   const dependencies = createDependencies({
     runShellCommand: async (command, workingDirectory, environment) => {
@@ -34,8 +32,8 @@ test('git installations update from the application root', async () => {
   const result = await service.updateSystem();
 
   assert.deepEqual(calls, [[
-    'git checkout main && git pull && npm install',
-    '/app/cloudcli',
+    'git pull --ff-only && npm install && npm run build',
+    '/app/agentharbor',
     dependencies.environment,
   ]]);
   assert.deepEqual(result, {
@@ -45,46 +43,20 @@ test('git installations update from the application root', async () => {
   });
 });
 
-test('global npm installations update from the user home directory', async () => {
+test('non-git installations are refused without running a command', async () => {
   const calls: unknown[][] = [];
-  const dependencies = createDependencies({
+  const service = createSystemUpdateService(createDependencies({
     installMode: 'npm',
-    runShellCommand: async (command, workingDirectory, environment) => {
-      calls.push([command, workingDirectory, environment]);
+    runShellCommand: async (...args) => {
+      calls.push(args);
       return { exitCode: 0, output: '', errorOutput: '' };
     },
-  });
-  const service = createSystemUpdateService(dependencies);
+  }));
 
   const result = await service.updateSystem();
 
-  assert.deepEqual(calls, [[
-    'npm install -g @cloudcli-ai/cloudcli@latest',
-    '/home/cloudcli',
-    dependencies.environment,
-  ]]);
-  assert.equal(result.output, 'Update completed successfully');
-});
-
-test('platform installations use the platform workflow regardless of install mode', async () => {
-  const calls: unknown[][] = [];
-  const dependencies = createDependencies({
-    installMode: 'npm',
-    isPlatform: true,
-    runShellCommand: async (command, workingDirectory, environment) => {
-      calls.push([command, workingDirectory, environment]);
-      return { exitCode: 0, output: 'platform update complete', errorOutput: '' };
-    },
-  });
-  const service = createSystemUpdateService(dependencies);
-
-  await service.updateSystem();
-
-  assert.deepEqual(calls, [[
-    'npm run update:platform',
-    '/app/cloudcli',
-    dependencies.environment,
-  ]]);
+  assert.deepEqual(calls, []);
+  assert.equal(result.success, false);
 });
 
 test('failed update commands retain stdout and stderr for the existing API contract', async () => {

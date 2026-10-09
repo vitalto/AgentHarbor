@@ -27,7 +27,7 @@ import { AppError, sliceTailPage } from '@/shared/utils.js';
  * abort — a task is stopped by id through `chat.stop-task` instead. `tasks`
  * rides along on both kinds whenever the session has any.
  *
- * A turn driven outside CloudCLI — the Claude CLI in the Shell view, or a
+ * A turn driven outside AgentHarbor — the Claude CLI in the Shell view, or a
  * terminal the user opened themselves — is listed the same way, with
  * `canInterrupt: false` because there is no run here to abort, and a
  * `statusText` saying where the work is happening.
@@ -93,11 +93,11 @@ type SessionDetails = {
   } | null;
 };
 
-const MAX_CLOUDCLI_SESSION_NAME_WORDS = 4;
+const MAX_SESSION_NAME_WORDS = 4;
 
-function buildCloudCliSessionName(initialMessage: string): string {
+function buildSessionNameFromMessage(initialMessage: string): string {
   const words = initialMessage.trim().split(/\s+/).filter(Boolean);
-  return words.slice(0, MAX_CLOUDCLI_SESSION_NAME_WORDS).join(' ') || 'Untitled Session';
+  return words.slice(0, MAX_SESSION_NAME_WORDS).join(' ') || 'Untitled Session';
 }
 
 /**
@@ -282,7 +282,7 @@ export const sessionsService = {
    * chat, navigates to the returned id immediately, and the id never changes
    * for the lifetime of the conversation. The provider-native id is mapped to
    * this row later, when the provider runtime announces it mid-run. Its title
-   * comes directly from the first visible CloudCLI message and is limited to
+   * comes directly from the first visible AgentHarbor message and is limited to
    * four whole words before any provider-owned storage exists.
    */
   createAppSession(
@@ -299,7 +299,7 @@ export const sessionsService = {
     }
 
     const sessionId = randomUUID();
-    const sessionName = buildCloudCliSessionName(initialMessage);
+    const sessionName = buildSessionNameFromMessage(initialMessage);
     sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath, sessionName);
 
     return {

@@ -79,7 +79,7 @@ test('claude history: file reference blocks restore non-image attachments', () =
       content: [{
         type: 'text',
         text: appendFilesInputTag('Summarize this', [
-          { path: 'C:/Users/x/.cloudcli/assets/brief.pdf', name: 'brief.pdf' },
+          { path: 'C:/Users/x/.agentharbor/assets/brief.pdf', name: 'brief.pdf' },
         ]),
       }],
     },
@@ -88,6 +88,6 @@ test('claude history: file reference blocks restore non-image attachments', () =
   const messages = provider.normalizeMessage(entry, SESSION_ID);
   assert.equal(messages[0].content, 'Summarize this');
   assert.deepEqual(messages[0].files, [
-    { path: 'C:/Users/x/.cloudcli/assets/brief.pdf', name: 'brief.pdf' },
+    { path: 'C:/Users/x/.agentharbor/assets/brief.pdf', name: 'brief.pdf' },
   ]);
 });

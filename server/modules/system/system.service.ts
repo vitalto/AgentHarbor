@@ -6,9 +6,7 @@ type SystemUpdateCommandResult = {
 
 type SystemUpdateDependencies = {
   appRoot: string;
-  homeDirectory: string;
   installMode: 'git' | 'npm';
-  isPlatform: boolean;
   environment: NodeJS.ProcessEnv;
   runShellCommand(
     command: string,
@@ -21,6 +19,8 @@ type SystemUpdateDependencies = {
   logError(message: string, detail?: string): void;
 };
 
+const GIT_CHECKOUT_UPDATE_COMMAND = 'git pull --ff-only && npm install && npm run build';
+
 /**
  * Creates the update workflow used by the system module and its focused tests.
  * Runtime-specific process spawning stays behind the injected command adapter.
@@ -29,20 +29,20 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
   return {
     /** Selects and executes the correct update workflow for this installation. */
     async updateSystem() {
-      const updateCommand = dependencies.isPlatform
-        ? 'npm run update:platform'
-        : dependencies.installMode === 'git'
-          ? 'git checkout main && git pull && npm install'
-          : 'npm install -g @cloudcli-ai/cloudcli@latest';
-      const workingDirectory = dependencies.isPlatform || dependencies.installMode === 'git'
-        ? dependencies.appRoot
-        : dependencies.homeDirectory;
+      if (dependencies.installMode !== 'git') {
+        return {
+          success: false as const,
+          error: 'In-place updates are only supported for git checkouts of AgentHarbor.',
+        };
+      }
+
+      const workingDirectory = dependencies.appRoot;
 
       dependencies.logInfo('Starting system update from directory:', workingDirectory);
 
       try {
         const result = await dependencies.runShellCommand(
-          updateCommand,
+          GIT_CHECKOUT_UPDATE_COMMAND,
           workingDirectory,
           dependencies.environment,
           (output) => dependencies.logInfo('Update output:', output),

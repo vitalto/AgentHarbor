@@ -5,7 +5,7 @@ import path from 'node:path';
 /**
  * Shared chat-attachment plumbing for every provider runtime.
  *
- * Uploaded chat files are persisted once in the global `~/.cloudcli/assets`
+ * Uploaded chat files are persisted once in the global `~/.agentharbor/assets`
  * folder and referenced by absolute path everywhere else:
  * - Claude: paths are read back into base64 `image` content blocks.
  * - General files: verified paths are appended inside a `<files_input>` tag,
@@ -18,7 +18,7 @@ import path from 'node:path';
 
 /** Global storage folder for uploaded chat image attachments. */
 export function getGlobalImageAssetsDir(): string {
-  return path.join(os.homedir(), '.cloudcli', 'assets');
+  return path.join(os.homedir(), '.agentharbor', 'assets');
 }
 
 export type ImageAttachmentDescriptor = {

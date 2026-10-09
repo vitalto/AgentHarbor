@@ -15,7 +15,7 @@ type BootstrapResult = {
   authenticatedUsername: string | null;
 };
 
-const RESULT_PREFIX = '__CLOUDCLI_BOOTSTRAP_RESULT__';
+const RESULT_PREFIX = '__AGENTHARBOR_BOOTSTRAP_RESULT__';
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const applicationRoot = path.resolve(testDirectory, '..', '..', '..', '..');
 
@@ -24,7 +24,7 @@ function sourceModuleUrl(...segments: string[]): string {
 }
 
 async function runCliBootstrapFixture(isPlatform: boolean): Promise<BootstrapResult> {
-  const fixtureRoot = await mkdtemp(path.join(os.tmpdir(), 'cloudcli-cli-bootstrap-'));
+  const fixtureRoot = await mkdtemp(path.join(os.tmpdir(), 'agentharbor-cli-bootstrap-'));
   const fixtureServerDirectory = path.join(fixtureRoot, 'server');
   const fixtureCliDirectory = path.join(fixtureServerDirectory, 'modules', 'cli');
   const fixtureDatabasePath = path.join(fixtureRoot, 'auth.db');
@@ -73,9 +73,6 @@ export function createCliApplication() {
       getFileStats: () => ({ size: 0, modifiedAt: new Date(0) }),
     },
     output: { log: () => undefined, error: () => undefined },
-    sandboxService: { execute: async () => 0 },
-    getLatestPackageVersion: async () => '1.0.0',
-    updateGlobalPackage: () => undefined,
     startServer: async () => undefined,
   });
 
