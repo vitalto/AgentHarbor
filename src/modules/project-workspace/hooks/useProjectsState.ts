@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
 import { api } from '@/shared/api';
+import { useAgentWindows, type AgentWindow } from '@/shared/hooks/useAgentWindows';
+import { sessionsNeedingAttention } from '@/modules/project-workspace/utils/agentAttention';
 import type { ServerEvent,
   AppTab,
   LLMProvider,
@@ -464,6 +466,13 @@ export function useProjectsState({
     });
   }, [sessionId]);
 
+  const { windows: liveAgents } = useAgentWindows();
+  const lastAgentActivityRef = useRef(new Map<string, AgentWindow['activity']>());
+  useEffect(() => {
+    sessionsNeedingAttention(lastAgentActivityRef.current, liveAgents).forEach((id) => markSessionAttention(id));
+    lastAgentActivityRef.current = new Map(liveAgents.map((agent) => [agent.sessionId, agent.activity]));
+  }, [liveAgents, markSessionAttention]);
+
   const clearSessionAttention = useCallback((targetSessionId?: string | null) => {
     if (!targetSessionId) {
       return;
@@ -676,17 +685,12 @@ export function useProjectsState({
         : null;
       const viewedSessionId = selectedSessionRef.current?.id ?? sessionId ?? null;
 
+      // "Needs attention" means there is something to look at: the turn ended, or Claude waits on a menu.
+      // Streamed rows of a turn still in progress are not that.
       if (
         eventSessionId
         && eventSessionId !== viewedSessionId
-        && event.kind !== 'chat_subscribed'
-        && event.kind !== 'loading_progress'
-        && event.kind !== 'session_upserted'
-        && event.kind !== 'status'
-        && event.kind !== 'stream_end'
-        && event.kind !== 'permission_resolved'
-        && event.kind !== 'permission_cancelled'
-        && event.kind !== 'websocket_reconnected'
+        && (event.kind === 'complete' || event.kind === 'tui_prompt' || event.kind === 'permission_request')
       ) {
         markSessionAttention(eventSessionId);
       }
@@ -710,8 +714,6 @@ export function useProjectsState({
         && !isSessionProcessing(upsert.sessionId)
       ) {
         setExternalMessageUpdate((prev) => prev + 1);
-      } else {
-        markSessionAttention(upsert.sessionId);
       }
 
       setProjects((previousProjects) => {
