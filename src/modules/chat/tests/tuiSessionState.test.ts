@@ -30,4 +30,10 @@ test('only the spinner word of the TUI screen becomes the activity label', async
   assert.equal(extractTuiActivity(['> Write a poem', '* Kneading… (3s · thinking with high effort)']), 'Kneading…');
   assert.equal(extractTuiActivity(['● Bash(ls)', '✻ Running tests… (12s · ↓ 2.1k tokens)', '  ⎿  ok']), 'Running tests…');
   assert.equal(extractTuiActivity(['✻ Cogitated for 1s · done 12:30', '> ']), null);
+  assert.equal(
+    extractTuiActivity(['● Bash(cd "D:/Develop/Unity/Floor 7" && git status --short | head -20; git log --oneline -4 | cut -c1-110…']),
+    null,
+    'a tool call cut short with an ellipsis is not the spinner',
+  );
+  assert.equal(extractTuiActivity(['● Bash(git status…)', '✶ Running git status… (4s)']), 'Running git status…');
 });

@@ -11,7 +11,9 @@ export type TuiPrompt = {
   options: TuiPromptOption[];
 };
 
-const SPINNER_LINE = /^\s*[^\w\s>❯]\s+([^…]+…)/;
+// Spinner glyphs only: "●" marks tool calls and replies, whose truncated text also ends in "…".
+// The verb is a short phrase followed by its timer, e.g. "✻ Running tests… (12s · ↓ 2.1k tokens)".
+const SPINNER_LINE = /^\s*[✻✽✶✳✢·*]\s+([^\s(…][^(…]{0,40}…)(?:\s+\(|\s*$)/;
 
 /**
  * The verb of the TUI's spinner line ("* Kneading… (3s · thinking)" →
