@@ -8,6 +8,7 @@ const windowsClaude: AgentConfig = {
   tmuxSession: 'main',
   claudeCommand: '/mnt/c/Users/u/.local/bin/claude.exe',
   claudeArgs: '',
+  idleCloseMinutes: 60,
   claudeHome: '/mnt/c/Users/u/.claude',
   stateDir: '/mnt/c/Users/u/.agentharbor',
   windowsClaude: true,

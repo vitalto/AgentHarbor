@@ -20,6 +20,7 @@ import {
     configureSessionMonitor,
     findAgentWindow,
     getAgentConfig,
+    startIdleReaper,
     typeIntoAgent,
     writeHookSettings,
 } from '@/modules/tmux/index.js';
@@ -103,6 +104,7 @@ const sessionMonitor = configureSessionMonitor({
 });
 writeHookSettings(getAgentConfig());
 sessionMonitor.start();
+startIdleReaper();
 
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
 // A completed run stays subscribable while its session's background work

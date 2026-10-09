@@ -22,6 +22,7 @@ async function setup(panes: AgentPane[]) {
     tmuxSession: 'main',
     claudeCommand: '/mnt/c/claude.exe',
     claudeArgs: '',
+    idleCloseMinutes: 60,
     claudeHome: path.join(root, 'claude'),
     stateDir: path.join(root, 'state'),
     windowsClaude: true,
