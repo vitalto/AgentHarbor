@@ -11,10 +11,15 @@ import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.ser
 import { toLocalPath } from '@/modules/tmux/path-translation.js';
 import { getSessionMonitor } from '@/modules/tmux/session-monitor.service.js';
 import { tmuxService, TmuxError, type AgentPane } from '@/modules/tmux/tmux.service.js';
+import { readInputBox, type InputBox } from '@/modules/tmux/tui-prompt.js';
 
 const REGISTRATION_TIMEOUT_MS = 120_000;
 const INPUT_READY_TIMEOUT_MS = 60_000;
 const POLL_MS = 300;
+const INPUT_POLL_MS = 100;
+const PASTE_LANDING_TIMEOUT_MS = 10_000;
+const SUBMIT_CONFIRM_TIMEOUT_MS = 3_000;
+const SUBMIT_ATTEMPTS = 3;
 const PROCESS_EXIT_TIMEOUT_MS = 10_000;
 /** A pane's interop process and its claude.exe start within a few seconds of each other. */
 const PANE_PROCESS_MATCH_MS = 60_000;
@@ -304,11 +309,47 @@ export async function waitForInputReady(appSessionId: string, paneId: string): P
   throw new AgentWindowError('Claude is not accepting input (no input box on screen after 60s).');
 }
 
+async function waitForInputBox(
+  paneId: string,
+  isWanted: (box: InputBox | null) => boolean,
+  timeoutMs: number,
+): Promise<{ box: InputBox | null } | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const box = readInputBox(await tmuxService.capturePane(paneId));
+    if (isWanted(box)) {
+      return { box };
+    }
+    await delay(INPUT_POLL_MS);
+  }
+  return null;
+}
+
+const withoutWhitespace = (text: string) => text.replace(/\s+/g, '');
+
+/**
+ * Pastes the text and presses Enter until Claude takes it. A fixed pause is not
+ * enough: the TUI absorbs a paste at its own pace ("Pasting…"), and a just-started
+ * Claude has dropped the Enter, leaving the message unsent in its input box.
+ * Taken means the pasted text left the box: it may be empty then, or show the
+ * "edit queued messages" hint while Claude is busy.
+ */
 export async function typeIntoAgent(paneId: string, text: string): Promise<void> {
   await tmuxService.pasteText(paneId, text);
-  // The TUI needs a moment to absorb a bracketed paste before Enter submits it.
-  await delay(250);
-  await tmuxService.sendKeys(paneId, ['Enter']);
+  const landed = await waitForInputBox(paneId, (box) => Boolean(box?.text) && !box?.pasting, PASTE_LANDING_TIMEOUT_MS);
+  const pastedText = withoutWhitespace(landed?.box?.text ?? '');
+  for (let attempt = 0; attempt < SUBMIT_ATTEMPTS; attempt += 1) {
+    await tmuxService.sendKeys(paneId, ['Enter']);
+    const submitted = await waitForInputBox(
+      paneId,
+      (box) => box === null || (!box.pasting && withoutWhitespace(box.text) !== pastedText),
+      SUBMIT_CONFIRM_TIMEOUT_MS,
+    );
+    if (submitted) {
+      return;
+    }
+  }
+  throw new AgentWindowError('Claude kept the message in its input box instead of sending it.');
 }
 
 /**

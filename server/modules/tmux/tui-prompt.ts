@@ -180,15 +180,37 @@ export function keysForOption(prompt: TuiPrompt, targetIndex: number): string[] 
   return [...moves, 'Enter'];
 }
 
-/** The prompt input box (`> ` between two horizontal rules) is on screen and no menu covers it. */
-export function isInputReady(lines: string[]): boolean {
+const INPUT_PROMPT = /^[>❯]\s?/;
+const PASTING = /^\s*Pasting…/;
+
+export type InputBox = {
+  text: string;
+  /** The TUI is still absorbing a paste: the box looks empty but the text is about to appear. */
+  pasting: boolean;
+};
+
+/** The prompt input box (`> ` between two horizontal rules) when it is on screen and no menu covers it. */
+export function readInputBox(lines: string[]): InputBox | null {
   if (findFooter(lines) >= 0) {
-    return false;
+    return null;
   }
-  for (let index = 1; index < lines.length; index += 1) {
-    if (/^[>❯]\s?/.test(lines[index]) && DIALOG_BORDER.test(lines[index - 1])) {
-      return lines.slice(index + 1, index + 6).some((line) => DIALOG_BORDER.test(line));
+  for (let index = lines.length - 1; index >= 1; index -= 1) {
+    if (!INPUT_PROMPT.test(lines[index]) || !DIALOG_BORDER.test(lines[index - 1])) {
+      continue;
     }
+    const closingRule = lines.findIndex((line, lineIndex) => lineIndex > index && DIALOG_BORDER.test(line));
+    if (closingRule < 0) {
+      return null;
+    }
+    const text = [lines[index].replace(INPUT_PROMPT, ''), ...lines.slice(index + 1, closingRule)]
+      .map((line) => line.trim())
+      .join('\n')
+      .trim();
+    return { text, pasting: lines.slice(closingRule + 1).some((line) => PASTING.test(line)) };
   }
-  return false;
+  return null;
+}
+
+export function isInputReady(lines: string[]): boolean {
+  return readInputBox(lines) !== null;
 }

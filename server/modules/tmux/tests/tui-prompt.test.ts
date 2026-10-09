@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { isInputReady, keysForOption, parseTuiPrompt } from '@/modules/tmux/tui-prompt.js';
+import { isInputReady, keysForOption, parseTuiPrompt, readInputBox } from '@/modules/tmux/tui-prompt.js';
 
 const fixturesDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const screen = (name: string) => readFileSync(path.join(fixturesDirectory, `${name}.txt`), 'utf8').split('\n');
@@ -74,4 +74,13 @@ test('isInputReady: true for idle and busy input boxes, false under a menu or di
   assert.equal(isInputReady(screen('bash-permission')), false);
   assert.equal(isInputReady(screen('trust-folder')), false);
   assert.equal(isInputReady(['', '']), false);
+});
+
+test('readInputBox: an unsent message stays readable, a paste in progress is flagged', () => {
+  assert.deepEqual(readInputBox(screen('idle-input')), { text: '', pasting: false });
+  assert.deepEqual(readInputBox(screen('pasting')), { text: '', pasting: true });
+  const unsent = readInputBox(screen('input-unsent'));
+  assert.equal(unsent?.pasting, false);
+  assert.match(unsent?.text ?? '', /^What is on this screenshot\?\n\n\\wsl\.localhost\\Ubuntu\\[\s\S]*screenshot\.png$/);
+  assert.equal(readInputBox(screen('bash-permission')), null);
 });
