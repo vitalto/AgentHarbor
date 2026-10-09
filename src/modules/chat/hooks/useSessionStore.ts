@@ -337,16 +337,26 @@ function pruneRealtimeSupersededByServer(
   });
 }
 
+/**
+ * Persisted rows that can stand in for an optimistic local user row: the
+ * server page, plus transcript rows that streamed in live (a TUI session echoes
+ * the typed prompt from its transcript before any REST refresh).
+ */
+function persistedEchoCandidates(server: NormalizedMessage[], realtime: NormalizedMessage[]): NormalizedMessage[] {
+  const livePersisted = realtime.filter((message) => !message.id.startsWith('local_'));
+  return livePersisted.length > 0 ? [...server, ...livePersisted] : server;
+}
+
 function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[]): NormalizedMessage[] {
   if (realtime.length === 0) {
     return dedupeAdjacentAssistantEchoes(server);
   }
   if (server.length === 0) {
-    return dedupeAdjacentAssistantEchoes(realtime);
+    return dedupeAdjacentAssistantEchoes(removeOptimisticUserEchoes(persistedEchoCandidates(server, realtime), realtime));
   }
 
   const serverIds = new Set(server.map((message) => message.id));
-  const reconciledRealtime = removeOptimisticUserEchoes(server, realtime);
+  const reconciledRealtime = removeOptimisticUserEchoes(persistedEchoCandidates(server, realtime), realtime);
   const extra = reconciledRealtime.filter((message) => {
     if (serverIds.has(message.id)) {
       return false;
