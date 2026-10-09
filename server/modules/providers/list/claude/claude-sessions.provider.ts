@@ -966,6 +966,13 @@ function isInternalContent(content: string): boolean {
   return INTERNAL_CONTENT_PREFIXES.some((prefix) => content.startsWith(prefix));
 }
 
+const IMAGE_MARKER = /\[Image #\d+\]\s*/g;
+
+/** The TUI writes `[Image #N]` into the prompt for each attached image; the bubble shows the images instead. */
+function withoutImageMarkers(text: string, attachedImageCount: number): string {
+  return attachedImageCount > 0 ? text.replace(IMAGE_MARKER, '').trim() : text;
+}
+
 /**
  * Claude wraps local slash-command metadata in lightweight XML-like tags inside
  * a plain string payload. We intentionally parse only the small tag surface we
@@ -1365,7 +1372,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               toolUseResult: truncateNestedOutput(raw.toolUseResult ?? raw.tool_use_result),
             }));
           } else if (part.type === 'text') {
-            const text = part.text || '';
+            const text = withoutImageMarkers(part.text || '', imageAttachments.length);
             const parsedFiles = parseFilesInputTag(text);
             if (
               (parsedFiles.text || parsedFiles.attachments.length > 0)
@@ -1393,7 +1400,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
         if (messages.length === 0) {
           const textParts = raw.message.content
             .filter((part: AnyRecord) => part.type === 'text')
-            .map((part: AnyRecord) => part.text)
+            .map((part: AnyRecord) => withoutImageMarkers(part.text || '', imageAttachments.length))
             .filter(Boolean)
             .join('\n');
           if (textParts && !isInternalContent(textParts)) {

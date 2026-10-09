@@ -327,17 +327,37 @@ async function waitForInputBox(
 
 const withoutWhitespace = (text: string) => text.replace(/\s+/g, '');
 
-/**
- * Pastes the text and presses Enter until Claude takes it. A fixed pause is not
- * enough: the TUI absorbs a paste at its own pace ("Pasting…"), and a just-started
- * Claude has dropped the Enter, leaving the message unsent in its input box.
- * Taken means the pasted text left the box: it may be empty then, or show the
- * "edit queued messages" hint while Claude is busy.
- */
-export async function typeIntoAgent(paneId: string, text: string): Promise<void> {
+/** Pastes and waits until the TUI has absorbed it; resolves with the input box text it left. */
+async function pasteIntoInputBox(paneId: string, text: string): Promise<string> {
+  const textBefore = readInputBox(await tmuxService.capturePane(paneId))?.text ?? '';
   await tmuxService.pasteText(paneId, text);
-  const landed = await waitForInputBox(paneId, (box) => Boolean(box?.text) && !box?.pasting, PASTE_LANDING_TIMEOUT_MS);
-  const pastedText = withoutWhitespace(landed?.box?.text ?? '');
+  const landed = await waitForInputBox(
+    paneId,
+    (box) => Boolean(box?.text) && !box?.pasting && box?.text !== textBefore,
+    PASTE_LANDING_TIMEOUT_MS,
+  );
+  return landed?.box?.text ?? '';
+}
+
+/**
+ * Pastes the message and presses Enter until Claude takes it. A fixed pause is
+ * not enough: the TUI absorbs a paste at its own pace ("Pasting…"), and a
+ * just-started Claude has dropped the Enter, leaving the message unsent in its
+ * input box. Taken means the pasted text left the box: it may be empty then,
+ * or show the "edit queued messages" hint while Claude is busy.
+ *
+ * Each image path is pasted on its own first: only a paste that is exactly an
+ * image file path becomes an `[Image #N]` attachment.
+ */
+export async function typeIntoAgent(paneId: string, text: string, imagePaths: string[] = []): Promise<void> {
+  let boxText = '';
+  for (const imagePath of imagePaths) {
+    boxText = await pasteIntoInputBox(paneId, imagePath);
+  }
+  if (text.trim()) {
+    boxText = await pasteIntoInputBox(paneId, imagePaths.length > 0 ? ` ${text}` : text);
+  }
+  const pastedText = withoutWhitespace(boxText);
   for (let attempt = 0; attempt < SUBMIT_ATTEMPTS; attempt += 1) {
     await tmuxService.sendKeys(paneId, ['Enter']);
     const submitted = await waitForInputBox(

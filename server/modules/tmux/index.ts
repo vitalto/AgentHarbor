@@ -1,6 +1,7 @@
 export { getAgentConfig, readAgentConfig } from '@/modules/tmux/agent-config.js';
 export type { AgentConfig } from '@/modules/tmux/agent-config.js';
 export { writeHookSettings } from '@/modules/tmux/agent-launch.js';
+export { stageAttachmentForClaude } from '@/modules/tmux/attachment-staging.js';
 export {
   AgentBusyElsewhereError,
   AgentWindowError,
