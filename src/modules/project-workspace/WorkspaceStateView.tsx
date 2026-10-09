@@ -28,12 +28,7 @@ export default function WorkspaceStateView({ mode, isMobile, onMenuClick }: Work
           <div className="text-center text-muted-foreground">
             <div className="mx-auto mb-4 h-10 w-10">
               <div
-                className="h-full w-full rounded-full border-[3px] border-muted border-t-primary"
-                style={{
-                  animation: 'spin 1s linear infinite',
-                  WebkitAnimation: 'spin 1s linear infinite',
-                  MozAnimation: 'spin 1s linear infinite',
-                }}
+                className="h-full w-full animate-spin rounded-full border-[3px] border-muted border-t-primary"
               />
             </div>
             <h2 className="mb-1 text-lg font-semibold text-foreground">{t('mainContent.loading')}</h2>
