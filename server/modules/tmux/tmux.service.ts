@@ -38,8 +38,21 @@ function parsePaneLine(line: string): AgentPane | null {
 
 export class TmuxError extends Error {}
 
+/**
+ * Arguments addressing the tmux server. Without an explicit socket name, a
+ * server running inside tmux follows $TMUX; spelled out as -S so processes
+ * started with TMUX removed (nested viewers) reach the same server.
+ */
+function resolveSocketArgs(socketName: string | undefined): string[] {
+  if (socketName) {
+    return ['-L', socketName];
+  }
+  const inheritedSocketPath = process.env.TMUX?.split(',')[0];
+  return inheritedSocketPath ? ['-S', inheritedSocketPath] : [];
+}
+
 export function createTmuxService(options: { socketName?: string; session?: string } = {}) {
-  const socketArgs = options.socketName ? ['-L', options.socketName] : [];
+  const socketArgs = resolveSocketArgs(options.socketName);
   const sessionName = () => options.session ?? getAgentConfig().tmuxSession;
 
   const run = (args: string[], stdin?: string): Promise<string> =>

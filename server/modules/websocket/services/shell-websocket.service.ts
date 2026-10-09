@@ -6,12 +6,11 @@ import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
 import {
-  ensureAgentWindow,
   getAgentConfig,
+  startAgentWindow,
   toLocalPath,
   tmuxService,
   type AgentPane,
-  type PaneSession,
 } from '@/modules/tmux/index.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
 
@@ -26,7 +25,8 @@ type ShellIncomingMessage = {
 };
 
 type ShellTmuxGateway = {
-  ensureAgentWindow: (appSessionId: string) => Promise<PaneSession>;
+  /** Resolves as soon as the window exists, even while Claude is still starting (trust dialog etc.). */
+  ensureAgentWindow: (appSessionId: string) => Promise<{ pane: AgentPane }>;
   hasSession: () => Promise<boolean>;
   listPanes: () => Promise<AgentPane[]>;
   newWindow: (input: { cwd: string; name: string; command: string }) => Promise<AgentPane>;
@@ -40,7 +40,7 @@ type ShellWebSocketDependencies = {
 };
 
 const defaultTmuxGateway: ShellTmuxGateway = {
-  ensureAgentWindow,
+  ensureAgentWindow: startAgentWindow,
   hasSession: () => tmuxService.hasSession(),
   listPanes: () => tmuxService.listPanes(),
   newWindow: (input) => tmuxService.newWindow(input),
@@ -69,21 +69,6 @@ function sendFrame(ws: WebSocket, frame: Record<string, unknown>): void {
   }
 }
 
-/**
- * The tmux service's own commands inherit this process's environment, so when
- * the server runs inside tmux they address the server named by $TMUX. The
- * viewer runs with TMUX removed (nested tmux refuses to start), so it has to be
- * pointed at that same server explicitly.
- */
-function viewerSocketArgs(gateway: ShellTmuxGateway): string[] {
-  const configured = gateway.socketArgs();
-  if (configured.length > 0) {
-    return configured;
-  }
-  const inheritedSocketPath = process.env.TMUX?.split(',')[0];
-  return inheritedSocketPath ? ['-S', inheritedSocketPath] : [];
-}
-
 function viewerEnvironment(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' };
   delete env.TMUX;
@@ -98,7 +83,7 @@ function viewerEnvironment(): NodeJS.ProcessEnv {
  */
 function buildViewerArgs(gateway: ShellTmuxGateway, windowId: string, viewerName: string): string[] {
   return [
-    ...viewerSocketArgs(gateway),
+    ...gateway.socketArgs(),
     'new-session', '-t', gateway.sessionName(), '-s', viewerName,
     ';', 'set-option', 'destroy-unattached', 'on',
     ';', 'select-window', '-t', windowId,

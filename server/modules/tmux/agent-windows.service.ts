@@ -7,7 +7,7 @@ import { buildAgentLaunch, writeHookSettings } from '@/modules/tmux/agent-launch
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { toLocalPath } from '@/modules/tmux/path-translation.js';
 import { getSessionMonitor } from '@/modules/tmux/session-monitor.service.js';
-import { tmuxService, TmuxError } from '@/modules/tmux/tmux.service.js';
+import { tmuxService, TmuxError, type AgentPane } from '@/modules/tmux/tmux.service.js';
 
 const REGISTRATION_TIMEOUT_MS = 120_000;
 const INPUT_READY_TIMEOUT_MS = 60_000;
@@ -58,23 +58,18 @@ export async function findAgentWindow(appSessionId: string): Promise<PaneSession
   return getSessionMonitor().findPane(appSessionId);
 }
 
-/**
- * Returns the tmux pane running the session's Claude, starting one if needed:
- * `--resume` for a session Claude already knows, `--session-id` with a fresh
- * id for a new app session (so the transcript is known before it exists).
- */
-export async function ensureAgentWindow(appSessionId: string): Promise<PaneSession> {
+type StartingWindow = { pane: AgentPane; registration: Promise<PaneSession> };
+
+/** One launch per session at a time: the chat and the terminal tab may both ask for the same window. */
+const startingWindows = new Map<string, Promise<StartingWindow>>();
+
+async function launchAgentWindow(appSessionId: string): Promise<StartingWindow> {
   const session = sessionsDb.getSessionById(appSessionId);
   if (!session) {
     throw new AgentWindowError(`Session ${appSessionId} not found.`);
   }
   if (!(await tmuxService.hasSession())) {
     throw new AgentWindowError(`tmux session "${getAgentConfig().tmuxSession}" is not running.`);
-  }
-
-  const existing = await findAgentWindow(appSessionId);
-  if (existing) {
-    return existing;
   }
 
   const config = getAgentConfig();
@@ -95,12 +90,47 @@ export async function ensureAgentWindow(appSessionId: string): Promise<PaneSessi
     env: launch.env,
   });
 
-  const registered = await waitForRegistration(appSessionId, pane.paneId);
-  if (registered.providerSessionId && registered.providerSessionId !== providerSessionId) {
-    // Claude may start a new transcript on resume; follow it so the chat keeps tracking this window.
-    sessionsDb.assignProviderSessionId(appSessionId, registered.providerSessionId);
+  const expectedSessionId = providerSessionId;
+  const registration = waitForRegistration(appSessionId, pane.paneId).then((registered) => {
+    if (registered.providerSessionId && registered.providerSessionId !== expectedSessionId) {
+      // Claude may start a new transcript on resume; follow it so the chat keeps tracking this window.
+      sessionsDb.assignProviderSessionId(appSessionId, registered.providerSessionId);
+    }
+    return registered;
+  });
+  return { pane, registration };
+}
+
+/**
+ * The session's Claude window as soon as it exists, starting one if needed:
+ * `--resume` for a session Claude already knows, `--session-id` with a fresh
+ * id for a new app session (so the transcript is known before it exists).
+ * Registration (the SessionStart hook) may still be pending — e.g. behind the
+ * folder-trust dialog — which is what a terminal viewer wants to see.
+ */
+export async function startAgentWindow(appSessionId: string): Promise<StartingWindow> {
+  const existing = await findAgentWindow(appSessionId);
+  if (existing) {
+    return { pane: existing.pane, registration: Promise.resolve(existing) };
   }
-  return registered;
+
+  let starting = startingWindows.get(appSessionId);
+  if (!starting) {
+    starting = launchAgentWindow(appSessionId).then((window) => {
+      const registration = window.registration.finally(() => startingWindows.delete(appSessionId));
+      // Callers that only want the pane must not see an unhandled rejection from a failed start.
+      registration.catch(() => undefined);
+      return { pane: window.pane, registration };
+    });
+    starting.catch(() => startingWindows.delete(appSessionId));
+    startingWindows.set(appSessionId, starting);
+  }
+  return starting;
+}
+
+/** The session's registered Claude window, starting and waiting for one if needed. */
+export async function ensureAgentWindow(appSessionId: string): Promise<PaneSession> {
+  return (await startAgentWindow(appSessionId)).registration;
 }
 
 /** Waits until the input box accepts text; menus shown meanwhile are surfaced for the user to answer. */

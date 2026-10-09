@@ -5,6 +5,7 @@ export {
   AgentWindowError,
   closeAgentWindow,
   ensureAgentWindow,
+  startAgentWindow,
   findAgentWindow,
   typeIntoAgent,
   waitForInputReady,

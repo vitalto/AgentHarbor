@@ -130,7 +130,7 @@ test('a session terminal attaches a grouped tmux viewer to the session window', 
   }
 });
 
-test('a server running inside tmux points the viewer at the same tmux server without inheriting TMUX', async () => {
+test('the viewer never inherits TMUX (nested tmux refuses to start)', async () => {
   const previousTmux = process.env.TMUX;
   process.env.TMUX = '/tmp/tmux-1000/default,1234,0';
   try {
@@ -138,7 +138,6 @@ test('a server running inside tmux points the viewer at the same tmux server wit
     socket.emit('message', JSON.stringify({ type: 'init', sessionId: 'app-1' }));
     await settle();
 
-    assert.deepEqual(spawns[0].args.slice(0, 3), ['-S', '/tmp/tmux-1000/default', 'new-session']);
     assert.equal(spawns[0].options.env?.TMUX, undefined);
   } finally {
     if (previousTmux === undefined) delete process.env.TMUX; else process.env.TMUX = previousTmux;
