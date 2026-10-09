@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { AgentConfig } from '@/modules/tmux/agent-config.js';
-import { toClaudePath, toLocalPath } from '@/shared/path-translation.js';
+import { toClaudePath, toLocalPath } from '@/modules/tmux/path-translation.js';
 
 const windowsClaude: AgentConfig = {
   tmuxSession: 'main',

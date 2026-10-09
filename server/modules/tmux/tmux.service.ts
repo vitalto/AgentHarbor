@@ -10,20 +10,29 @@ export type AgentPane = {
   panePid: number;
   cwd: string;
   dead: boolean;
+  command: string;
 };
 
 export type TmuxService = ReturnType<typeof createTmuxService>;
 
 const FIELD_SEPARATOR = '\u001f';
-const PANE_FORMAT = ['#{window_id}', '#{window_name}', '#{pane_id}', '#{pane_pid}', '#{pane_current_path}', '#{pane_dead}']
+const PANE_FORMAT = ['#{window_id}', '#{window_name}', '#{pane_id}', '#{pane_pid}', '#{pane_current_path}', '#{pane_dead}', '#{pane_current_command}']
   .join(FIELD_SEPARATOR);
 
 function parsePaneLine(line: string): AgentPane | null {
-  const [windowId, windowName, paneId, panePid, cwd, dead] = line.split(FIELD_SEPARATOR);
+  const [windowId, windowName, paneId, panePid, cwd, dead, command] = line.split(FIELD_SEPARATOR);
   if (!windowId || !paneId) {
     return null;
   }
-  return { windowId, windowName, paneId, panePid: Number(panePid) || 0, cwd: cwd ?? '', dead: dead === '1' };
+  return {
+    windowId,
+    windowName,
+    paneId,
+    panePid: Number(panePid) || 0,
+    cwd: cwd ?? '',
+    dead: dead === '1',
+    command: command ?? '',
+  };
 }
 
 export class TmuxError extends Error {}
