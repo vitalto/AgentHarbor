@@ -7,10 +7,11 @@ export {
   ensureAgentWindow,
   startAgentWindow,
   findAgentWindow,
+  moveSessionToTmux,
   typeIntoAgent,
   waitForInputReady,
 } from '@/modules/tmux/agent-windows.service.js';
-export { getLiveProcessStartTime, readClaudeStatuses } from '@/modules/tmux/claude-status.js';
+export { getLiveProcessStartTime, readClaudeProcesses, readClaudeStatuses } from '@/modules/tmux/claude-status.js';
 export type { ClaudeActivity, ClaudeStatus } from '@/modules/tmux/claude-status.js';
 export { paneRegistry } from '@/modules/tmux/pane-registry.service.js';
 export type { PaneSession } from '@/modules/tmux/pane-registry.service.js';

@@ -16,14 +16,15 @@ import type { PermissionMode, Project, ProjectSession } from '@/shared/types';
 const PROJECT: Project = { projectId: 'project-1', displayName: 'Project One', fullPath: '/tmp/project-one' };
 const SESSION: ProjectSession = { id: 'session-1' };
 
-const submitWhileBusy = async (sendWhileBusy: boolean) => {
+const submitWhileBusy = async (sendWhileBusy: boolean, beforeSend?: () => boolean, session: ProjectSession = SESSION) => {
   const sent: Array<{ type: string; content?: string }> = [];
   const view = renderHook(() =>
     useChatComposerState({
       sendWhileBusy,
+      beforeSend,
       selectedProject: PROJECT,
-      selectedSession: SESSION,
-      currentSessionId: SESSION.id,
+      selectedSession: session,
+      currentSessionId: session.id,
       provider: 'claude',
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
@@ -67,4 +68,11 @@ test('without a live window the mid-turn message is queued as before', async () 
   const { sends, view } = await submitWhileBusy(false);
   assert.equal(sends.length, 0);
   assert.equal(view.result.current.queuedDraft?.content, 'also check the tests');
+});
+
+test('a send held back by beforeSend (session runs outside tmux) keeps the text and sends nothing', async () => {
+  const { sends, view } = await submitWhileBusy(true, () => false, { id: 'session-held-back' });
+  assert.equal(sends.length, 0);
+  assert.equal(view.result.current.queuedDraft, null);
+  assert.equal(view.result.current.input, 'also check the tests');
 });

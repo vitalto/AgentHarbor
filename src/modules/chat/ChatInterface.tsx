@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon } from 'lucide-react';
 
@@ -6,6 +6,7 @@ import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 import { useTuiSessionState } from '@/modules/chat/hooks/useTuiSessionState';
+import OutsideTmuxNotice from '@/modules/chat/composer/OutsideTmuxNotice';
 import type { TuiKey } from '@/modules/chat/utils/tuiPrompt';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
@@ -71,7 +72,10 @@ function ChatInterface({
 }: ChatInterfaceProps) {
   const { subscribe } = useWebSocket();
   const { handleTuiEvent, getTuiState } = useTuiSessionState();
-  const { findWindow } = useAgentWindows();
+  const { findWindow, moveToTmux } = useAgentWindows();
+  // Set when a send was held back because the session runs outside tmux; cleared once it is moved or sent.
+  const [hasMessageAwaitingMove, setHasMessageAwaitingMove] = useState(false);
+  const sendAfterMoveRef = useRef(false);
   const { t } = useTranslation('chat');
   const processingSessions = useProcessingSessions();
   const {
@@ -230,6 +234,15 @@ function ChatInterface({
     beginEditMessage,
   } = useChatComposerState({
     sendWhileBusy: findWindow(selectedSession?.id || currentSessionId)?.location === 'tmux',
+    beforeSend: () => {
+      const agent = findWindow(selectedSession?.id || currentSessionId);
+      if (sendAfterMoveRef.current || !agent || agent.location === 'tmux') {
+        sendAfterMoveRef.current = false;
+        return true;
+      }
+      setHasMessageAwaitingMove(true);
+      return false;
+    },
     selectedProject,
     selectedSession,
     currentSessionId,
@@ -276,6 +289,9 @@ function ChatInterface({
   const viewedTui = getTuiState(viewedSessionId);
   const viewedAgent = findWindow(viewedSessionId);
   const viewedOutsideTmux = viewedAgent && (viewedAgent.location !== 'tmux' || viewedAgent.duplicateProcesses) ? viewedAgent : null;
+  useEffect(() => {
+    setHasMessageAwaitingMove(false);
+  }, [viewedSessionId]);
   const chooseTuiOption = useCallback((optionIndex: number) => {
     if (viewedSessionId) {
       sendMessage({ type: 'chat.tui-keys', sessionId: viewedSessionId, optionIndex });
@@ -490,12 +506,21 @@ function ChatInterface({
             </div>
           )}
 
-          {viewedOutsideTmux && (
-            <div className="mx-auto mb-2 max-w-[54.25rem] rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground" data-testid="outside-tmux-notice">
-              {viewedOutsideTmux.duplicateProcesses
-                ? 'Two Claude processes hold this session. Close one of them, otherwise both write its history.'
-                : `This session runs in ${viewedOutsideTmux.location === 'windows' ? 'a Windows terminal' : 'another terminal'} (pid ${viewedOutsideTmux.pid}). You can watch it here; to chat from here, close it there first.`}
-            </div>
+          {viewedOutsideTmux && viewedSessionId && (
+            <OutsideTmuxNotice
+              agent={viewedOutsideTmux}
+              hasPendingMessage={hasMessageAwaitingMove}
+              onMove={async () => {
+                await moveToTmux(viewedSessionId);
+                setHasMessageAwaitingMove(false);
+              }}
+              onMoveAndSend={async () => {
+                await moveToTmux(viewedSessionId);
+                setHasMessageAwaitingMove(false);
+                sendAfterMoveRef.current = true;
+                handleSubmit({ preventDefault: () => undefined } as Parameters<typeof handleSubmit>[0]);
+              }}
+            />
           )}
 
           <ChatComposer

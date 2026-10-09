@@ -1,9 +1,11 @@
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { getAgentConfig } from '@/modules/tmux/agent-config.js';
-import { readClaudeStatuses, type ClaudeStatus } from '@/modules/tmux/claude-status.js';
+import { readClaudeProcesses, readClaudeStatuses, type ClaudeProcess, type ClaudeStatus } from '@/modules/tmux/claude-status.js';
 import { buildAgentLaunch, writeHookSettings } from '@/modules/tmux/agent-launch.js';
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { toLocalPath } from '@/modules/tmux/path-translation.js';
@@ -13,6 +15,11 @@ import { tmuxService, TmuxError, type AgentPane } from '@/modules/tmux/tmux.serv
 const REGISTRATION_TIMEOUT_MS = 120_000;
 const INPUT_READY_TIMEOUT_MS = 60_000;
 const POLL_MS = 300;
+const PROCESS_EXIT_TIMEOUT_MS = 10_000;
+/** A pane's interop process and its claude.exe start within a few seconds of each other. */
+const PANE_PROCESS_MATCH_MS = 60_000;
+const CLOCK_TICKS_PER_SECOND = 100;
+const TASKKILL = '/mnt/c/Windows/System32/taskkill.exe';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -152,6 +159,95 @@ export async function startAgentWindow(appSessionId: string): Promise<StartingWi
 /** The session's registered Claude window, starting and waiting for one if needed. */
 export async function ensureAgentWindow(appSessionId: string): Promise<PaneSession> {
   return (await startAgentWindow(appSessionId)).registration;
+}
+
+/** Epoch ms at which a local process started, from /proc (null where there is no procfs). */
+async function localProcessStartedAt(pid: number): Promise<number | null> {
+  try {
+    const [stat, systemStat] = await Promise.all([fsp.readFile(`/proc/${pid}/stat`, 'utf8'), fsp.readFile('/proc/stat', 'utf8')]);
+    const bootSeconds = Number(/^btime (\d+)$/m.exec(systemStat)?.[1]);
+    // Fields after the parenthesised command name; starttime is the 20th of them, in clock ticks since boot.
+    const startTicks = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]);
+    return Number.isFinite(bootSeconds) && Number.isFinite(startTicks) ? bootSeconds * 1000 + (startTicks * 1000) / CLOCK_TICKS_PER_SECOND : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The Claude processes holding the session that are NOT the one in its tmux
+ * window. A Windows claude.exe in a pane cannot be matched by pid (the pane
+ * holds the interop process), so the pane's process start time is matched to
+ * the process whose status file reports the closest start. Null when the pane's
+ * process cannot be identified: then nothing may be stopped.
+ */
+export function pickProcessesOutsideTmux(processes: ClaudeProcess[], paneStartedAt: number | null): ClaudeProcess[] | null {
+  if (paneStartedAt === null) {
+    return null;
+  }
+  let paneProcess: ClaudeProcess | null = null;
+  for (const candidate of processes) {
+    const distance = candidate.startedAt === null ? Infinity : Math.abs(candidate.startedAt - paneStartedAt);
+    if (distance <= PANE_PROCESS_MATCH_MS && (!paneProcess || distance < Math.abs((paneProcess.startedAt ?? 0) - paneStartedAt))) {
+      paneProcess = candidate;
+    }
+  }
+  return paneProcess ? processes.filter((candidate) => candidate !== paneProcess) : null;
+}
+
+async function stopClaudeProcess(claude: ClaudeProcess): Promise<void> {
+  if (!claude.windowsPid) {
+    process.kill(claude.pid, 'SIGTERM');
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    execFile(TASKKILL, ['/PID', String(claude.pid), '/F'], { timeout: 10_000 }, (error) => (error ? reject(error) : resolve()));
+  });
+}
+
+/**
+ * Moves a session that Claude runs outside tmux (a Windows console, another
+ * terminal) into its tmux window: the outside process is ended — only while it
+ * is idle, so no turn is cut off — and the session is resumed in tmux (or the
+ * tmux copy that already exists is kept).
+ */
+export async function moveSessionToTmux(appSessionId: string): Promise<PaneSession> {
+  const session = sessionsDb.getSessionById(appSessionId);
+  const providerSessionId = session?.provider_session_id;
+  if (!providerSessionId) {
+    throw new AgentWindowError('This session has no Claude conversation yet.');
+  }
+
+  const pane = await findAgentWindow(appSessionId);
+  const holders = (await readClaudeProcesses()).filter((claude) => claude.providerSessionId === providerSessionId);
+  const outside = pane
+    ? pickProcessesOutsideTmux(holders, await localProcessStartedAt(pane.pane.panePid))
+    : holders;
+  if (!outside) {
+    throw new AgentWindowError('Could not tell which Claude process belongs to the tmux window; close the other one by hand.');
+  }
+  const working = outside.find((claude) => claude.activity !== 'idle');
+  if (working) {
+    throw new AgentWindowError(
+      `Claude is ${working.activity === 'waiting' ? 'waiting for an answer' : 'working'} in the other terminal (pid ${working.pid}). `
+      + 'Let it finish there, then move the session.',
+    );
+  }
+
+  for (const claude of outside) {
+    await stopClaudeProcess(claude);
+  }
+  const stoppedPids = new Set(outside.map((claude) => claude.pid));
+  const deadline = Date.now() + PROCESS_EXIT_TIMEOUT_MS;
+  while (stoppedPids.size > 0 && Date.now() < deadline) {
+    const alive = new Set((await readClaudeProcesses()).map((claude) => claude.pid));
+    if (![...stoppedPids].some((pid) => alive.has(pid))) {
+      break;
+    }
+    await delay(POLL_MS);
+  }
+
+  return pane ?? ensureAgentWindow(appSessionId);
 }
 
 /** Waits until the input box accepts text; menus shown meanwhile are surfaced for the user to answer. */

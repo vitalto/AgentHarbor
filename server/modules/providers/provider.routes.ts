@@ -939,6 +939,15 @@ router.post(
   }),
 );
 
+/** Ends Claude for this session in any other terminal (only while idle) and continues it in tmux. */
+router.post(
+  '/sessions/:sessionId/move-to-tmux',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    res.json(createApiSuccessResponse(await sessionsService.moveAgentToTmux(sessionId)));
+  }),
+);
+
 router.delete(
   '/sessions/:sessionId/window',
   asyncHandler(async (req: Request, res: Response) => {

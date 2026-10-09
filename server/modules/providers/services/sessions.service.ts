@@ -5,7 +5,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { AgentWindowError, ensureAgentWindow, paneRegistry, readClaudeStatuses } from '@/modules/tmux/index.js';
+import { AgentWindowError, ensureAgentWindow, moveSessionToTmux, paneRegistry, readClaudeStatuses } from '@/modules/tmux/index.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   BackgroundTaskSummary,
@@ -751,6 +751,19 @@ export const sessionsService = {
       });
     }
     return agents;
+  },
+
+  /** Moves a session Claude runs in another terminal into tmux (see moveSessionToTmux). */
+  async moveAgentToTmux(sessionId: string): Promise<{ sessionId: string; windowName: string }> {
+    try {
+      const pane = await moveSessionToTmux(sessionId);
+      return { sessionId, windowName: pane.pane.windowName };
+    } catch (error) {
+      if (error instanceof AgentWindowError) {
+        throw new AppError(error.message, { code: 'AGENT_MOVE_FAILED', statusCode: 409 });
+      }
+      throw error;
+    }
   },
 
   /** Starts (or finds) the session's Claude window: `claude --resume` in its project directory. */

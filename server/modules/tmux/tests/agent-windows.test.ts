@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { AgentWindowError, assertNotOpenElsewhere } from '@/modules/tmux/agent-windows.service.js';
-import type { ClaudeStatus } from '@/modules/tmux/claude-status.js';
+import { AgentWindowError, assertNotOpenElsewhere, pickProcessesOutsideTmux } from '@/modules/tmux/agent-windows.service.js';
+import type { ClaudeProcess, ClaudeStatus } from '@/modules/tmux/claude-status.js';
 
 const windowsConsoleStatus: ClaudeStatus = {
   providerSessionId: 's1',
@@ -25,4 +25,20 @@ test('resuming a session that Claude already runs elsewhere is refused instead o
 test('a session with no live Claude process may be resumed', () => {
   assert.doesNotThrow(() => assertNotOpenElsewhere('s1', new Map()));
   assert.doesNotThrow(() => assertNotOpenElsewhere('s2', new Map([['s1', windowsConsoleStatus]])));
+});
+
+const claudeProcess = (pid: number, startedAt: number): ClaudeProcess => ({
+  providerSessionId: 's1', activity: 'idle', pid, windowsPid: true, cwd: null, updatedAt: 0, startedAt,
+});
+
+test('the process started with the tmux pane stays; the other holder of the session is the outside one', () => {
+  const windowsConsole = claudeProcess(1248, 1_000_000);
+  const tmuxCopy = claudeProcess(54292, 9_001_562);
+  assert.deepEqual(pickProcessesOutsideTmux([windowsConsole, tmuxCopy], 9_000_000), [windowsConsole]);
+});
+
+test('a pane whose process cannot be identified stops nothing', () => {
+  const windowsConsole = claudeProcess(1248, 1_000_000);
+  assert.equal(pickProcessesOutsideTmux([windowsConsole], null), null);
+  assert.equal(pickProcessesOutsideTmux([windowsConsole], 5_000_000), null);
 });

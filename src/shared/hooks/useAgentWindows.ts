@@ -79,10 +79,20 @@ export function useAgentWindows() {
     }
   }, []);
 
+  /** Ends Claude in the other terminal and continues the session in tmux; rejects with the server's reason. */
+  const moveToTmux = useCallback(async (sessionId: string) => {
+    const response = await api.providers.moveAgentToTmux(sessionId);
+    const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } | string };
+    await refreshAgentWindows();
+    if (!response.ok) {
+      throw new Error(typeof body.error === 'string' ? body.error : body.error?.message ?? 'Could not move the session to tmux');
+    }
+  }, []);
+
   const closeWindow = useCallback(async (sessionId: string) => {
     await api.providers.closeAgentWindow(sessionId);
     await refreshAgentWindows();
   }, []);
 
-  return { windows, findWindow, openWindow, closeWindow, refresh: refreshAgentWindows };
+  return { windows, findWindow, openWindow, closeWindow, moveToTmux, refresh: refreshAgentWindows };
 }

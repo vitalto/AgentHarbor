@@ -35,6 +35,8 @@ import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
 type UseChatComposerStateArgs = {
   /** The session runs in a tmux window whose TUI takes input while Claude works: send instead of queueing. */
   sendWhileBusy?: boolean;
+  /** Asked before a message goes out; returning false keeps it in the composer unsent. */
+  beforeSend?: () => boolean;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
@@ -171,6 +173,7 @@ const SAFARI_IME_RACE_WINDOW_MS = 30;
 
 export function useChatComposerState({
   sendWhileBusy = false,
+  beforeSend,
   selectedProject,
   selectedSession,
   currentSessionId,
@@ -685,6 +688,10 @@ export function useChatComposerState({
         return;
       }
 
+      if (beforeSend && !beforeSend()) {
+        return;
+      }
+
       // A turn is already in flight: stash this message instead of sending it.
       // Upload attached files now so the queued record contains durable image
       // descriptors that can be sent even if another session is open later.
@@ -958,6 +965,7 @@ export function useChatComposerState({
       executeCommand,
       isLoading,
       sendWhileBusy,
+      beforeSend,
       onSessionProcessing,
       onSessionEstablished,
       provider,
