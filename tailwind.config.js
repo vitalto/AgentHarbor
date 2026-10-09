@@ -63,9 +63,13 @@ export default {
         'mobile-nav': 'var(--mobile-nav-total)',
       },
       keyframes: {
-        shimmer: {
-          '0%': { backgroundPosition: '200% 0' },
-          '100%': { backgroundPosition: '-200% 0' },
+        'shimmer-window': {
+          from: { transform: 'translateX(-100%)' },
+          to: { transform: 'translateX(100%)' },
+        },
+        'shimmer-window-text': {
+          from: { transform: 'translateX(100%)' },
+          to: { transform: 'translateX(-100%)' },
         },
         'dialog-overlay-show': {
           from: { opacity: '0' },
@@ -85,7 +89,8 @@ export default {
       animation: {
         spin: 'spin 1s steps(8, end) infinite',
         pulse: 'pulse 2s steps(5, end) infinite',
-        shimmer: 'shimmer 2s steps(24, end) infinite',
+        'shimmer-window': 'shimmer-window 2s steps(24, end) infinite',
+        'shimmer-window-text': 'shimmer-window-text 2s steps(24, end) infinite',
         'dialog-overlay-show': 'dialog-overlay-show 150ms ease-out',
         'dialog-content-show': 'dialog-content-show 150ms ease-out',
         'bottom-sheet-content-show': 'bottom-sheet-content-show 220ms cubic-bezier(0.22, 1, 0.36, 1)',
