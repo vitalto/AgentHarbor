@@ -30,7 +30,7 @@ import {
   truncateSubagentActivity,
 } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
-import { getClaudeSDKSessionStartTime } from '@/modules/providers/list/claude/claude-runtime.provider.js';
+import { getLiveProcessStartTime } from '@/modules/tmux/index.js';
 import { summarizeClaudeTokenUsage } from '@/modules/providers/services/provider-token-usage.service.js';
 
 const PROVIDER = 'claude';
@@ -1192,7 +1192,7 @@ type ClaudeSessionsProviderOptions = {
 export class ClaudeSessionsProvider implements IProviderSessions {
   private readonly getLiveRunStartTime: LiveRunStartTimeProbe;
 
-  constructor({ getLiveRunStartTime = getClaudeSDKSessionStartTime }: ClaudeSessionsProviderOptions = {}) {
+  constructor({ getLiveRunStartTime = getLiveProcessStartTime }: ClaudeSessionsProviderOptions = {}) {
     this.getLiveRunStartTime = getLiveRunStartTime;
   }
 

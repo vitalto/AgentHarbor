@@ -28,8 +28,8 @@ browser ──/ws chat──────┐                       ┌── tmux
 browser ──/shell xterm──┤  AgentHarbor server   │     window = 1 agent = claude TUI
                         ├─ tmux adapter ────────┤        └─ SessionStart hook → panes/<pane>.json
                         ├─ pane registry ◄──────┘
-                        ├─ transcript tailer ◄── <CLAUDE_HOME>/projects/**/<session>.jsonl (polled)
-                        ├─ liveness ◄─────────── <CLAUDE_HOME>/sessions/<pid>.json (busy/idle)
+                        ├─ transcript tailer ◄── <CLAUDE_CONFIG_DIR>/projects/**/<session>.jsonl (polled)
+                        ├─ liveness ◄─────────── <CLAUDE_CONFIG_DIR>/sessions/<pid>.json (busy/idle)
                         └─ prompt detector ◄──── tmux capture-pane
 ```
 
@@ -42,7 +42,7 @@ The server runs on Linux next to the tmux server (on Windows: inside WSL; Claude
 |---|---|---|
 | `AH_TMUX_SESSION` | `main` | tmux session that holds agent windows |
 | `AH_CLAUDE_CMD` | `claude` | command started in new windows |
-| `CLAUDE_HOME` | `~/.claude` | where Claude writes `projects/` and `sessions/` (WSL+Windows claude: `/mnt/c/Users/<u>/.claude`) |
+| `CLAUDE_CONFIG_DIR` | `~/.claude` | where Claude writes `projects/` and `sessions/` (WSL+Windows claude: `/mnt/c/Users/<u>/.claude`) |
 | `AH_STATE_DIR` | `~/.agentharbor` | pane registry + generated hook settings + DB; must be writable by the Claude process (WSL+Windows: a `/mnt/c/...` dir) |
 | `PORT` | `3001` | HTTP port |
 
@@ -72,8 +72,8 @@ The author's `cc` helper is updated to launch with the same env + `--settings`, 
 from the phone are registered too.
 
 ### 3. Liveness — existing `claude-cli-liveness.service.ts`
-Reads `<CLAUDE_HOME>/sessions/<pid>.json` (`sessionId`, `status: busy|idle`). Made to honor
-`CLAUDE_HOME`. Gives busy/idle per session id.
+Reads `<CLAUDE_CONFIG_DIR>/sessions/<pid>.json` (`sessionId`, `status: busy|idle`). Made to honor
+`CLAUDE_CONFIG_DIR`. Gives busy/idle per session id.
 
 ### 4. Transcript tailer — `server/modules/tmux/transcript-tail.service.ts`
 For every session with at least one chat subscriber: poll `stat` of its jsonl every 750 ms
@@ -117,7 +117,7 @@ tmux window with `$SHELL` in the project dir and attaches the same way. The 30-m
 cache and the per-provider command builder are removed.
 
 ### 8. Sessions and projects
-Kept: DB, synchronizer (scans `<CLAUDE_HOME>/projects`), sidebar. Added to session rows sent to
+Kept: DB, synchronizer (scans `<CLAUDE_CONFIG_DIR>/projects`), sidebar. Added to session rows sent to
 the client: `liveWindow` (tmux window name or null) and `busy`. Sidebar: live dot, "open in tmux"
 (window with `--resume`), "close window". "New session" creates the app session row and a window
 with `--session-id`. Polling watcher interval lowered to 2 s.

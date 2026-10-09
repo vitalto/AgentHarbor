@@ -55,14 +55,13 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsImages: true,
     supportsFiles: true,
     supportsAbort: true,
-    supportsPermissionRequests: true,
+    // Prompts belong to the live TUI's menus; the web answers them with keys.
+    supportsPermissionRequests: false,
     supportsTokenUsage: true,
     supportsEffort: true,
     effortLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'],
-    // `resumeSessionAt` re-runs a conversation truncated at a message, and
-    // `forkSession` copies a transcript prefix into a new session file.
-    supportsMessageEditing: true,
-    supportsSessionForking: true,
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
   },
 };
 

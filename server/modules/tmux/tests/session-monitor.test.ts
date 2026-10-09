@@ -58,7 +58,7 @@ async function harness() {
     tmux,
     registry,
     readStatuses: async () => new Map<string, ClaudeStatus>([['p1', {
-      providerSessionId: 'p1', activity: state.activity, pid: 1, probeablePid: false, updatedAt: 0,
+      providerSessionId: 'p1', activity: state.activity, pid: 1, probeablePid: false, updatedAt: 0, startedAt: null,
     }]]),
     resolveProviderSessionId: () => 'p1',
     resolveTranscriptPath: () => null,

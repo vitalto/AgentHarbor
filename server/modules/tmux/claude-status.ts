@@ -13,9 +13,18 @@ export type ClaudeStatus = {
   /** Process ids from another OS (Windows claude.exe seen from WSL) cannot be probed from here. */
   probeablePid: boolean;
   updatedAt: number;
+  startedAt: number | null;
 };
 
 const MAX_STATUS_FILES = 256;
+
+/** Last statuses read, for synchronous lookups from history building. */
+let lastStatuses = new Map<string, ClaudeStatus>();
+
+/** When the Claude process currently running the session started, from the most recent status read. */
+export function getLiveProcessStartTime(providerSessionId: string | null | undefined): number | null {
+  return providerSessionId ? lastStatuses.get(providerSessionId)?.startedAt ?? null : null;
+}
 
 function readActivity(value: unknown): ClaudeActivity | null {
   return value === 'busy' || value === 'waiting' || value === 'idle' ? value : null;
@@ -31,7 +40,7 @@ function processExists(pid: number): boolean {
 }
 
 /**
- * Reads Claude Code's per-process status files (`<CLAUDE_HOME>/sessions/<pid>.json`)
+ * Reads Claude Code's per-process status files (`<CLAUDE_CONFIG_DIR>/sessions/<pid>.json`)
  * keyed by session id. When several files name one session (a crash left one
  * behind), the most recently updated wins.
  */
@@ -63,10 +72,12 @@ export async function readClaudeStatuses(config: AgentConfig = getAgentConfig())
       return;
     }
     const updatedAt = typeof record.updatedAt === 'number' ? record.updatedAt : 0;
+    const startedAt = typeof record.startedAt === 'number' ? record.startedAt : null;
     const existing = statuses.get(providerSessionId);
     if (!existing || existing.updatedAt < updatedAt) {
-      statuses.set(providerSessionId, { providerSessionId, activity, pid, probeablePid, updatedAt });
+      statuses.set(providerSessionId, { providerSessionId, activity, pid, probeablePid, updatedAt, startedAt });
     }
   }));
+  lastStatuses = statuses;
   return statuses;
 }

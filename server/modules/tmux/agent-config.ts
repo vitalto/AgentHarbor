@@ -20,7 +20,7 @@ export function readAgentConfig(env: NodeJS.ProcessEnv = process.env): AgentConf
     tmuxSession: env.AH_TMUX_SESSION?.trim() || 'main',
     claudeCommand,
     claudeArgs: env.AH_CLAUDE_ARGS?.trim() ?? '',
-    claudeHome: env.CLAUDE_HOME?.trim() || path.join(os.homedir(), '.claude'),
+    claudeHome: env.CLAUDE_CONFIG_DIR?.trim() || path.join(os.homedir(), '.claude'),
     stateDir: env.AH_STATE_DIR?.trim() || path.join(os.homedir(), '.agentharbor'),
     windowsClaude: /\.exe$/i.test(claudeCommand),
     wslDistro: env.WSL_DISTRO_NAME?.trim() || null,

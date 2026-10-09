@@ -15,9 +15,10 @@ import {
   readObjectRecord,
   readOptionalString,
   readProviderSkillMarkdownDefinition,
+  getClaudeConfigDir,
 } from '@/shared/utils.js';
 
-const getClaudeHomePath = (): string => path.join(os.homedir(), '.claude');
+const getClaudeHomePath = (): string => getClaudeConfigDir();
 
 const getClaudePluginName = (pluginId: string): string | null => {
   const normalizedPluginId = pluginId.trim();

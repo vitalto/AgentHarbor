@@ -4,8 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { toClaudePath } from '@/modules/tmux/index.js';
 import type { AnyRecord } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, getClaudeConfigDir } from '@/shared/utils.js';
 
 type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
 
@@ -17,7 +18,7 @@ type FileTail = {
 
 type ProviderTokenUsageServiceDependencies = {
   getSessionById: (sessionId: string) => SessionRow | null | undefined;
-  getHomeDirectory: () => string;
+  getClaudeConfigDir: () => string;
   fileExists: (filePath: string) => boolean;
   readTextFile: (filePath: string) => Promise<string>;
   readTextFileTail: (filePath: string, maxBytes: number) => Promise<FileTail>;
@@ -51,7 +52,7 @@ const TOKEN_USAGE_TAIL_BYTES = 4 * 1024 * 1024;
 
 const defaultDependencies: ProviderTokenUsageServiceDependencies = {
   getSessionById: (sessionId) => sessionsDb.getSessionById(sessionId),
-  getHomeDirectory: () => os.homedir(),
+  getClaudeConfigDir,
   fileExists: (filePath) => fsSync.existsSync(filePath),
   readTextFile: (filePath) => fsp.readFile(filePath, 'utf8'),
   readTextFileTail: async (filePath, maxBytes) => {
@@ -235,13 +236,9 @@ export function createProviderTokenUsageService(
           });
         }
 
-        const encodedProjectPath = session.project_path.replace(/[^a-zA-Z0-9-]/g, '-');
-        const projectDirectory = path.join(
-          dependencies.getHomeDirectory(),
-          '.claude',
-          'projects',
-          encodedProjectPath,
-        );
+        // Claude names the directory after the cwd it saw, which may be the Windows form of the stored path.
+        const encodedProjectPath = toClaudePath(session.project_path).replace(/[^a-zA-Z0-9-]/g, '-');
+        const projectDirectory = path.join(dependencies.getClaudeConfigDir(), 'projects', encodedProjectPath);
         sessionFilePath = path.join(projectDirectory, `${providerSessionId}.jsonl`);
 
         const relativePath = path.relative(path.resolve(projectDirectory), path.resolve(sessionFilePath));

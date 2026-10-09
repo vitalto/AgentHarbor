@@ -4,7 +4,7 @@
 
 **Goal:** Turn the CloudCLI UI fork into AgentHarbor: a web UI that drives live Claude Code TUIs in tmux windows instead of SDK runs, with all non-Claude/unneeded modules removed.
 
-**Architecture:** A tmux layer (adapter, pane registry fed by a SessionStart hook, transcript tailer, TUI prompt detector) sits behind the existing `IProviderRuntime` interface as `claude-tmux.runtime.ts`. A per-session monitor turns busy periods (from `<CLAUDE_HOME>/sessions/<pid>.json`) into chat runs and feeds tailed jsonl rows through the existing normalizer, so the existing frontend store/render path works unchanged. The shell websocket attaches grouped tmux viewer sessions.
+**Architecture:** A tmux layer (adapter, pane registry fed by a SessionStart hook, transcript tailer, TUI prompt detector) sits behind the existing `IProviderRuntime` interface as `claude-tmux.runtime.ts`. A per-session monitor turns busy periods (from `<CLAUDE_CONFIG_DIR>/sessions/<pid>.json`) into chat runs and feeds tailed jsonl rows through the existing normalizer, so the existing frontend store/render path works unchanged. The shell websocket attaches grouped tmux viewer sessions.
 
 **Tech Stack:** Node 22 (Linux/WSL), TypeScript server (tsx, node:test), React/Vite frontend (vitest), tmux ≥ 3.3, better-sqlite3, node-pty.
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Claude is never started by the server in SDK/stream-json/`-p` mode; only as an interactive TUI inside a tmux window.
-- Env: `AH_TMUX_SESSION` (default `main`), `AH_CLAUDE_CMD` (default `claude`), `CLAUDE_HOME` (default `~/.claude`), `AH_STATE_DIR` (default `~/.agentharbor`), `PORT` (default `3001`).
+- Env: `AH_TMUX_SESSION` (default `main`), `AH_CLAUDE_CMD` (default `claude`), `CLAUDE_CONFIG_DIR` (default `~/.claude`), `AH_STATE_DIR` (default `~/.agentharbor`), `PORT` (default `3001`).
 - Windows-path translation only when `AH_CLAUDE_CMD` ends with `.exe`; all of it in `server/shared/path-translation.ts`.
 - Branding: package/bin `agentharbor`, UI "AgentHarbor"; README carries "AgentHarbor is a modified version of CloudCLI UI (https://github.com/siteboon/claudecodeui)"; no "CloudCLI"/"Siteboon" in product name, logos or promotion. LICENSE (AGPL-3.0) kept; NOTICE extended.
 - Commands run inside WSL: `export PATH=$HOME/.local/node/bin:$PATH; cd /mnt/d/Develop/AgentHarbor`.
@@ -118,7 +118,7 @@ export function isInputReady(lines: string[]): boolean;   // input box visible, 
 
 ### Task 6: Session monitor + tmux runtime
 
-**Files:** Create `server/modules/providers/list/claude/claude-tmux.runtime.ts`, `server/modules/tmux/session-monitor.service.ts`; Modify `claude.provider.ts`, `claude-cli-liveness.service.ts` (honor `CLAUDE_HOME`; skip pid probe when `pidDomain` starts with `win32:`; expose `readClaudeCliStatuses(): Promise<Map<providerSessionId, 'busy'|'idle'>>`), `claude-sessions.provider.ts` (drop SDK import), `chat-websocket.service.ts` (add `chat.tui-keys`; subscribe registers the socket with the monitor), delete `claude-runtime.provider.js`, `claude-fork.provider.ts`, SDK dep. Test `server/modules/tmux/tests/session-monitor.test.ts`.
+**Files:** Create `server/modules/providers/list/claude/claude-tmux.runtime.ts`, `server/modules/tmux/session-monitor.service.ts`; Modify `claude.provider.ts`, `claude-cli-liveness.service.ts` (honor `CLAUDE_CONFIG_DIR`; skip pid probe when `pidDomain` starts with `win32:`; expose `readClaudeCliStatuses(): Promise<Map<providerSessionId, 'busy'|'idle'>>`), `claude-sessions.provider.ts` (drop SDK import), `chat-websocket.service.ts` (add `chat.tui-keys`; subscribe registers the socket with the monitor), delete `claude-runtime.provider.js`, `claude-fork.provider.ts`, SDK dep. Test `server/modules/tmux/tests/session-monitor.test.ts`.
 
 **Interfaces:**
 ```ts
@@ -153,7 +153,7 @@ Attach: `pty.spawn('tmux', ['new-session','-t',session,'-s',`ah-v-${rand}`,';','
 
 ### Task 10: End-to-end on this machine + deployment
 
-- [ ] Build in WSL; run with `AH_CLAUDE_CMD=/mnt/c/Users/vital/.local/bin/claude.exe CLAUDE_HOME=/mnt/c/Users/vital/.claude AH_STATE_DIR=/mnt/c/Users/vital/.agentharbor PORT=7690`.
+- [ ] Build in WSL; run with `AH_CLAUDE_CMD=/mnt/c/Users/vital/.local/bin/claude.exe CLAUDE_CONFIG_DIR=/mnt/c/Users/vital/.claude AH_STATE_DIR=/mnt/c/Users/vital/.agentharbor PORT=7690`.
 - [ ] E2E script (`scripts/e2e/tmux-e2e.mjs`): login → create session in `D:\Develop\TerminalShare` → `chat.send` "Reply with exactly PONG" → receive assistant text `PONG` and `complete`; send "run `ls` with Bash" in default permission mode → receive `tui_prompt` → send key `1` → tool_result arrives; type into the tmux pane directly → web receives frames without send.
 - [ ] Playwright screenshots desktop + 400 px; fix visual breakage.
 - [ ] systemd unit `agentharbor.service` (copy in TerminalShare `wsl/`), firewall rule `WSL AgentHarbor 7690`, `cc` updated to the hook launch, TerminalShare README section. Commit both repos.

@@ -3,12 +3,14 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { toLocalPath } from '@/modules/tmux/index.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
+  getClaudeConfigDir,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
@@ -23,7 +25,7 @@ type ParsedSession = {
  */
 export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'claude' as const;
-  private readonly claudeHome = path.join(os.homedir(), '.claude');
+  private readonly claudeHome = getClaudeConfigDir();
 
   /**
    * Returns true when a JSONL file is a subagent transcript or tool result
@@ -119,7 +121,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     const parsed = await extractFirstValidJsonlData(filePath, (rawData) => {
       const data = rawData as Record<string, unknown>;
       const sessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
-      const projectPath = typeof data.cwd === 'string' ? data.cwd : undefined;
+      // Stored as a path this server can open; Claude may report a Windows path.
+      const projectPath = typeof data.cwd === 'string' ? toLocalPath(data.cwd) : undefined;
 
       if (!sessionId || !projectPath) {
         return null;

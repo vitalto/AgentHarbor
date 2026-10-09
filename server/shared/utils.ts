@@ -169,6 +169,28 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
 ];
 
 /**
+ * Claude Code's config directory (projects/, sessions/, settings.json,
+ * commands/). `CLAUDE_CONFIG_DIR` is the CLI's own override; AgentHarbor also
+ * sets it when Claude is a Windows binary whose home lives under /mnt/c.
+ */
+export function getClaudeConfigDir(): string {
+  const configured = process.env.CLAUDE_CONFIG_DIR?.trim();
+  return configured && path.isAbsolute(configured) ? configured : path.join(os.homedir(), '.claude');
+}
+
+/**
+ * Claude's global state file (`.claude.json`: MCP servers, project trust).
+ * It sits next to the default `~/.claude` directory, and inside a custom
+ * config directory otherwise.
+ */
+export function getClaudeGlobalConfigPath(): string {
+  const configDir = getClaudeConfigDir();
+  return path.basename(configDir) === '.claude'
+    ? path.join(path.dirname(configDir), '.claude.json')
+    : path.join(configDir, '.claude.json');
+}
+
+/**
  * Roots the file browser and viewer may read from even though they are outside
  * every project.
  *
@@ -195,7 +217,7 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
 const READ_ONLY_ROOTS = [...new Set([
   '/tmp',
   os.tmpdir(),
-  path.join(os.homedir(), '.claude', 'projects'),
+  path.join(getClaudeConfigDir(), 'projects'),
 ])];
 
 /**
