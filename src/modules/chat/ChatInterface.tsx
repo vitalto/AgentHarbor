@@ -10,6 +10,7 @@ import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 import { useTuiSessionState } from '@/modules/chat/hooks/useTuiSessionState';
 import OutsideTmuxNotice from '@/modules/chat/composer/OutsideTmuxNotice';
 import SessionAgentsPanel from '@/modules/chat/composer/SessionAgentsPanel';
+import PermissionModePicker from '@/modules/chat/composer/PermissionModePicker';
 import type { TuiKey } from '@/modules/chat/utils/tuiPrompt';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
@@ -553,6 +554,7 @@ function ChatInterface({
           onTuiChoose={chooseTuiOption}
           onTuiKey={pressTuiKey}
           hasLiveWindow={findWindow(viewedSessionId)?.location === 'tmux'}
+          permissionModeControl={viewedSessionId ? <PermissionModePicker sessionId={viewedSessionId} /> : null}
           activity={sessionActivity}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}

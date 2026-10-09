@@ -22,3 +22,5 @@ export { configureSessionMonitor, getSessionMonitor } from '@/modules/tmux/sessi
 export type { MonitorSocket, SessionMonitor } from '@/modules/tmux/session-monitor.service.js';
 export { tmuxService } from '@/modules/tmux/tmux.service.js';
 export type { AgentPane } from '@/modules/tmux/tmux.service.js';
+export { getPermissionMode, setPermissionMode } from '@/modules/tmux/permission-mode.js';
+export type { PermissionMode } from '@/modules/tmux/permission-mode.js';

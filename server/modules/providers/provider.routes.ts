@@ -9,6 +9,7 @@ import { providerTokenUsageService } from '@/modules/providers/services/provider
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { AgentWindowError, getPermissionMode, setPermissionMode, type PermissionMode } from '@/modules/tmux/index.js';
 import type {
   CustomProviderModelEffort,
   CustomProviderModelInput,
@@ -935,6 +936,36 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
     res.status(201).json(createApiSuccessResponse(await sessionsService.openAgentWindow(sessionId)));
+  }),
+);
+
+const PERMISSION_MODES = new Set(['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions']);
+
+/** The permission mode of the session's Claude window (null when it has none). */
+router.get(
+  '/sessions/:sessionId/permission-mode',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse({ mode: await getPermissionMode(parseSessionId(req.params.sessionId)) }));
+  }),
+);
+
+/** Switches the window's mode the way a user would, with Shift+Tab. */
+router.post(
+  '/sessions/:sessionId/permission-mode',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const mode = (req.body as { mode?: unknown } | undefined)?.mode;
+    if (typeof mode !== 'string' || !PERMISSION_MODES.has(mode)) {
+      throw new AppError('Unknown permission mode.', { code: 'INVALID_PERMISSION_MODE', statusCode: 400 });
+    }
+    try {
+      res.json(createApiSuccessResponse({ mode: await setPermissionMode(sessionId, mode as PermissionMode) }));
+    } catch (error) {
+      if (error instanceof AgentWindowError) {
+        throw new AppError(error.message, { code: 'PERMISSION_MODE_FAILED', statusCode: 409 });
+      }
+      throw error;
+    }
   }),
 );
 

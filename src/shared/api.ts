@@ -416,6 +416,10 @@ export const api = {
     agentWindows: () => get('/api/providers/agents/windows'),
     openAgentWindow: (sessionId: string) =>
       post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/window`),
+    permissionMode: (sessionId: string) =>
+      get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/permission-mode`),
+    setPermissionMode: (sessionId: string, mode: string) =>
+      post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/permission-mode`, { mode }),
     clearAgentConversation: (sessionId: string) =>
       post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/clear`),
     moveAgentToTmux: (sessionId: string, force = false) =>

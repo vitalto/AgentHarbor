@@ -4,7 +4,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { test, vi } from 'vitest';
 
-import TuiKeyBar from '@/modules/chat/composer/TuiKeyBar';
 import TuiPromptPanel from '@/modules/chat/composer/TuiPromptPanel';
 import type { TuiPrompt } from '@/modules/chat/utils/tuiPrompt';
 
@@ -35,12 +34,4 @@ test('cancel sends Esc through its own callback', () => {
   render(<TuiPromptPanel prompt={bashPermission} onChoose={vi.fn()} onCancel={onCancel} />);
   fireEvent.click(screen.getByText('Cancel (Esc)'));
   assert.equal(onCancel.mock.calls.length, 1);
-});
-
-test('the key bar emits tmux key names', () => {
-  const onKey = vi.fn();
-  render(<TuiKeyBar onKey={onKey} />);
-  fireEvent.click(screen.getByTitle('Cycle permission mode'));
-  fireEvent.click(screen.getByText('Esc'));
-  assert.deepEqual(onKey.mock.calls, [['BTab'], ['Escape']]);
 });

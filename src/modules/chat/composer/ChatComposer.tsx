@@ -28,7 +28,6 @@ import ActivityIndicator from '@/modules/chat/composer/ActivityIndicator';
 import ComposerAttachment from '@/modules/chat/composer/ComposerAttachment';
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
-import TuiKeyBar from '@/modules/chat/composer/TuiKeyBar';
 import TuiPromptPanel from '@/modules/chat/composer/TuiPromptPanel';
 import type { TuiKey, TuiPrompt } from '@/modules/chat/utils/tuiPrompt';
 
@@ -42,8 +41,10 @@ type ChatComposerProps = {
   tuiPrompt: TuiPrompt | null;
   onTuiChoose: (optionIndex: number) => void;
   onTuiKey: (key: TuiKey) => void;
-  /** The session has a live Claude window to send keys to; its TUI also takes messages while Claude works. */
+  /** The session has a live Claude window; its TUI also takes messages while Claude works. */
   hasLiveWindow: boolean;
+  /** Control for the window's permission mode, shown when the session has a live window. */
+  permissionModeControl?: ReactNode;
   activity: SessionActivity | null;
   isLoading: boolean;
   onAbortSession: () => void;
@@ -102,6 +103,7 @@ export default function ChatComposer({
   onTuiChoose,
   onTuiKey,
   hasLiveWindow,
+  permissionModeControl,
   activity,
   isLoading,
   onAbortSession,
@@ -384,7 +386,7 @@ export default function ChatComposer({
           </PromptInputTools>
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-            {hasLiveWindow && <TuiKeyBar onKey={onTuiKey} />}
+            {hasLiveWindow && permissionModeControl}
 
             <PromptInputSubmit
               onClick={
