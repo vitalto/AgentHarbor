@@ -44,9 +44,9 @@ test('prefers the persisted summary of a session, as the sessions API returns it
 });
 
 test('falls back to the project title when no session is selected', () => {
-  assert.equal(getPageTitle(project, null), 'My Project - CloudCLI UI');
+  assert.equal(getPageTitle(project, null), 'My Project - AgentHarbor');
 });
 
 test('falls back to the app title when no project or session is selected', () => {
-  assert.equal(getPageTitle(null, null), 'CloudCLI UI');
+  assert.equal(getPageTitle(null, null), 'AgentHarbor');
 });

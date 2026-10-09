@@ -58,9 +58,9 @@ function Sidebar({
 }: SidebarProps) {
   const { t } = useTranslation(['sidebar', 'common']);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
-  const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
-    'siteboon',
-    'claudecodeui',
+  const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo } = useVersionCheck(
+    'vitalto',
+    'AgentHarbor',
   );
   const preferences = useUiPreferences();
   const setPreference = useSetUiPreference();
@@ -245,7 +245,6 @@ function Sidebar({
         releaseInfo={releaseInfo}
         currentVersion={currentVersion}
         latestVersion={latestVersion}
-        installMode={installMode}
         t={t}
       />
 

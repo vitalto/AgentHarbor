@@ -20,7 +20,7 @@
     "runClaudeCli": "כדי להתחיל, יש להריץ את Claude CLI בתיקיית פרויקט"
   },
   "app": {
-    "title": "CloudCLI",
+    "title": "AgentHarbor",
     "subtitle": "ממשק לעוזר תכנות AI"
   },
   "sessions": {
@@ -42,7 +42,6 @@
     "deleteSelected_other": "מחיקת {{count}} סשנים"
   },
   "tooltips": {
-    "viewEnvironments": "הצגת סביבות",
     "hideSidebar": "הסתרת סרגל הצד",
     "createProject": "יצירת פרויקט חדש",
     "refresh": "רענון פרויקטים וסשנים (Ctrl+R)",
@@ -77,7 +76,6 @@
     "save": "שמירה",
     "delete": "מחיקה",
     "rename": "שינוי שם",
-    "joinCommunity": "הצטרפות לקהילה",
     "reportIssue": "דיווח על בעיה",
     "starOnGithub": "כוכב ב-GitHub"
   },

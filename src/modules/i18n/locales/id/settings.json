@@ -534,10 +534,6 @@
       "edit": "Edit server",
       "delete": "Hapus server"
     },
-    "managed": {
-      "badge": "Dikelola",
-      "hint": "Dikelola oleh CloudCLI."
-    },
     "help": {
       "title": "Tentang MCP Codex",
       "description": "Codex mendukung server MCP berbasis stdio. Tambahkan server untuk memperluas kemampuan Codex dengan tool dan resource tambahan."
@@ -545,10 +541,9 @@
   },
   "pluginSettings": {
     "title": "Plugin",
-    "description": "Perluas antarmuka dengan plugin kustom. Instal dari Git atau letakkan folder di ~/.claude-code-ui/plugins/",
+    "description": "Perluas antarmuka dengan plugin kustom. Instal dari Git atau letakkan folder di ~/.agentharbor/plugins/",
     "installPlaceholder": "https://github.com/user/my-plugin",
     "installButton": "Instal",
-    "installing": "Menginstal…",
     "securityWarning": "Hanya instal plugin yang kode sumbernya sudah ditinjau atau berasal dari pembuat yang dipercaya.",
     "scanningPlugins": "Memindai plugin…",
     "noPluginsInstalled": "Belum ada plugin terinstal",
@@ -563,86 +558,11 @@
     "installFailed": "Instalasi gagal",
     "uninstallFailed": "Uninstal gagal",
     "toggleFailed": "Gagal mengubah status",
-    "starterPluginLabel": "Plugin Starter",
+    "starterPluginLabel": "Plugin menggunakan format plugin CloudCLI UI",
     "starter": "Starter",
-    "docs": "Dokumentasi",
-    "sections": {
-      "officialTitle": "Plugin Resmi",
-      "officialDescription": "Dikelola oleh tim CloudCLI dan siap langsung diinstal.",
-      "unofficialTitle": "Plugin Lainnya",
-      "unofficialDescription": "Plugin dan integrasi tidak resmi dari pengguna lain. Tinjau kode sumber sebelum menginstal."
-    },
-    "starterPlugin": {
-      "name": "Project Stats",
-      "badge": "starter",
-      "description": "Jumlah file, baris kode, rincian jenis file, dan aktivitas terbaru proyek.",
-      "install": "Instal"
-    },
-    "terminalPlugin": {
-      "name": "Terminal",
-      "badge": "resmi",
-      "description": "Terminal terintegrasi dengan akses shell penuh langsung di dalam antarmuka.",
-      "install": "Instal"
-    },
-    "scheduledPromptPlugin": {
-      "name": "Scheduled Prompts",
-      "badge": "tidak resmi",
-      "description": "Jadwalkan prompt workspace, tinjau riwayat proses, dan kelola tugas lokal berulang.",
-      "install": "Instal"
-    },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "tidak resmi",
-      "description": "Pantau sesi Claude Code yang berjalan lama untuk mendeteksi hang dan menyediakan kontrol proses.",
-      "install": "Instal"
-    },
-    "prismCloudCLI": {
-      "name": "PRISM CloudCLI",
-      "badge": "tidak resmi",
-      "description": "Intelijen sesi untuk Claude Code di dalam CloudCLI. Lihat penyebab penggunaan token tinggi tanpa meninggalkan browser.",
-      "install": "Instal"
-    },
-    "sessionManagerPlugin": {
-      "name": "Sessions",
-      "badge": "tidak resmi",
-      "description": "Lihat, kelola, dan hentikan sesi Claude Code yang aktif.",
-      "install": "Instal"
-    },
-    "tokenCostCalculatorPlugin": {
-      "name": "Token Cost Calculator",
-      "badge": "tidak resmi",
-      "description": "Hitung biaya API dari harga model dan penggunaan token, dengan dukungan preset harga model.",
-      "install": "Instal"
-    },
-    "taskQueuePlugin": {
-      "name": "Task Queue",
-      "badge": "tidak resmi",
-      "description": "Dasbor antrean tugas untuk melihat, memfilter, dan menjalankan tugas agen.",
-      "install": "Instal"
-    },
-    "githubIssuesBoardPlugin": {
-      "name": "GitHub Issues Board",
-      "badge": "tidak resmi",
-      "description": "Board Kanban untuk GitHub Issues dengan sinkronisasi dua arah TaskMaster dan instalasi otomatis skill CLI /github-task",
-      "install": "Instal"
-    },
-    "claudeUsagePlugin": {
-      "name": "Claude Usage",
-      "badge": "tidak resmi",
-      "description": "Pantau batas paket Claude Code secara langsung dan jelajahi riwayat token serta biaya 30 hari.",
-      "install": "Instal"
-    },
-    "codexUsagePlugin": {
-      "name": "Codex Usage",
-      "badge": "tidak resmi",
-      "description": "Pantau batas paket Codex secara langsung, waktu reset, dan aktivitas token akun selama 30 hari.",
-      "install": "Instal"
-    },
-    "morePlugins": "Lainnya",
     "enable": "Aktifkan",
     "disable": "Nonaktifkan",
     "installAriaLabel": "URL repositori Git plugin",
-    "tab": "tab",
     "runningStatus": "berjalan"
   },
   "skillsPage": {
@@ -798,11 +718,6 @@
     "configCwd": "Cwd",
     "configEnvVars": "Env Vars"
   },
-  "mcpTeamCard": {
-    "title": "Konfigurasi MCP Tim",
-    "description": "Bagikan konfigurasi server MCP di seluruh tim. Semua anggota tetap tersinkron otomatis.",
-    "proLink": "Tersedia dengan CloudCLI Pro"
-  },
   "mcpServersAddErrors": {
     "loadFailedProvider": "Gagal memuat server MCP {{provider}}",
     "deleteFailed": "Gagal menghapus server MCP",
@@ -816,17 +731,6 @@
   },
   "about": {
     "tagline": "Antarmuka asisten coding AI open source",
-    "starOnGitHub": "Beri Bintang di GitHub",
-    "docs": "Dokumentasi",
-    "hostedTitle": "Coba CloudCLI Hosted",
-    "hostedDescription": "Kolaborasi tim, konfigurasi MCP bersama, sinkronisasi pengaturan antar-environment, dan infrastruktur terkelola.",
-    "learnMore": "Pelajari lebih lanjut",
-    "proFeaturesTitle": "Fitur CloudCLI Pro",
-    "syncSettingsTitle": "Sinkronkan Pengaturan",
-    "syncSettingsDescription": "Jaga preferensi, konfigurasi MCP, dan tema tetap sinkron di semua environment.",
-    "teamManagementTitle": "Manajemen Tim",
-    "teamManagementDescription": "Banyak pengguna, akses berbasis peran, dan proyek bersama untuk tim.",
-    "licensed": "Dilisensikan di bawah AGPL-3.0",
-    "proCta": "Tersedia dengan CloudCLI Pro"
+    "licensed": "Dilisensikan di bawah AGPL-3.0"
   }
 }

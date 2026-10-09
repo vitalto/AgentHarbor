@@ -20,7 +20,7 @@
     "runClaudeCli": "在專案目錄中執行 Claude CLI 以開始使用"
   },
   "app": {
-    "title": "CloudCLI",
+    "title": "AgentHarbor",
     "subtitle": "AI 程式開發助手"
   },
   "sessions": {
@@ -41,7 +41,6 @@
     "deleteSelected_other": "刪除 {{count}} 個工作階段"
   },
   "tooltips": {
-    "viewEnvironments": "查看環境",
     "hideSidebar": "隱藏側邊欄",
     "createProject": "建立新專案",
     "refresh": "重新整理專案和工作階段 (Ctrl+R)",
@@ -73,7 +72,6 @@
     "save": "儲存",
     "delete": "刪除",
     "rename": "重新命名",
-    "joinCommunity": "加入社群",
     "reportIssue": "回報問題",
     "starOnGithub": "在 GitHub 上加星"
   },

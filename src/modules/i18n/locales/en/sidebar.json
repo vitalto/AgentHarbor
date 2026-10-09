@@ -20,7 +20,7 @@
     "runClaudeCli": "Run Claude CLI in a project directory to get started"
   },
   "app": {
-    "title": "CloudCLI",
+    "title": "AgentHarbor",
     "subtitle": "AI coding assistant interface"
   },
   "sessions": {
@@ -41,7 +41,6 @@
     "deleteSelected_other": "Delete {{count}} sessions"
   },
   "tooltips": {
-    "viewEnvironments": "View Environments",
     "hideSidebar": "Hide sidebar",
     "createProject": "Create new project",
     "refresh": "Refresh projects and sessions (Ctrl+R)",
@@ -75,7 +74,6 @@
     "save": "Save",
     "delete": "Delete",
     "rename": "Rename",
-    "joinCommunity": "Join Community",
     "reportIssue": "Report Issue",
     "starOnGithub": "Star on GitHub"
   },

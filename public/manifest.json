@@ -1,7 +1,7 @@
 {
-  "name": "CloudCLI UI",
-  "short_name": "CloudCLI UI",
-  "description": "CloudCLI UI web application",
+  "name": "AgentHarbor",
+  "short_name": "AgentHarbor",
+  "description": "Web UI for your live AI CLI agents",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

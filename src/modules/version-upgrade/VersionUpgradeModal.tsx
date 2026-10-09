@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 
 import { api } from "@/shared/api";
-import type { ReleaseInfo,InstallMode } from "@/shared/types";
+import type { ReleaseInfo } from "@/shared/types";
 import { copyTextToClipboard,IS_PLATFORM } from "@/shared/utils";
 
 type VersionUpgradeModalProps = {
@@ -13,10 +13,10 @@ type VersionUpgradeModalProps = {
     releaseInfo: ReleaseInfo | null;
     currentVersion: string;
     latestVersion: string | null;
-    installMode: InstallMode;
 };
 
 const RELOAD_COUNTDOWN_START = 120;
+const GIT_CHECKOUT_UPGRADE_COMMAND = 'git pull --ff-only && npm install && npm run build';
 
 /** This module's only public export: rendered by the sidebar module's modal layer to show release notes and run the app upgrade. */
 export function VersionUpgradeModal({
@@ -25,14 +25,9 @@ export function VersionUpgradeModal({
     releaseInfo,
     currentVersion,
     latestVersion,
-    installMode
 }: VersionUpgradeModalProps) {
     const { t } = useTranslation('common');
-    const upgradeCommand = installMode === 'npm'
-        ? t('versionUpdate.npmUpgradeCommand')
-        : IS_PLATFORM
-            ? 'npm run update:platform'
-            : 'git checkout main && git pull && npm install';
+    const upgradeCommand = GIT_CHECKOUT_UPGRADE_COMMAND;
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateOutput, setUpdateOutput] = useState('');
     const [updateError, setUpdateError] = useState('');

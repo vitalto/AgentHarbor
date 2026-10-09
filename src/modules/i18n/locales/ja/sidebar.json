@@ -20,7 +20,7 @@
     "runClaudeCli": "プロジェクトディレクトリでClaude CLIを実行して始めましょう"
   },
   "app": {
-    "title": "CloudCLI",
+    "title": "AgentHarbor",
     "subtitle": "AIコーディングアシスタント"
   },
   "sessions": {
@@ -40,7 +40,6 @@
     "deleteSelected": "{{count}}件のセッションを削除"
   },
   "tooltips": {
-    "viewEnvironments": "環境を表示",
     "hideSidebar": "サイドバーを隠す",
     "createProject": "新しいプロジェクトを作成",
     "refresh": "プロジェクトとセッションを更新 (Ctrl+R)",
@@ -72,7 +71,6 @@
     "save": "保存",
     "delete": "削除",
     "rename": "名前の変更",
-    "joinCommunity": "コミュニティに参加",
     "reportIssue": "問題を報告",
     "starOnGithub": "GitHubでスター"
   },

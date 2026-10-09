@@ -494,10 +494,9 @@
   },
   "pluginSettings": {
     "title": "プラグイン",
-    "description": "カスタムプラグインでインターフェースを拡張します。gitからインストールするか、~/.claude-code-ui/plugins/ にフォルダを配置してください。",
+    "description": "カスタムプラグインでインターフェースを拡張します。gitからインストールするか、~/.agentharbor/plugins/ にフォルダを配置してください。",
     "installPlaceholder": "https://github.com/user/my-plugin",
     "installButton": "インストール",
-    "installing": "インストール中…",
     "securityWarning": "信頼できる作成者のプラグイン、またはソースコードを確認済みのプラグインのみをインストールしてください。",
     "scanningPlugins": "プラグインをスキャン中…",
     "noPluginsInstalled": "プラグインがインストールされていません",
@@ -514,18 +513,9 @@
     "toggleFailed": "切り替えに失敗しました",
     "buildYourOwn": "プラグインを自作する",
     "starter": "スターター",
-    "docs": "ドキュメント",
-    "starterPlugin": {
-      "name": "プロジェクト統計",
-      "badge": "スターター",
-      "description": "プロジェクトのファイル数、コード行数、ファイルタイプの内訳、最近のアクティビティを表示します。",
-      "install": "インストール"
-    },
-    "morePlugins": "詳細",
     "enable": "有効にする",
     "disable": "無効にする",
     "installAriaLabel": "プラグインのgitリポジトリURL",
-    "tab": "タブ",
     "runningStatus": "実行中"
   }
 }
