@@ -8,7 +8,7 @@ import type { Project, SessionWithProvider, SidebarProjectListProps } from '@/sh
 
 /**
  * The Projects list draws a session's state as a dot on the row's left edge:
- * amber when it needs the user, green when it was touched lately. A session
+ * amber when it needs the user (the time column already says when it was last active). A session
  * whose turn has ended while the tasks it launched still run takes that slot
  * in the purple of the workflow and agent cards, saying what is still going
  * on — while the spinner and the destructive-action lockout stay reserved for
@@ -62,9 +62,9 @@ beforeEach(() => {
   recordedOptionsProps.length = 0;
 });
 
-test('background work shows as the purple dot in place of the green one, with nothing spinning', () => {
+test('background work shows as the purple dot, with nothing spinning; a recently touched idle session shows no dot', () => {
   const idle = renderRow({ isProcessing: false, hasBackgroundWork: false });
-  assert.ok(idle.container.querySelector('[role="status"].bg-green-500'), 'the fixture is a recently touched session');
+  assert.equal(idle.container.querySelector('[role="status"]'), null, 'no "recently active" dot: the row shows its time');
   idle.unmount();
 
   const { container } = renderRow({ isProcessing: false, hasBackgroundWork: true });

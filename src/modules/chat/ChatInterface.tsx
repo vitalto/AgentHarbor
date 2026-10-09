@@ -123,7 +123,6 @@ function ChatInterface({
     providerModelsLoading,
     providerModelActions,
     selectProviderModel,
-    selectProviderEffort,
     resolvePermissionModeForProvider,
     supportsMessageEditing,
     supportsSessionForking,
@@ -520,6 +519,8 @@ function ChatInterface({
             </div>
           )}
 
+          {/* The composer's activity pill ("Brewing… / Stop") floats above it; keep these panels clear of it. */}
+          <div className={hasActivityIndicator ? 'mb-9' : undefined}>
           {viewedSessionId && (
             <SessionAgentsPanel
               sessionId={viewedSessionId}
@@ -545,6 +546,7 @@ function ChatInterface({
               }}
             />
           )}
+          </div>
 
           <ChatComposer
           tuiPrompt={viewedTui.prompt}

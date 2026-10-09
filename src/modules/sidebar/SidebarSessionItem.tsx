@@ -83,12 +83,9 @@ function SidebarSessionItem({
   // Background work takes the recent-activity dot's place: the session is
   // still doing something, which says more than that it was touched lately.
   const showBackgroundIndicator = !showAttentionIndicator && hasBackgroundWork;
-  const showRecentIndicator = !showAttentionIndicator && !showBackgroundIndicator && !isProcessing && sessionView.isActive;
   const indicatorLabel = showAttentionIndicator
     ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
-    : showBackgroundIndicator
-      ? t('tooltips.backgroundWorkIndicator', { defaultValue: 'Background work running' })
-      : t('tooltips.activeSessionIndicator');
+    : t('tooltips.backgroundWorkIndicator', { defaultValue: 'Background work running' });
   const providerLabel = PROVIDER_LABELS[session.__provider];
 
   // The desktop controls live in SessionOptions, which owns the rename panel and
@@ -158,7 +155,7 @@ function SidebarSessionItem({
 
   return (
     <div className="group relative">
-      {(showAttentionIndicator || showBackgroundIndicator || showRecentIndicator) && (
+      {(showAttentionIndicator || showBackgroundIndicator) && (
         <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
           <Tooltip content={indicatorLabel} position="right">
             <div
@@ -166,11 +163,7 @@ function SidebarSessionItem({
               aria-label={indicatorLabel}
               className={cn(
                 'h-2 w-2 animate-pulse rounded-full',
-                showAttentionIndicator
-                  ? 'bg-amber-500'
-                  : showBackgroundIndicator
-                    ? 'bg-purple-500 dark:bg-purple-400'
-                    : 'bg-green-500',
+                showAttentionIndicator ? 'bg-amber-500' : 'bg-purple-500 dark:bg-purple-400',
               )}
             />
           </Tooltip>
@@ -187,11 +180,7 @@ function SidebarSessionItem({
           className={cn(
             'p-2 mx-3 my-0.5 rounded-md bg-card border active:scale-[0.98] transition-all duration-150 relative',
             isSelected ? 'bg-primary/5 border-primary/20' : '',
-            !isSelected && isProcessing
-              ? 'border-border/60 bg-muted/20'
-              : !isSelected && sessionView.isActive
-              ? 'border-green-500/30 bg-green-50/5 dark:bg-green-900/5'
-              : 'border-border/30',
+            !isSelected && isProcessing ? 'border-border/60 bg-muted/20' : 'border-border/30',
             isChecked && 'border-primary/40 bg-primary/10',
           )}
           onClick={isSelecting ? (isSelectable ? toggleSelected : undefined) : selectMobileSession}
@@ -410,11 +399,7 @@ function SidebarSessionItem({
             'h-auto w-full justify-start rounded-md border bg-card p-2 text-left font-normal transition-all duration-150',
             isSelecting ? 'pr-2' : 'pr-11',
             isSelected ? 'border-primary/20 bg-primary/5' : 'border-border/30',
-            !isSelected && isProcessing
-              ? 'border-border/60 bg-muted/20 hover:bg-muted/25'
-              : !isSelected && sessionView.isActive
-                ? 'border-green-500/30 bg-green-50/5 hover:bg-green-50/10 dark:bg-green-900/5 dark:hover:bg-green-900/10'
-                : 'hover:bg-accent/50',
+            !isSelected && isProcessing ? 'border-border/60 bg-muted/20 hover:bg-muted/25' : 'hover:bg-accent/50',
             isChecked && 'border-primary/40 bg-primary/10',
           )}
           // Left-click keeps in-app navigation; Ctrl/Cmd/middle-click and the

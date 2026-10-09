@@ -90,7 +90,7 @@ export function useSidebarController({
   const [showNewProject, setShowNewProject] = useState(false);
   const [initialSessionsLoaded, setInitialSessionsLoaded] = useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
+  const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('date');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
   const [deletingProjects, setDeletingProjects] = useState<Set<string>>(new Set());
