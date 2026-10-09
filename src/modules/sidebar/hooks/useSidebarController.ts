@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 
 import { api } from '@/shared/api';
+import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 import { subscribeToUserPreferences } from '@/shared/userSettings';
 import { usePaletteOps } from '@/modules/command-palette';
 import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode, SidebarSessionSelection } from '@/shared/types';
@@ -131,7 +132,14 @@ export function useSidebarController({
   const onRefreshRef = useRef(onRefresh);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
-  const activeSessionIds = activeSessions;
+  // The Running tab lists every session whose Claude is up (a tmux window or another terminal), not only busy ones.
+  const { windows: liveAgents } = useAgentWindows();
+  const activeSessionIds = useMemo(() => {
+    if (liveAgents.length === 0) {
+      return activeSessions;
+    }
+    return new Set([...activeSessions, ...liveAgents.map((agent) => agent.sessionId)]);
+  }, [activeSessions, liveAgents]);
   const runningSessionsCount = activeSessionIds.size;
 
   useEffect(() => {
