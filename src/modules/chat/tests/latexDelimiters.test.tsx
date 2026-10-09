@@ -9,7 +9,7 @@ import { normalizeLatexDelimiters } from '@/modules/chat/utils/latexDelimiters';
 import { splitStreamingMarkdown } from '@/modules/chat/utils/streamingMarkdown';
 
 /**
- * Issue #1123: Codex writes math with the LaTeX delimiters `\(…\)` and
+ * Issue #1123: models write math with the LaTeX delimiters `\(…\)` and
  * `\[…\]`, which remark-math does not recognize — CommonMark ate the backslash
  * and the transcript showed `(x = …)` instead of a formula. These render the
  * reporter's sample through the real chat <Markdown> and pin the cases a naive

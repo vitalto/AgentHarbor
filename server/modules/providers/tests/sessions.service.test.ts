@@ -34,17 +34,17 @@ async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promis
 
 test('provider session id returns the mapped native id', { concurrency: false }, async () => {
   await withIsolatedDatabase(() => {
-    sessionsDb.createAppSession('app-session-id', 'codex', '/tmp/session-id-copy-project');
-    sessionsDb.assignProviderSessionId('app-session-id', 'codex-native-session-id');
+    sessionsDb.createAppSession('app-session-id', 'claude', '/tmp/session-id-copy-project');
+    sessionsDb.assignProviderSessionId('app-session-id', 'claude-native-session-id');
 
-    assert.equal(sessionsService.getProviderSessionId('app-session-id'), 'codex-native-session-id');
+    assert.equal(sessionsService.getProviderSessionId('app-session-id'), 'claude-native-session-id');
   });
 });
 
 test('app session names use at most four whole words from the initial message', { concurrency: false }, async () => {
   await withIsolatedDatabase(() => {
     const result = sessionsService.createAppSession(
-      'codex',
+      'claude',
       '/tmp/session-name-project',
       '  supercalifragilisticexpialidocious\nsecond   third fourth fifth  ',
     );
@@ -104,7 +104,7 @@ test('recent sessions map project metadata and preserve database pagination', { 
     );
     sessionsDb.createSession(
       'newer-session',
-      'codex',
+      'claude',
       '/tmp/recent-project',
       'Newer conversation',
       '2026-08-01T10:00:00.000Z',
@@ -118,7 +118,7 @@ test('recent sessions map project metadata and preserve database pagination', { 
     assert.deepEqual(page, {
       conversations: [{
         sessionId: 'newer-session',
-        provider: 'codex',
+        provider: 'claude',
         projectId: project?.project_id ?? null,
         projectDisplayName: 'Recent Project',
         sessionTitle: 'Newer conversation',
@@ -202,7 +202,7 @@ test('history pages are sliced from the cached full transcript and see appended 
  * the running-sessions list without an SDK run behind it.
  */
 async function withProviders(
-  runtimes: Partial<Record<'claude' | 'codex', IProvider['runtime']>>,
+  runtimes: Partial<Record<string, IProvider['runtime']>>,
   runTest: () => void | Promise<void>,
 ): Promise<void> {
   const realListProviders = providerRegistry.listProviders;
@@ -287,7 +287,7 @@ test('running sessions list a session whose background work outlived its turn', 
 test('running sessions carry their tasks on a chat run that is still going', { concurrency: false }, async () => {
   await withIsolatedDatabase(async () => {
     sessionsDb.createAppSession('busy-session', 'claude', '/tmp/running-project');
-    sessionsDb.createAppSession('idle-session', 'codex', '/tmp/running-project');
+    sessionsDb.createAppSession('idle-session', 'claude', '/tmp/running-project');
     const run = chatRunRegistry.startRun({
       appSessionId: 'busy-session', provider: 'claude', providerSessionId: null, connection: null, userId: null,
     });
@@ -298,7 +298,7 @@ test('running sessions carry their tasks on a chat run that is still going', { c
       {
         claude: { run: async () => undefined, abort: () => false, listBackgroundWork: () => [{ sessionId: 'busy-session', tasks }] },
         // A runtime without background work contributes chat runs alone.
-        codex: { run: async () => undefined, abort: () => false },
+        secondary: { run: async () => undefined, abort: () => false },
       },
       async () => {
         const sessions = await sessionsService.listRunningSessions();
@@ -317,17 +317,17 @@ test('running sessions carry their tasks on a chat run that is still going', { c
 
 test('running sessions with no background work are the chat runs alone', { concurrency: false }, async () => {
   await withIsolatedDatabase(async () => {
-    sessionsDb.createAppSession('plain-session', 'codex', '/tmp/running-project');
+    sessionsDb.createAppSession('plain-session', 'claude', '/tmp/running-project');
     const run = chatRunRegistry.startRun({
-      appSessionId: 'plain-session', provider: 'codex', providerSessionId: null, connection: null, userId: null,
+      appSessionId: 'plain-session', provider: 'claude', providerSessionId: null, connection: null, userId: null,
     });
     assert.ok(run);
 
     await withClaudeCliRegistry([], async () => await withProviders(
-      { codex: { run: async () => undefined, abort: () => false } },
+      { claude: { run: async () => undefined, abort: () => false } },
       async () => {
         assert.deepEqual(await sessionsService.listRunningSessions(), [{
-          sessionId: 'plain-session', provider: 'codex', startedAt: run.startedAt, lastSeq: 0,
+          sessionId: 'plain-session', provider: 'claude', startedAt: run.startedAt, lastSeq: 0,
         }]);
       },
     ));

@@ -395,7 +395,7 @@ test('shells that are not a themed Claude launch never ask for a restart', () =>
   vi.useFakeTimers();
   writeUserPreference('theme', 'light');
   const current = renderShellRuntime();
-  // The server sends no launch theme for plain shells, Codex and the like.
+  // The server sends no launch theme for plain shells and the like.
   const { reportLaunchTheme } = connectShell(current);
 
   act(() => {

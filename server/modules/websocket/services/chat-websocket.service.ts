@@ -312,7 +312,7 @@ async function dispatchRun(
  * Nothing is deleted. The provider resumes the conversation partway and
  * appends the replacement, so the abandoned attempt stays in the transcript
  * file and is simply no longer part of the live conversation — the same shape
- * Claude Code's rewind and Codex's fork-with-cut-point produce.
+ * Claude Code's rewind produces.
  */
 async function handleChatEditSend(
   ws: WebSocket,
@@ -355,14 +355,8 @@ async function handleChatEditSend(
     return;
   }
 
-  // Providers split here on what their runtime can do. Claude resumes its
-  // transcript partway, so the anchor rides along as a run option. Codex
-  // cannot — a thread only grows — so the conversation is rewound on disk and
-  // the run that follows is an ordinary resume of whatever the session then
-  // points at. Which of the two applies is decided here; the rewind itself
-  // waits until the run has actually been admitted.
-  const rewinds = sessionsService.providerRewindsForEdit(sessionId);
-
+  // Claude resumes its transcript partway, so the anchor rides along as a
+  // run option.
   await dispatchRun(
     ws,
     userId,
@@ -372,40 +366,17 @@ async function handleChatEditSend(
     dependencies,
     // `null` is meaningful: the edited turn was the first prompt, so the
     // conversation starts over instead of resuming.
-    rewinds
-      ? {}
-      : { resumeAnchorId: resumeThroughId ?? undefined, resumeFromScratch: resumeThroughId === null },
-    async (run) => {
+    { resumeAnchorId: resumeThroughId ?? undefined, resumeFromScratch: resumeThroughId === null },
+    (run) => {
       // Emitted through the run's writer so it is sequenced and replayed like
       // any other event — a second tab watching this session has to truncate
       // too.
-      //
-      // Before the rewind, not after it. A rewind that has to branch spawns a
-      // process and waits on a JSON-RPC round trip, and holding the frame
-      // until that came back left the message the user had just edited away
-      // sitting on screen for about a second — the very flicker this feature
-      // exists to avoid. Announcing first is safe because a rewind that fails
-      // still ends the run, and the terminal `complete` makes every client
-      // re-read the transcript, which puts back anything that turned out not
-      // to have been replaced after all.
       run.writer.send({
         kind: 'history_truncated',
         provider,
         sessionId,
         anchorId,
       });
-
-      if (rewinds) {
-        try {
-          await sessionsService.rewindSessionForEdit(sessionId, resumeThroughId);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          sendProtocolError(ws, 'EDIT_REWIND_FAILED', `Could not rewind the conversation: ${message}`, sessionId);
-          // Ends the run before the provider is asked to continue a
-          // conversation that was not rewound after all.
-          throw error;
-        }
-      }
     },
   );
 }
@@ -589,71 +560,6 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * (`chat_subscribed`, `session_upserted`, `loading_progress`,
  * `protocol_error`).
  */
-/**
- * Runs a turn for a session with no client attached.
- *
- * Used by scheduled messages, which fire from a timer: there is no socket to
- * report errors to and no audience to stream to. The run is registered exactly
- * like an interactive one, so anyone who opens the session while it is going
- * subscribes and replays it from the start, and the session shows as busy
- * everywhere in the meantime.
- *
- * Resolves when the provider run settles. Returns false when the session has
- * gone away or is busy without `interruptActiveRun`, which the caller reports
- * on the schedule.
- */
-export async function runDetachedChatTurn(
-  input: {
-    sessionId: string;
-    userId: string | number | null;
-    content: string;
-    options?: AnyRecord;
-    /**
-     * Aborts a run already in progress instead of refusing to start. A
-     * scheduled message sets this: the user picked the time knowing it might
-     * land mid-run, so the timer outranks whatever is running.
-     */
-    interruptActiveRun?: boolean;
-  },
-  dependencies: ChatWebSocketDependencies,
-): Promise<{ started: boolean; error: string | null }> {
-  const session = sessionsDb.getSessionById(input.sessionId);
-  if (!session) {
-    return { started: false, error: 'The session no longer exists.' };
-  }
-
-  const provider = session.provider as LLMProvider;
-  if (!dependencies.runtime.hasRuntime(provider)) {
-    return { started: false, error: `Provider "${provider}" is not available.` };
-  }
-
-  const activeRun = chatRunRegistry.getRun(input.sessionId);
-  if (activeRun && activeRun.status === 'running') {
-    if (!input.interruptActiveRun) {
-      return { started: false, error: 'A run was already in progress for this session.' };
-    }
-    // Same shape as `chat.abort`: cancel the provider run and emit the
-    // terminal `complete` on its behalf, so every watching client sees the
-    // interrupted run end before this turn's stream begins. The interrupted
-    // run's own dispatch settles later through completeRunIfCurrent, which is
-    // scoped to that run and cannot touch the one started here.
-    const aborted = await dependencies.runtime.abort(activeRun.provider, input.sessionId);
-    chatRunRegistry.completeRun(input.sessionId, {
-      exitCode: aborted ? 0 : 1,
-      aborted: true,
-    });
-  }
-
-  return dispatchRun(
-    null,
-    input.userId,
-    input.sessionId,
-    session,
-    { sessionId: input.sessionId, content: input.content, options: input.options ?? {} },
-    dependencies,
-  );
-}
-
 export function handleChatConnection(
   ws: WebSocket,
   request: AuthenticatedWebSocketRequest,

@@ -73,9 +73,9 @@ async function executeCommand(
 }
 
 test('models command returns models only for the active provider using injected catalog', async () => {
-  const result = await executeCommand('/models', { provider: 'codex' });
+  const result = await executeCommand('/models', { provider: 'claude' });
   const data = result.data as Record<string, unknown>;
-  assert.deepEqual(Object.keys(data.available as object), ['codex']);
+  assert.deepEqual(Object.keys(data.available as object), ['claude']);
 });
 
 test('models command falls back to claude for unsupported providers', async () => {

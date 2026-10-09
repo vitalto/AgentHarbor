@@ -226,30 +226,6 @@ function buildShellCommand(
     return otherProgram(initialCommand);
   }
 
-  if (provider === 'cursor') {
-    if (resumeSessionId) {
-      return otherProgram(`cursor-agent --resume="${resumeSessionId}"`);
-    }
-    return otherProgram('cursor-agent');
-  }
-
-  if (provider === 'codex') {
-    if (resumeSessionId) {
-      if (os.platform() === 'win32') {
-        return otherProgram(`codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`);
-      }
-      return otherProgram(`codex resume "${resumeSessionId}" || codex`);
-    }
-    return otherProgram('codex');
-  }
-
-  if (provider === 'opencode') {
-    if (resumeSessionId) {
-      return otherProgram(`opencode --session "${resumeSessionId}"`);
-    }
-    return otherProgram(initialCommand || 'opencode');
-  }
-
   // Launching with the flag is what unlocks "bypass permissions" in the CLI's
   // shift+tab permission-mode cycle; it cannot be enabled from inside a
   // session started without it.
@@ -564,7 +540,6 @@ export function handleShellConnection(
         const isLoginCommand =
           !!initialCommand &&
           (initialCommand.includes('setup-token') ||
-            initialCommand.includes('cursor-agent login') ||
             initialCommand.includes('auth login'));
 
         const commandSuffix =
@@ -782,17 +757,9 @@ export function handleShellConnection(
 
         let welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
         if (!isPlainShell) {
-          const providerName =
-            provider === 'cursor'
-              ? 'Cursor'
-              : provider === 'codex'
-                ? 'Codex'
-                : provider === 'opencode'
-                    ? 'OpenCode'
-                  : 'Claude';
           welcomeMsg = hasSession && resumeSessionId
-            ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
-            : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
+            ? `\x1b[36mResuming Claude session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
+            : `\x1b[36mStarting new Claude session in: ${projectPath}\x1b[0m\r\n`;
         }
 
         ws.send(

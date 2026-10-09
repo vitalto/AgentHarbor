@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/shared/api';
 import type { FileOpenHandler, GitApiErrorResponse, GitCommitSummary, GitDiffMap, GitFileDiffResponse, GitOperationResponse, GitPanelView, GitRemoteStatus, GitStatusResponse, Project } from '@/shared/types';
 import { getAllChangedFiles } from '@/modules/git-panel/utils/gitPanelUtils';
-import { useSelectedProvider } from '@/shared/hooks/useSelectedProvider';
 
 const DEFAULT_BRANCH = 'main';
 // High enough for the commit graph to show meaningful branch structure.
@@ -51,7 +50,6 @@ type GitPanelController = {
   stageFiles: (files: string[]) => Promise<boolean>;
   unstageFiles: (files: string[]) => Promise<boolean>;
   fetchCommitDiff: (commitHash: string) => Promise<void>;
-  generateCommitMessage: (files: string[]) => Promise<string | null>;
   commitChanges: (message: string, files: string[]) => Promise<boolean>;
   createInitialCommit: () => Promise<boolean>;
   initRepository: () => Promise<boolean>;
@@ -67,10 +65,6 @@ type GitBranchesResponse = GitApiErrorResponse & {
 
 type GitCommitsResponse = GitApiErrorResponse & {
   commits?: GitCommitSummary[];
-};
-
-type GitGenerateMessageResponse = GitApiErrorResponse & {
-  message?: string;
 };
 
 type GitFileWithDiffResponse = GitApiErrorResponse & {
@@ -139,7 +133,6 @@ export function useGitPanelController({
     selectedProjectIdRef.current = selectedProject?.projectId ?? null;
   }, [selectedProject]);
 
-  const provider = useSelectedProvider();
 
   const fetchFileDiff = useCallback(
     async (filePath: string, signal?: AbortSignal) => {
@@ -615,34 +608,6 @@ export function useGitPanelController({
     [selectedProject],
   );
 
-  const generateCommitMessage = useCallback(
-    async (files: string[]) => {
-      if (!selectedProject || files.length === 0) {
-        return null;
-      }
-
-      try {
-        const response = await api.git.generateCommitMessage(
-          selectedProject.projectId,
-          files,
-          provider,
-        );
-
-        const data = await readJson<GitGenerateMessageResponse>(response);
-        if (data.message) {
-          return data.message;
-        }
-
-        console.error('Failed to generate commit message:', data.error);
-        return null;
-      } catch (error) {
-        console.error('Error generating commit message:', error);
-        return null;
-      }
-    },
-    [provider, selectedProject],
-  );
-
   const commitChanges = useCallback(
     async (message: string, files: string[]) => {
       if (!selectedProject || !message.trim() || files.length === 0) {
@@ -844,7 +809,6 @@ export function useGitPanelController({
     stageFiles,
     unstageFiles,
     fetchCommitDiff,
-    generateCommitMessage,
     commitChanges,
     createInitialCommit,
     initRepository,

@@ -28,12 +28,10 @@ type SandboxOptions = {
 
 const SANDBOX_TEMPLATES: Record<string, string> = {
   claude: 'docker.io/cloudcliai/sandbox:claude-code',
-  codex: 'docker.io/cloudcliai/sandbox:codex',
 };
 
 const SANDBOX_SECRETS: Record<string, string> = {
   claude: 'anthropic',
-  codex: 'openai',
 };
 
 function parseSandboxArguments(argumentsList: string[], homeDirectory: string): SandboxOptions {
@@ -122,7 +120,7 @@ Subcommands:
   ${terminalTextStyles.bright('help')}         Show this help
 
 Options:
-  -a, --agent <agent>       Agent to use: claude, codex (default: claude)
+  -a, --agent <agent>       Agent to use: claude (default: claude)
   -n, --name <name>         Sandbox name (default: derived from workspace folder)
   -t, --template <image>    Custom template image
   -e, --env <KEY=VALUE>     Set environment variable (repeatable)
@@ -130,7 +128,7 @@ Options:
 
 Examples:
   $ cloudcli sandbox ~/my-project
-  $ cloudcli sandbox ~/my-project --agent codex --port 8080
+  $ cloudcli sandbox ~/my-project --port 8080
   $ cloudcli sandbox ~/my-project --env SERVER_PORT=8080 --env HOST=0.0.0.0
   $ cloudcli sandbox ls
   $ cloudcli sandbox stop my-project
@@ -142,7 +140,6 @@ Prerequisites:
   2. Authenticate and store your API key:
        sbx login
        sbx secret set -g anthropic   # for Claude
-       sbx secret set -g openai      # for Codex
 
 Advanced usage:
   For branch mode, multiple workspaces, memory limits, network policies,

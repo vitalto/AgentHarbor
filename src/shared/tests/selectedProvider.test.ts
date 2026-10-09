@@ -23,11 +23,6 @@ test('an unset provider falls back to claude', () => {
   assert.equal(readSelectedProvider(), 'claude');
 });
 
-test('a stored provider is read back', () => {
-  writeSelectedProvider('codex');
-  assert.equal(readSelectedProvider(), 'codex');
-});
-
 test('a value that is not a known provider falls back instead of being trusted', () => {
   // Only one of the previous readers validated; the rest returned this verbatim.
   writeUserPreference('selectedProvider', 'not-a-provider');
@@ -44,7 +39,7 @@ test('a write publishes a same-tab change, which the storage event does not', ()
     changes += 1;
   });
 
-  writeSelectedProvider('cursor');
+  writeSelectedProvider('claude');
 
   unsubscribe();
   assert.equal(changes, 1);
@@ -55,7 +50,7 @@ test('a change to an unrelated preference does not read as a provider switch', (
   // theme toggle in another tab looked like a provider switch. The preference
   // store notifies on any change, so the guarantee moved to the reader: it must
   // still report the provider that is actually stored.
-  writeSelectedProvider('codex');
+  writeSelectedProvider('claude');
 
   let observed: string | null = null;
   const unsubscribe = subscribeToUserPreferences(() => {
@@ -64,5 +59,5 @@ test('a change to an unrelated preference does not read as a provider switch', (
   writeUserPreference('theme', 'dark');
   unsubscribe();
 
-  assert.equal(observed, 'codex');
+  assert.equal(observed, 'claude');
 });

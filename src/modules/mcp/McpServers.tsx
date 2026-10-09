@@ -18,9 +18,6 @@ const MCP_GLOBAL_SUPPORTED_SCOPES: McpScope[] = ['user', 'project'];
 
 const MCP_PROVIDER_BUTTON_CLASSES: Record<McpProvider, string> = {
   claude: 'bg-primary text-primary-foreground hover:bg-primary/90',
-  cursor: 'bg-primary text-primary-foreground hover:bg-primary/90',
-  codex: 'bg-primary text-primary-foreground hover:bg-primary/90',
-  opencode: 'bg-primary text-primary-foreground hover:bg-primary/90',
 };
 
 const getTransportIcon = (transport: string | undefined) => {
@@ -281,13 +278,6 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
           <div className="py-8 text-center text-muted-foreground">{t('mcpServers.empty')}</div>
         )}
       </div>
-
-      {selectedProvider === 'codex' && (
-        <div className="rounded-lg border border-border bg-muted/50 p-4">
-          <h4 className="mb-2 font-medium text-foreground">{t('mcpServers.help.title')}</h4>
-          <p className="text-sm text-muted-foreground">{t('mcpServers.help.description')}</p>
-        </div>
-      )}
 
       {selectedProvider === 'claude' && !IS_PLATFORM && <TeamMcpFeatureCard />}
 

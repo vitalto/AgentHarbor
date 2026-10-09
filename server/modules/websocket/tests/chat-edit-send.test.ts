@@ -6,7 +6,6 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
-import { sessionsService } from '@/modules/providers/index.js';
 import { handleChatConnection } from '@/modules/websocket/services/chat-websocket.service.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients } from '@/modules/websocket/services/websocket-state.service.js';
@@ -44,33 +43,7 @@ const TRANSCRIPT_ROWS = [
   },
 ];
 
-/**
- * The same two turns as a Codex rollout. Codex rows carry no id of their own,
- * so the edit anchor is the enclosing turn — which is also the unit its fork
- * endpoint cuts at.
- */
-const CODEX_TRANSCRIPT_ROWS = [
-  { type: 'event_msg', payload: { type: 'task_started', turn_id: 'turn-a' } },
-  { type: 'event_msg', payload: { type: 'user_message', message: 'first' } },
-  { type: 'event_msg', payload: { type: 'task_complete', turn_id: 'turn-a' } },
-  { type: 'event_msg', payload: { type: 'task_started', turn_id: 'turn-b' } },
-  { type: 'event_msg', payload: { type: 'user_message', message: 'second' } },
-  { type: 'event_msg', payload: { type: 'task_complete', turn_id: 'turn-b' } },
-];
-
 type RunCall = { provider: string; command: string; options: Record<string, unknown> };
-
-/**
- * Set by a test that needs a run to still be in flight when the next frame
- * arrives; the stub runtime returns immediately otherwise. Released when the
- * test ends, so no stub run is left pending for the rest of the file.
- */
-let holdRun: Promise<void> | null = null;
-let releaseHeldRun: (() => void) | null = null;
-
-function holdTheNextRun(): void {
-  holdRun = new Promise<void>((resolve) => { releaseHeldRun = resolve; });
-}
 
 async function withGateway(
   provider: string,
@@ -104,9 +77,6 @@ async function withGateway(
           hasRuntime: () => true,
           run: async (runProvider: string, command: string, options: Record<string, unknown>) => {
             runs.push({ provider: runProvider, command, options });
-            if (holdRun) {
-              await holdRun;
-            }
           },
         } as never,
       },
@@ -114,9 +84,6 @@ async function withGateway(
 
     await runTest({ socket, runs });
   } finally {
-    releaseHeldRun?.();
-    releaseHeldRun = null;
-    holdRun = null;
     connectedClients.clear();
     chatRunRegistry.clearAll();
     closeConnection();
@@ -212,98 +179,4 @@ test('an anchor the transcript does not hold is refused', async () => {
     assert.equal(runs.length, 0);
     assert.equal(socket.frames.at(-1)?.code, 'ANCHOR_NOT_FOUND');
   });
-});
-
-test('a provider that cannot re-run from a point is refused rather than sending a new message', async () => {
-  await withGateway('cursor', async ({ socket, runs }) => {
-    socket.emit('message', JSON.stringify({
-      type: 'chat.edit-send',
-      sessionId: SESSION_ID,
-      anchorId: 'e-u2',
-      content: 'replacement',
-    }));
-    await settle();
-
-    assert.equal(runs.length, 0);
-    assert.equal(socket.frames.at(-1)?.code, 'EDIT_NOT_SUPPORTED');
-  });
-});
-
-test('a refused send never rewinds the conversation', async () => {
-  await withGateway('codex', async ({ socket, runs }) => {
-    // The rewind moves the session onto a different provider transcript and
-    // cannot be undone, so a send the gateway is about to refuse must not
-    // reach it. A run already in flight is the realistic way that happens: a
-    // scheduled message, or another device.
-    const realRewind = sessionsService.rewindSessionForEdit;
-    let rewound = false;
-    sessionsService.rewindSessionForEdit = async () => { rewound = true; };
-    holdTheNextRun();
-
-    try {
-      socket.emit('message', JSON.stringify({
-        type: 'chat.send',
-        sessionId: SESSION_ID,
-        content: 'a turn that is already running',
-      }));
-      await settle();
-      assert.equal(runs.length, 1);
-
-      socket.emit('message', JSON.stringify({
-        type: 'chat.edit-send',
-        sessionId: SESSION_ID,
-        anchorId: 'turn-b',
-        content: 'an edit that arrives too late',
-      }));
-      await settle();
-    } finally {
-      sessionsService.rewindSessionForEdit = realRewind;
-    }
-
-    assert.equal(rewound, false);
-    assert.equal(runs.length, 1);
-    assert.equal(socket.frames.at(-1)?.code, 'RUN_IN_PROGRESS');
-  }, CODEX_TRANSCRIPT_ROWS);
-});
-
-test('a provider that has to branch to rewind is rewound before the run, not during it', async () => {
-  await withGateway('codex', async ({ socket, runs }) => {
-    // The rewind itself belongs to the provider and is covered there; what
-    // this asserts is the gateway's half — that a provider which reports it
-    // rewound gets an ordinary run instead of one carrying a resume anchor its
-    // runtime would not know what to do with.
-    const realRewind = sessionsService.rewindSessionForEdit;
-    const rewindCalls: unknown[] = [];
-    let truncatedBeforeRewind = false;
-    sessionsService.rewindSessionForEdit = async (sessionId: string, keepThroughId: string | null) => {
-      truncatedBeforeRewind = socket.frames.some((frame) => frame.kind === 'history_truncated');
-      rewindCalls.push({ sessionId, keepThroughId });
-    };
-
-    try {
-      socket.emit('message', JSON.stringify({
-        type: 'chat.edit-send',
-        sessionId: SESSION_ID,
-        anchorId: 'turn-b',
-        content: 'a better second prompt',
-      }));
-      await settle();
-    } finally {
-      sessionsService.rewindSessionForEdit = realRewind;
-    }
-
-    // Resolved from the real Codex rollout: the turn before the edited one.
-    assert.deepEqual(rewindCalls, [{ sessionId: SESSION_ID, keepThroughId: 'turn-a' }]);
-    assert.equal(runs.length, 1);
-    assert.equal(runs[0].command, 'a better second prompt');
-    assert.equal(runs[0].options.resumeAnchorId, undefined);
-    assert.equal(runs[0].options.resumeFromScratch, undefined);
-
-    // Clients still hear about the cut; how it was made is the server's
-    // business. And they hear about it first: a rewind that branches waits on
-    // a spawned process, and holding the frame until it returned left the
-    // replaced message on screen for about a second.
-    assert.ok(socket.frames.some((frame) => frame.kind === 'history_truncated'));
-    assert.equal(truncatedBeforeRewind, true);
-  }, CODEX_TRANSCRIPT_ROWS);
 });

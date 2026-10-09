@@ -63,7 +63,7 @@ test('session creation route names a CloudCLI session from the initial message',
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        provider: 'codex',
+        provider: 'claude',
         projectPath: workspacePath,
         initialMessage: 'abcd  efg\nhij klm nop',
       }),
@@ -85,23 +85,24 @@ test('conversation search streams title matches before transcript results', asyn
   await withProviderServer(async (baseUrl, workspacePath) => {
     sessionsDb.createAppSession(
       'title-only-session',
-      'codex',
+      'claude',
       workspacePath,
       'Release planning notes',
     );
-    const transcriptPath = path.join(path.dirname(workspacePath), 'codex-search.jsonl');
+    const transcriptPath = path.join(path.dirname(workspacePath), 'claude-search.jsonl');
     await writeFile(transcriptPath, `${JSON.stringify({
-      type: 'event_msg',
+      type: 'user',
+      sessionId: 'transcript-session',
+      uuid: 'message-1',
       timestamp: '2026-08-12T09:00:00.000Z',
-      payload: {
-        type: 'user_message',
-        kind: 'plain',
-        message: 'Release planning also appears in this conversation.',
+      message: {
+        role: 'user',
+        content: 'Release planning also appears in this conversation.',
       },
     })}\n`);
     sessionsDb.createSession(
       'transcript-session',
-      'codex',
+      'claude',
       workspacePath,
       'Unrelated session',
       undefined,
@@ -138,20 +139,20 @@ test('conversation search streams title matches before transcript results', asyn
     assert.equal(titlePayload.titleResults.length, 1);
     assert.equal(titlePayload.titleResults[0]?.sessionId, 'title-only-session');
     assert.equal(titlePayload.titleResults[0]?.sessionTitle, 'Release planning notes');
-    assert.equal(titlePayload.titleResults[0]?.provider, 'codex');
+    assert.equal(titlePayload.titleResults[0]?.provider, 'claude');
   });
 });
 
 test('reasoning effort is persisted and returned with the active session model', async () => {
   await withProviderServer(async (baseUrl, workspacePath) => {
-    sessionsDb.createAppSession('effort-session', 'codex', workspacePath);
+    sessionsDb.createAppSession('effort-session', 'claude', workspacePath);
 
     const updateResponse = await fetch(
-      `${baseUrl}/api/providers/codex/sessions/effort-session/active-effort`,
+      `${baseUrl}/api/providers/claude/sessions/effort-session/active-effort`,
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ effort: 'ultra' }),
+        body: JSON.stringify({ effort: 'max' }),
       },
     );
     const updatePayload = await updateResponse.json() as {
@@ -159,11 +160,11 @@ test('reasoning effort is persisted and returned with the active session model',
     };
 
     assert.equal(updateResponse.status, 200);
-    assert.equal(updatePayload.data.effort, 'ultra');
-    assert.equal(sessionsDb.getSessionById('effort-session')?.effort, 'ultra');
+    assert.equal(updatePayload.data.effort, 'max');
+    assert.equal(sessionsDb.getSessionById('effort-session')?.effort, 'max');
 
     const readResponse = await fetch(
-      `${baseUrl}/api/providers/codex/sessions/effort-session/active-model`,
+      `${baseUrl}/api/providers/claude/sessions/effort-session/active-model`,
     );
     const readPayload = await readResponse.json() as {
       data: { effort: string | null; sessionId: string };
@@ -171,13 +172,13 @@ test('reasoning effort is persisted and returned with the active session model',
 
     assert.equal(readResponse.status, 200);
     assert.equal(readPayload.data.sessionId, 'effort-session');
-    assert.equal(readPayload.data.effort, 'ultra');
+    assert.equal(readPayload.data.effort, 'max');
   });
 });
 
 test('model routes expose immutable defaults and full custom model CRUD', async () => {
   await withProviderServer(async (baseUrl) => {
-    const initialResponse = await fetch(`${baseUrl}/api/providers/codex/models`);
+    const initialResponse = await fetch(`${baseUrl}/api/providers/claude/models`);
     const initialPayload = await initialResponse.json() as {
       data: {
         cache?: unknown;
@@ -192,7 +193,7 @@ test('model routes expose immutable defaults and full custom model CRUD', async 
     assert.equal(predefined.isCustom, false);
     assert.equal(predefined.recordId, undefined);
 
-    const createResponse = await fetch(`${baseUrl}/api/providers/codex/models`, {
+    const createResponse = await fetch(`${baseUrl}/api/providers/claude/models`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ model: 'Gateway GPT', id: 'gateway/gpt' }),
@@ -205,7 +206,7 @@ test('model routes expose immutable defaults and full custom model CRUD', async 
     const customRecordId = createPayload.data.model.recordId;
 
     const updateResponse = await fetch(
-      `${baseUrl}/api/providers/codex/models/${customRecordId}`,
+      `${baseUrl}/api/providers/claude/models/${customRecordId}`,
       {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
@@ -220,7 +221,7 @@ test('model routes expose immutable defaults and full custom model CRUD', async 
     assert.equal(updatePayload.data.model.label, 'Gateway GPT Updated');
 
     const immutableResponse = await fetch(
-      `${baseUrl}/api/providers/codex/models/999999`,
+      `${baseUrl}/api/providers/claude/models/999999`,
       {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
@@ -232,7 +233,7 @@ test('model routes expose immutable defaults and full custom model CRUD', async 
     assert.equal(immutablePayload.error.code, 'MODEL_NOT_FOUND');
 
     const deleteResponse = await fetch(
-      `${baseUrl}/api/providers/codex/models/${customRecordId}`,
+      `${baseUrl}/api/providers/claude/models/${customRecordId}`,
       { method: 'DELETE' },
     );
     const deletePayload = await deleteResponse.json() as {
@@ -289,16 +290,6 @@ test('custom model routes accept, validate, and return reasoning-effort levels',
       ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'],
     );
 
-    // OpenCode's allowed levels do not depend on which upstream providers the
-    // machine running the tests has connected.
-    const openCodeModel = await postModel('opencode', {
-      model: 'Router model',
-      id: 'openrouter/router-model',
-      effort: { values: ['none', 'high'] },
-    });
-    assert.equal(openCodeModel.status, 201, JSON.stringify(openCodeModel.payload));
-    assert.deepEqual(openCodeModel.payload.data?.model.effort, { values: [{ value: 'none' }, { value: 'high' }] });
-
     // A PATCH from a client that predates effort metadata keeps the levels.
     const renameResponse = await fetch(
       `${baseUrl}/api/providers/claude/models/${created.payload.data?.model.recordId}`,
@@ -318,7 +309,6 @@ test('custom model routes accept, validate, and return reasoning-effort levels',
       { provider: 'claude', effort: { values: ['low'], default: 'high' }, code: 'INVALID_MODEL_EFFORT' },
       { provider: 'claude', effort: { values: ['turbo'] }, code: 'INVALID_MODEL_EFFORT' },
       { provider: 'claude', effort: 'high', code: 'INVALID_MODEL_EFFORT' },
-      { provider: 'cursor', effort: { values: ['low'] }, code: 'MODEL_EFFORT_NOT_SUPPORTED' },
     ];
     for (const [index, invalid] of invalidPayloads.entries()) {
       const rejected = await postModel(invalid.provider, {

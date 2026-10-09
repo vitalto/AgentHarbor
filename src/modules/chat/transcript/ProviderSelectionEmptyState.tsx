@@ -8,7 +8,6 @@ import type {
   ProviderModelActions,
   ProviderModelsDefinition,
 } from "@/shared/types";
-import { NextTaskBanner } from "@/modules/task-master";
 import {
   Dialog,
   DialogTrigger,
@@ -28,9 +27,6 @@ import { writeSelectedProvider } from '@/shared/selectedProvider';
 
 const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "claude", name: "Anthropic" },
-  { id: "codex", name: "OpenAI" },
-  { id: "cursor", name: "Cursor" },
-  { id: "opencode", name: "OpenCode" },
 ];
 
 const MOD_KEY =
@@ -59,10 +55,6 @@ type ProviderSelectionEmptyStateProps = {
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelActions: ProviderModelActions;
   providerModelsLoading: boolean;
-  tasksEnabled: boolean;
-  isTaskMasterInstalled: boolean | null;
-  onShowAllTasks?: (() => void) | null;
-  setInput: React.Dispatch<React.SetStateAction<string>>;
 };
 
 function getModelConfig(
@@ -71,14 +63,6 @@ function getModelConfig(
 ): ProviderModelsDefinition {
   const entry = catalog[p];
   return entry ?? { OPTIONS: [], DEFAULT: "" };
-}
-
-function getProviderDisplayName(p: LLMProvider) {
-  if (p === "claude") return "Claude";
-  if (p === "cursor") return "Cursor";
-  if (p === "codex") return "Codex";
-  if (p === "opencode") return "OpenCode";
-  return "Claude";
 }
 
 /**
@@ -96,10 +80,6 @@ export default function ProviderSelectionEmptyState({
   providerModelCatalog,
   providerModelActions,
   providerModelsLoading,
-  tasksEnabled,
-  isTaskMasterInstalled,
-  onShowAllTasks,
-  setInput,
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation("chat");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -131,10 +111,6 @@ export default function ProviderSelectionEmptyState({
     })),
     [providerModelCatalog],
   );
-
-  const nextTaskPrompt = t("tasks.nextTaskPrompt", {
-    defaultValue: "Start the next task",
-  });
 
   const currentModel = providerModels[provider];
 
@@ -195,7 +171,7 @@ export default function ProviderSelectionEmptyState({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1">
                       <span className="text-xs font-semibold text-foreground">
-                        {getProviderDisplayName(provider)}
+                        Claude
                       </span>
                       <span className="text-xs text-muted-foreground">·</span>
                       <span className="truncate text-xs text-foreground">
@@ -295,23 +271,9 @@ export default function ProviderSelectionEmptyState({
           </Dialog>
 
           <p className="mt-4 text-center text-sm text-muted-foreground/70">
-            {
-              {
-                claude: t("providerSelection.readyPrompt.claude", {
-                  model: providerModels.claude,
-                }),
-                cursor: t("providerSelection.readyPrompt.cursor", {
-                  model: providerModels.cursor,
-                }),
-                codex: t("providerSelection.readyPrompt.codex", {
-                  model: providerModels.codex,
-                }),
-                opencode: t("providerSelection.readyPrompt.opencode", {
-                  model: providerModels.opencode,
-                  defaultValue: "Ready with OpenCode {{model}}",
-                }),
-              }[provider]
-            }
+            {t("providerSelection.readyPrompt.claude", {
+              model: providerModels.claude,
+            })}
           </p>
 
           <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground/60">
@@ -326,15 +288,6 @@ export default function ProviderSelectionEmptyState({
               }}
             />
           </p>
-
-          {provider && tasksEnabled && isTaskMasterInstalled && (
-            <div className="mt-5">
-              <NextTaskBanner
-                onStartTask={() => setInput(nextTaskPrompt)}
-                onShowAllTasks={onShowAllTasks}
-              />
-            </div>
-          )}
         </div>
       </div>
     );
@@ -350,15 +303,6 @@ export default function ProviderSelectionEmptyState({
           <p className="text-sm leading-relaxed text-muted-foreground">
             {t("session.continue.description")}
           </p>
-
-          {tasksEnabled && isTaskMasterInstalled && (
-            <div className="mt-5">
-              <NextTaskBanner
-                onStartTask={() => setInput(nextTaskPrompt)}
-                onShowAllTasks={onShowAllTasks}
-              />
-            </div>
-          )}
         </div>
       </div>
     );

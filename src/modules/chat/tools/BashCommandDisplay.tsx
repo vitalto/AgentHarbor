@@ -18,7 +18,7 @@ type BashCommandDisplayProps = {
 };
 
 /**
- * Codex-in-VSCode style command row: a compact, single-line command with a
+ * Compact command row: a single-line command with a
  * chevron on the left. When the command produced output, the row becomes a
  * dropdown that expands to reveal the output inline. Theme-integrated surfaces
  * keep it clean in both light and dark mode; consecutive commands stack tightly

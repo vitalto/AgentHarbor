@@ -53,16 +53,16 @@ test('overlapping latest page retains loaded older messages and replaces the tai
   assert.equal(new Set(result.messages.map((item) => item.id)).size, result.messages.length);
 });
 
-test('Codex rows with regenerated IDs overlap by stable transcript fields', () => {
+test('rows with regenerated IDs overlap by stable transcript fields', () => {
   const cached = range(1, 20).map((item) => ({
     ...item,
-    id: `codex-old-${item.id}`,
-    provider: 'codex' as const,
+    id: `old-${item.id}`,
+    provider: 'claude' as const,
   }));
   const latest = range(11, 30).map((item) => ({
     ...item,
-    id: `codex-new-${item.id}`,
-    provider: 'codex' as const,
+    id: `new-${item.id}`,
+    provider: 'claude' as const,
   }));
 
   assert.equal(findLatestPageOverlapLength(cached, latest), 10);

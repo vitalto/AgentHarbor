@@ -1,13 +1,11 @@
-import fsSync, { type Dirent } from 'node:fs';
+import fsSync from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import Database from 'better-sqlite3';
-
 import { sessionsDb } from '@/modules/database/index.js';
 import type { AnyRecord } from '@/shared/types.js';
-import { AppError, getOpenCodeDatabasePath } from '@/shared/utils.js';
+import { AppError } from '@/shared/utils.js';
 
 type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
 
@@ -20,9 +18,7 @@ type FileTail = {
 type ProviderTokenUsageServiceDependencies = {
   getSessionById: (sessionId: string) => SessionRow | null | undefined;
   getHomeDirectory: () => string;
-  getOpenCodeDatabasePath: () => string;
   fileExists: (filePath: string) => boolean;
-  readDirectory: (directoryPath: string) => Promise<Dirent[]>;
   readTextFile: (filePath: string) => Promise<string>;
   readTextFileTail: (filePath: string, maxBytes: number) => Promise<FileTail>;
   getClaudeContextWindow: () => string | undefined;
@@ -45,16 +41,8 @@ type TokenUsageResult = {
   message?: string;
 };
 
-type OpenCodeTokenRow = {
-  inputTokens: number | null;
-  outputTokens: number | null;
-  reasoningTokens: number | null;
-  cacheReadTokens: number | null;
-  cacheWriteTokens: number | null;
-};
-
 /**
- * Both JSONL usage readers below only need the newest usage row, which sits at
+ * The JSONL usage reader below only needs the newest usage row, which sits at
  * or near the end of the transcript. Reading just this much of the tail keeps
  * a session-open usage lookup O(1) in the transcript's size; the rare tail
  * with no usage row at all falls back to the full read.
@@ -64,9 +52,7 @@ const TOKEN_USAGE_TAIL_BYTES = 4 * 1024 * 1024;
 const defaultDependencies: ProviderTokenUsageServiceDependencies = {
   getSessionById: (sessionId) => sessionsDb.getSessionById(sessionId),
   getHomeDirectory: () => os.homedir(),
-  getOpenCodeDatabasePath,
   fileExists: (filePath) => fsSync.existsSync(filePath),
-  readDirectory: (directoryPath) => fsp.readdir(directoryPath, { withFileTypes: true }),
   readTextFile: (filePath) => fsp.readFile(filePath, 'utf8'),
   readTextFileTail: async (filePath, maxBytes) => {
     const handle = await fsp.open(filePath, 'r');
@@ -101,91 +87,11 @@ function readUsageNumber(value: unknown): number {
   return Number.isFinite(parsedValue) ? parsedValue : 0;
 }
 
-async function findCodexSessionFile(
-  directoryPath: string,
-  providerSessionId: string,
-  dependencies: ProviderTokenUsageServiceDependencies,
-): Promise<string | null> {
-  let entries: Dirent[];
-  try {
-    entries = await dependencies.readDirectory(directoryPath);
-  } catch {
-    // Codex session folders are date-partitioned and can disappear while a
-    // cleanup is running. An unreadable branch is simply not a match.
-    return null;
-  }
-
-  for (const entry of entries) {
-    const entryPath = path.join(directoryPath, entry.name);
-    if (entry.isDirectory()) {
-      const nestedMatch = await findCodexSessionFile(entryPath, providerSessionId, dependencies);
-      if (nestedMatch) {
-        return nestedMatch;
-      }
-      continue;
-    }
-
-    if (entry.name.includes(providerSessionId) && entry.name.endsWith('.jsonl')) {
-      return entryPath;
-    }
-  }
-
-  return null;
-}
-
-/** Newest `token_count` snapshot in the given JSONL text, or null when it has none. */
-function findCodexTokenUsage(fileContent: string): TokenUsageResult | null {
-  const lines = fileContent.trim().split('\n');
-
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    try {
-      const entry = JSON.parse(lines[index]) as AnyRecord;
-      const tokenInfo = entry.type === 'event_msg' && entry.payload?.type === 'token_count'
-        ? entry.payload.info
-        : null;
-      if (!tokenInfo) {
-        continue;
-      }
-
-      let inputTokens = 0;
-      let outputTokens = 0;
-      let totalTokens = 0;
-      if (tokenInfo.total_token_usage) {
-        inputTokens = readUsageNumber(tokenInfo.total_token_usage.input_tokens);
-        outputTokens = readUsageNumber(tokenInfo.total_token_usage.output_tokens);
-        totalTokens = readUsageNumber(tokenInfo.total_token_usage.total_tokens)
-          || inputTokens + outputTokens;
-      }
-      return {
-        used: totalTokens,
-        total: readUsageNumber(tokenInfo.model_context_window) || 200_000,
-        inputTokens,
-        outputTokens,
-        breakdown: { input: inputTokens, output: outputTokens },
-      };
-    } catch {
-      // A provider may be writing the last JSONL line while this read happens.
-    }
-  }
-
-  return null;
-}
-
-function emptyCodexTokenUsage(): TokenUsageResult {
-  return {
-    used: 0,
-    total: 200_000,
-    inputTokens: 0,
-    outputTokens: 0,
-    breakdown: { input: 0, output: 0 },
-  };
-}
-
 /**
  * Latest context-window usage from a Claude transcript's already-parsed rows.
  *
  * Exported because the session-messages reader hands the same usage back on
- * every history page, the way the Codex and OpenCode readers do. Without that,
+ * every history page. Without that,
  * a Claude session's counter only moved when the session was reselected, and
  * the store's "this provider reports no usage" path overwrote it with zero.
  *
@@ -276,67 +182,6 @@ function claudeEntriesHaveUsage(entries: AnyRecord[]): boolean {
   return entries.some((entry) => entry?.type === 'assistant' && entry.message?.usage);
 }
 
-function readOpenCodeTokenUsage(databasePath: string, providerSessionId: string): TokenUsageResult {
-  const database = new Database(databasePath, { readonly: true, fileMustExist: true });
-  try {
-    const columns = database.prepare('PRAGMA table_info(session)').all() as Array<{ name: string }>;
-    const columnNames = new Set(columns.map((column) => column.name));
-    const requiredColumns = [
-      'tokens_input',
-      'tokens_output',
-      'tokens_reasoning',
-      'tokens_cache_read',
-      'tokens_cache_write',
-    ];
-
-    if (!requiredColumns.every((column) => columnNames.has(column))) {
-      return {
-        used: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        breakdown: { input: 0, output: 0 },
-        unsupported: true,
-        message: 'Token usage tracking is not available in this OpenCode database schema',
-      };
-    }
-
-    const row = database.prepare(`
-      SELECT
-        tokens_input AS inputTokens,
-        tokens_output AS outputTokens,
-        tokens_reasoning AS reasoningTokens,
-        tokens_cache_read AS cacheReadTokens,
-        tokens_cache_write AS cacheWriteTokens
-      FROM session
-      WHERE id = ?
-    `).get(providerSessionId) as OpenCodeTokenRow | undefined;
-
-    if (!row) {
-      throw new AppError('OpenCode session was not found.', {
-        code: 'OPENCODE_SESSION_NOT_FOUND',
-        statusCode: 404,
-      });
-    }
-
-    const inputTokens = readUsageNumber(row.inputTokens) + readUsageNumber(row.cacheReadTokens);
-    const outputTokens = readUsageNumber(row.outputTokens);
-    const used = readUsageNumber(row.inputTokens)
-      + outputTokens
-      + readUsageNumber(row.reasoningTokens)
-      + readUsageNumber(row.cacheReadTokens)
-      + readUsageNumber(row.cacheWriteTokens);
-
-    return {
-      used,
-      inputTokens,
-      outputTokens,
-      breakdown: { input: inputTokens, output: outputTokens },
-    };
-  } finally {
-    database.close();
-  }
-}
-
 /**
  * Creates the provider token-usage service used by the provider routes. The
  * provider test suite supplies isolated filesystem and session dependencies so
@@ -380,59 +225,6 @@ export function createProviderTokenUsageService(
       }
 
       const providerSessionId = session.provider_session_id || sessionId;
-
-      if (session.provider === 'cursor') {
-        return {
-          used: 0,
-          total: 0,
-          inputTokens: 0,
-          outputTokens: 0,
-          breakdown: { input: 0, output: 0 },
-          unsupported: true,
-          message: 'Token usage tracking not available for Cursor sessions',
-        };
-      }
-
-      if (session.provider === 'opencode') {
-        const databasePath = dependencies.getOpenCodeDatabasePath();
-        if (!dependencies.fileExists(databasePath)) {
-          throw new AppError('OpenCode database was not found.', {
-            code: 'OPENCODE_DATABASE_NOT_FOUND',
-            statusCode: 404,
-          });
-        }
-
-        return readOpenCodeTokenUsage(databasePath, providerSessionId);
-      }
-
-      if (session.provider === 'codex') {
-        const indexedFilePath = session.jsonl_path && dependencies.fileExists(session.jsonl_path)
-          ? session.jsonl_path
-          : null;
-        const sessionFilePath = indexedFilePath ?? await findCodexSessionFile(
-          path.join(dependencies.getHomeDirectory(), '.codex', 'sessions'),
-          providerSessionId,
-          dependencies,
-        );
-
-        if (!sessionFilePath) {
-          throw new AppError(`Codex session file for "${sessionId}" was not found.`, {
-            code: 'CODEX_SESSION_FILE_NOT_FOUND',
-            statusCode: 404,
-          });
-        }
-
-        const tail = await dependencies.readTextFileTail(sessionFilePath, TOKEN_USAGE_TAIL_BYTES);
-        const tailUsage = findCodexTokenUsage(tail.content);
-        if (tailUsage || tail.isComplete) {
-          return tailUsage ?? emptyCodexTokenUsage();
-        }
-
-        // A tail this large with no token_count row is pathological, but the
-        // whole file is still authoritative when it happens.
-        return findCodexTokenUsage(await dependencies.readTextFile(sessionFilePath))
-          ?? emptyCodexTokenUsage();
-      }
 
       let sessionFilePath = session.jsonl_path;
       if (!sessionFilePath) {

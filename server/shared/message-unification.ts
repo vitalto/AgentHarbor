@@ -2,20 +2,18 @@ import type { AnyRecord, NormalizedMessage } from '@/shared/types.js';
 import { readObjectRecord } from '@/shared/utils.js';
 
 /**
- * Cross-provider unification of the two interaction surfaces that Claude and
- * Codex both have but spell differently: the running checklist and the
- * ask-the-user round trip.
+ * Unification of the two interaction surfaces that come in more than one
+ * spelling: the running checklist and the ask-the-user round trip.
  *
- * Each provider parses its own transcript format first; this pass runs once the
+ * The provider parses its own transcript format first; this pass runs once the
  * tool results have been attached and rewrites those rows onto a single
  * canonical shape, so the chat needs exactly one renderer per surface:
  *
  * - checklist → a `TodoWrite` call whose input is the full list at that point
  * - question  → an `AskUserQuestion` call whose input carries the chosen answers
  *
- * Doing it here rather than in each provider is what keeps the two feeling like
- * one product: Claude's incremental `TaskCreate`/`TaskUpdate` calls and Codex's
- * whole-list `update_plan` calls both come out as the same evolving checklist.
+ * Claude's incremental `TaskCreate`/`TaskUpdate` calls come out as the same
+ * evolving checklist as a whole-list `TodoWrite`.
  */
 
 //----------------- CANONICAL TOOL NAMES ------------
@@ -26,8 +24,8 @@ const CHECKLIST_TOOL = 'TodoWrite';
 /** The one tool name every provider's user-question call is rewritten onto. */
 const ASK_TOOL = 'AskUserQuestion';
 
-/** Provider spellings of the ask-the-user tool. Codex calls it `request_user_input`. */
-const ASK_TOOL_ALIASES = new Set([ASK_TOOL, 'request_user_input']);
+/** Spellings of the ask-the-user tool that are rewritten onto the canonical one. */
+const ASK_TOOL_ALIASES = new Set([ASK_TOOL]);
 
 /**
  * Claude's incremental task tracker. Each call mutates one entry of a list the
@@ -39,8 +37,8 @@ const TASK_TOOLS = new Set(['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet']);
 //----------------- SHARED PAYLOAD READERS ------------
 
 /**
- * Reads a tool payload that providers store either as an object (Claude) or as
- * the raw JSON string it arrived as (Codex).
+ * Reads a tool payload stored either as an object or as the raw JSON string it
+ * arrived as.
  */
 function readToolPayload(value: unknown): AnyRecord | null {
   if (typeof value === 'string') {
@@ -66,8 +64,8 @@ function readNonEmptyString(value: unknown): string {
 
 /**
  * Flattens one answer value into the comma-joined label list the question view
- * renders. Claude stores the labels already joined, Codex stores them as
- * `{ answers: [...] }`, and a multi-select answer is an array either way.
+ * renders. Claude stores the labels already joined; a `{ answers: [...] }`
+ * record and a multi-select array are accepted as well.
  */
 function readAnswerLabels(value: unknown): string {
   if (typeof value === 'string') {
@@ -109,7 +107,7 @@ function readAnswersFromAcknowledgement(content: string): Record<string, string>
 /**
  * Rewrites answers onto the question text they belong to.
  *
- * Codex keys its answers by the question's `id`; Claude keys them by the
+ * Answers may be keyed by the question's `id`; Claude keys them by the
  * question text. Settling on the text means the renderer needs no provider
  * knowledge to pair a question with its answer.
  */

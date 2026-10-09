@@ -442,45 +442,6 @@ export const sessionsService = {
     return sessions.resolveEditAnchor(sessionId, anchorId);
   },
 
-  /**
-   * Whether editing a message on this session's provider means rewinding it on
-   * disk first, rather than handing the anchor to the runtime as a resume
-   * option.
-   *
-   * Answering this without doing anything is the point: the rewind moves the
-   * session onto a different provider transcript and cannot be undone, so the
-   * gateway has to know which shape the run takes before it commits to one.
-   */
-  providerRewindsForEdit(sessionId: string): boolean {
-    const session = sessionsDb.getSessionById(sessionId);
-    if (!session) {
-      throw new AppError(`Session "${sessionId}" was not found.`, {
-        code: 'SESSION_NOT_FOUND',
-        statusCode: 404,
-      });
-    }
-
-    return Boolean(providerRegistry.resolveProvider(session.provider as LLMProvider).sessions.rewindSession);
-  },
-
-  /**
-   * Rewinds a session on disk so `keepThroughId` is the last row it holds.
-   *
-   * Only call this once the run is admitted — see `providerRewindsForEdit`.
-   */
-  async rewindSessionForEdit(sessionId: string, keepThroughId: string | null): Promise<void> {
-    const session = sessionsDb.getSessionById(sessionId);
-    if (!session) {
-      throw new AppError(`Session "${sessionId}" was not found.`, {
-        code: 'SESSION_NOT_FOUND',
-        statusCode: 404,
-      });
-    }
-
-    const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
-    await sessions.rewindSession?.(sessionId, keepThroughId);
-  },
-
   async fetchHistory(
     sessionId: string,
     options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},
@@ -512,14 +473,10 @@ export const sessionsService = {
     const requestedLimit = options.limit ?? null;
     const requestedOffset = options.offset ?? 0;
 
-    // Claude and Codex history readers parse `jsonl_path` itself, so a page
-    // can be sliced from the stat-validated full-transcript cache instead of
-    // re-parsing the whole file per request. Cursor and OpenCode read their
-    // messages from elsewhere (store.db / shared SQLite), so that file's stat
-    // says nothing about their history — they stay on the direct path.
-    const transcriptPath = provider === 'claude' || provider === 'codex'
-      ? session.jsonl_path
-      : null;
+    // The Claude history reader parses `jsonl_path` itself, so a page can be
+    // sliced from the stat-validated full-transcript cache instead of
+    // re-parsing the whole file per request.
+    const transcriptPath = session.jsonl_path;
     const fullHistory = await sessionHistoryCache.getFullHistory({
       sessionId,
       transcriptPath,

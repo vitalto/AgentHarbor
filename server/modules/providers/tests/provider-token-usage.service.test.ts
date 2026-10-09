@@ -4,8 +4,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import Database from 'better-sqlite3';
-
 import {
   createProviderTokenUsageService,
   summarizeClaudeTokenUsage,
@@ -68,112 +66,6 @@ test('token usage lookup requires only the app-facing session id for Claude', as
   } finally {
     await rm(tempDirectory, { recursive: true, force: true });
   }
-});
-
-test('Codex token usage uses the latest token_count snapshot', async () => {
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-codex-'));
-  const sessionFilePath = path.join(tempDirectory, 'rollout-provider-session.jsonl');
-
-  try {
-    await writeFile(sessionFilePath, [
-      JSON.stringify({
-        type: 'event_msg',
-        payload: {
-          type: 'token_count',
-          info: {
-            total_token_usage: { input_tokens: 10, output_tokens: 4, total_tokens: 14 },
-            model_context_window: 100_000,
-          },
-        },
-      }),
-      JSON.stringify({
-        type: 'event_msg',
-        payload: {
-          type: 'token_count',
-          info: {
-            total_token_usage: { input_tokens: 40, output_tokens: 9, total_tokens: 49 },
-            model_context_window: 250_000,
-          },
-        },
-      }),
-    ].join('\n'));
-
-    const service = createProviderTokenUsageService({
-      getSessionById: () => createSessionRow({
-        provider: 'codex',
-        jsonl_path: sessionFilePath,
-      }),
-    });
-
-    assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
-      used: 49,
-      total: 250_000,
-      inputTokens: 40,
-      outputTokens: 9,
-      breakdown: { input: 40, output: 9 },
-    });
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
-});
-
-test('OpenCode token usage resolves its provider-native id from the session row', async () => {
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-opencode-'));
-  const databasePath = path.join(tempDirectory, 'opencode.db');
-  const database = new Database(databasePath);
-
-  try {
-    database.exec(`
-      CREATE TABLE session (
-        id TEXT PRIMARY KEY,
-        tokens_input INTEGER,
-        tokens_output INTEGER,
-        tokens_reasoning INTEGER,
-        tokens_cache_read INTEGER,
-        tokens_cache_write INTEGER
-      )
-    `);
-    database.prepare(`
-      INSERT INTO session (
-        id,
-        tokens_input,
-        tokens_output,
-        tokens_reasoning,
-        tokens_cache_read,
-        tokens_cache_write
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `).run('provider-session', 12, 7, 3, 5, 2);
-  } finally {
-    database.close();
-  }
-
-  try {
-    const service = createProviderTokenUsageService({
-      getSessionById: () => createSessionRow({ provider: 'opencode' }),
-      getOpenCodeDatabasePath: () => databasePath,
-    });
-
-    assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
-      used: 29,
-      inputTokens: 17,
-      outputTokens: 7,
-      breakdown: { input: 17, output: 7 },
-    });
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
-});
-
-test('Cursor returns an explicit unsupported token usage result', async () => {
-  const service = createProviderTokenUsageService({
-    getSessionById: () => createSessionRow({ provider: 'cursor' }),
-  });
-
-  const result = await service.getSessionTokenUsage('app-session');
-
-  assert.equal(result.unsupported, true);
-  assert.equal(result.used, 0);
-  assert.equal(result.total, 0);
 });
 
 test('token usage reports SESSION_NOT_FOUND for an unknown app session id', async () => {
@@ -304,69 +196,6 @@ test('Claude token usage falls back to the whole file when the tail has no usage
     const usage = await service.getSessionTokenUsage('app-session');
     assert.equal(usage.inputTokens, 11);
     assert.equal(usage.outputTokens, 3);
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
-});
-
-test('Codex token usage reads only the tail of a large rollout', async () => {
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-codex-tail-'));
-  const sessionFilePath = path.join(tempDirectory, 'rollout-provider-session.jsonl');
-
-  try {
-    await writeFile(sessionFilePath, [
-      paddingLines(5 * 1024 * 1024),
-      JSON.stringify({
-        type: 'event_msg',
-        payload: {
-          type: 'token_count',
-          info: {
-            total_token_usage: { input_tokens: 21, output_tokens: 8, total_tokens: 29 },
-            model_context_window: 150_000,
-          },
-        },
-      }),
-    ].join('\n'));
-
-    const service = createProviderTokenUsageService({
-      getSessionById: () => createSessionRow({ provider: 'codex', jsonl_path: sessionFilePath }),
-      readTextFile: () => { throw new Error('full read must not happen when the tail has usage'); },
-    });
-
-    assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
-      used: 29,
-      total: 150_000,
-      inputTokens: 21,
-      outputTokens: 8,
-      breakdown: { input: 21, output: 8 },
-    });
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
-});
-
-test('Codex token usage falls back to the whole file when the tail has no token_count row', async () => {
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-codex-fallback-'));
-  const sessionFilePath = path.join(tempDirectory, 'rollout-provider-session.jsonl');
-
-  try {
-    await writeFile(sessionFilePath, [
-      JSON.stringify({
-        type: 'event_msg',
-        payload: {
-          type: 'token_count',
-          info: { total_token_usage: { input_tokens: 5, output_tokens: 1, total_tokens: 6 } },
-        },
-      }),
-      paddingLines(5 * 1024 * 1024),
-    ].join('\n'));
-
-    const service = createProviderTokenUsageService({
-      getSessionById: () => createSessionRow({ provider: 'codex', jsonl_path: sessionFilePath }),
-    });
-
-    const usage = await service.getSessionTokenUsage('app-session');
-    assert.equal(usage.used, 6);
   } finally {
     await rm(tempDirectory, { recursive: true, force: true });
   }

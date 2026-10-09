@@ -79,7 +79,7 @@ test('a replacement echo survives a kept turn that repeats its text', () => {
     id,
     kind: 'text',
     role: 'user',
-    provider: 'codex',
+    provider: 'claude',
     sessionId: 's1',
     content,
     timestamp,

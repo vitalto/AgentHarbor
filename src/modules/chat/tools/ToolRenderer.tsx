@@ -54,8 +54,8 @@ const CLAUDE_DENIAL_MESSAGES = [
 ];
 
 function deriveToolStatus(toolResult: any, reportedStatus?: string): ToolStatus {
-  // Codex reports a command's lifecycle directly, so a row can show as running
-  // while its output is still streaming in rather than only once it finishes.
+  // A reported command lifecycle lets a row show as running while its output is
+  // still streaming in rather than only once it finishes.
   if (reportedStatus === 'in_progress') return 'running';
   if (reportedStatus === 'failed') return 'error';
   if (!toolResult) return 'running';
@@ -115,7 +115,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
   if (!displayConfig) return null;
 
-  // Bash renders as a Codex-style command row: the command on a single line with
+  // Bash renders as a compact command row: the command on a single line with
   // a chevron that expands to show the output inline. The combined view lives on
   // the input render; the separate result section is suppressed in MessageComponent.
   // Files the command changed are listed under the row, outside its collapse, so

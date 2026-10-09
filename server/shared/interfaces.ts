@@ -218,21 +218,6 @@ export interface IProviderSessions {
   ): Promise<{ found: boolean; resumeThroughId: string | null }>;
 
   /**
-   * Rewinds the session so `keepThroughId` is the last row of its
-   * conversation, and points the session at whatever provider session now
-   * holds it. `null` keeps nothing: the conversation starts over.
-   *
-   * Implemented only by providers whose runtime cannot resume a transcript
-   * partway and have to branch instead. Codex is one — it has no
-   * resume-at-a-row, so the rewind is a `thread/fork` that leaves the pre-edit
-   * thread on disk and moves the session onto the copy. Providers that can
-   * resume partway leave this undefined, and the anchor is handed to their
-   * runtime as a resume option instead; that is the difference the edit
-   * gateway branches on.
-   */
-  rewindSession?(sessionId: string, keepThroughId: string | null): Promise<void>;
-
-  /**
    * Reads what one agent of a workflow run did, from the transcript the run
    * wrote for it, with the status its journal gives it. Returns `null` when the
    * run left no transcript for that agent.

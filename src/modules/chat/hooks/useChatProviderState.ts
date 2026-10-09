@@ -17,11 +17,6 @@ const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly stri
   // xhigh-capable models alone, but listing it here keeps a stored ultracode
   // selection from being reset during catalog hydration.
   claude: ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'],
-  // Superset used only before the model catalog loads. Per-model metadata
-  // narrows this once available; including the GPT-5.6 tiers here prevents a
-  // valid Max/Ultra selection from being reset during catalog hydration.
-  codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
-  opencode: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
 };
 
 const toProviderEffortOptions = (
@@ -30,12 +25,9 @@ const toProviderEffortOptions = (
 
 const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   claude: 'default',
-  cursor: 'gpt-5.3-codex',
-  codex: 'gpt-5.4',
-  opencode: 'anthropic/claude-sonnet-4-5',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const PROVIDERS: LLMProvider[] = ['claude'];
 
 /** localStorage key holding the user's default model for one provider. */
 const providerModelStorageKey = (provider: LLMProvider): string => `${provider}-model`;
@@ -48,9 +40,6 @@ const providerModelStorageKey = (provider: LLMProvider): string => `${provider}-
  */
 const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   claude: ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'],
-  cursor: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
-  codex: ['default', 'acceptEdits', 'bypassPermissions'],
-  opencode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
 };
 
 type ProviderCapabilities = {

@@ -101,39 +101,6 @@ test('a result with no call to attach to is kept', () => {
   assert.deepEqual(unified.map((entry) => entry.kind), ['tool_result']);
 });
 
-test("Codex's request_user_input becomes an answered AskUserQuestion", () => {
-  const [unified] = prepareTranscriptMessages([
-    message({
-      provider: 'codex',
-      kind: 'tool_use',
-      toolName: 'request_user_input',
-      toolId: 'call-1',
-      toolInput: JSON.stringify({
-        questions: [{ id: 'season', header: 'Quick test', question: 'Which season?', options: [{ label: 'Summer' }] }],
-      }),
-      toolResult: { content: '{"answers":{"season":{"answers":["Summer"]}}}' },
-    }),
-  ]);
-
-  assert.equal(unified.toolName, 'AskUserQuestion');
-  assert.deepEqual((unified.toolInput as { answers: unknown }).answers, { 'Which season?': 'Summer' });
-});
-
-test('a multi-select Codex answer keeps every label it picked', () => {
-  const [unified] = prepareTranscriptMessages([
-    message({
-      provider: 'codex',
-      kind: 'tool_use',
-      toolName: 'request_user_input',
-      toolId: 'call-1',
-      toolInput: JSON.stringify({ questions: [{ id: 'scope', question: 'Which areas?', options: [] }] }),
-      toolResult: { content: '{"answers":{"scope":{"answers":["Providers","Tests"]}}}' },
-    }),
-  ]);
-
-  assert.deepEqual((unified.toolInput as { answers: unknown }).answers, { 'Which areas?': 'Providers, Tests' });
-});
-
 test("Claude's AskUserQuestion answer is folded into the question it answers", () => {
   const [unified] = prepareTranscriptMessages([
     message({

@@ -7,7 +7,7 @@ import { cn } from '@/shared/utils';
 /**
  * Footnote listing the stored memory an assistant reply drew on.
  *
- * Codex appends this as a machine-readable block at the end of the reply, which
+ * A provider may append this as a machine-readable block at the end of the reply, which
  * reads as stray markup in the prose. The backend lifts it out and the reply
  * keeps the provenance here instead: collapsed to a single line, expandable to
  * the file ranges and what each contributed.

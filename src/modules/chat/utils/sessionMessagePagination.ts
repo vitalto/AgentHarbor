@@ -42,8 +42,8 @@ function serializedValue(value: unknown): string {
 }
 
 /**
- * Persisted IDs are preferred, but some provider readers (notably Codex)
- * generate fresh IDs on every read. The fallback uses stable transcript fields
+ * Persisted IDs are preferred, but a provider reader may generate fresh IDs
+ * on every read. The fallback uses stable transcript fields
  * and deliberately excludes enrichment such as toolResult, which may change
  * when the provider finishes writing a turn.
  */

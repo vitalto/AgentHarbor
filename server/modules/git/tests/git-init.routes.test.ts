@@ -20,13 +20,10 @@ test('git init does not run when repository validation fails for an execution er
     })));
     return child;
   }) as Parameters<typeof createGitRouter>[0]['spawnProcess'];
-  const unexpectedProvider = async (): Promise<never> => { throw new Error('unexpected provider call'); };
   const router = createGitRouter({
     fileSystem: { access: async () => undefined } as unknown as Parameters<typeof createGitRouter>[0]['fileSystem'],
     spawnProcess,
     resolveProjectPathById: () => '/workspace/repo',
-    queryClaude: unexpectedProvider,
-    queryCursor: unexpectedProvider,
   });
   const app = express();
   app.use(express.json());
@@ -69,13 +66,10 @@ test('delete branch parses force and uses Git force deletion', async () => {
     });
     return child;
   }) as Parameters<typeof createGitRouter>[0]['spawnProcess'];
-  const unexpectedProvider = async (): Promise<never> => { throw new Error('unexpected provider call'); };
   const router = createGitRouter({
     fileSystem: { access: async () => undefined } as unknown as Parameters<typeof createGitRouter>[0]['fileSystem'],
     spawnProcess,
     resolveProjectPathById: () => '/workspace/repo',
-    queryClaude: unexpectedProvider,
-    queryCursor: unexpectedProvider,
   });
   const app = express();
   app.use(express.json());
@@ -105,13 +99,10 @@ test('delete branch rejects a non-boolean force value before running Git', async
   const spawnProcess = (() => {
     throw new Error('Git must not run for invalid input');
   }) as Parameters<typeof createGitRouter>[0]['spawnProcess'];
-  const unexpectedProvider = async (): Promise<never> => { throw new Error('unexpected provider call'); };
   const router = createGitRouter({
     fileSystem: { access: async () => undefined } as unknown as Parameters<typeof createGitRouter>[0]['fileSystem'],
     spawnProcess,
     resolveProjectPathById: () => '/workspace/repo',
-    queryClaude: unexpectedProvider,
-    queryCursor: unexpectedProvider,
   });
   const app = express();
   app.use(express.json());

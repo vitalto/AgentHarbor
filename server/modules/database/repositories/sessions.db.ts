@@ -289,81 +289,6 @@ export const sessionsDb = {
     merge();
   },
 
-  /**
-   * Moves one session onto a different provider session and transcript.
-   *
-   * Only editing a message on a provider that has to branch to rewind (Codex)
-   * does this — an ordinary run keeps the same provider session for its whole
-   * life. `assignProviderSessionId` cannot be used for it: that one keeps the
-   * existing `jsonl_path` on purpose, so a session repointed with it would
-   * claim the new thread while still reading the old transcript.
-   *
-   * The watcher may already have indexed the new transcript under its own id.
-   * That row is the same conversation this one is about to become, so it is
-   * replaced rather than left behind as a second sidebar entry.
-   */
-  repointSessionToProviderSession(
-    sessionId: string,
-    input: { providerSessionId: string; jsonlPath: string },
-  ): void {
-    const db = getConnection();
-
-    db.transaction(() => {
-      db.prepare('DELETE FROM sessions WHERE session_id = ? AND session_id <> ?')
-        .run(input.providerSessionId, sessionId);
-      db.prepare(
-        `UPDATE sessions SET
-           provider_session_id = ?,
-           jsonl_path = ?,
-           updated_at = CURRENT_TIMESTAMP
-         WHERE session_id = ?`
-      ).run(input.providerSessionId, input.jsonlPath, sessionId);
-    })();
-  },
-
-  /**
-   * Detaches a session from its provider session so the next run starts a new
-   * one.
-   *
-   * Used when an edit replaces the very first prompt: there is no conversation
-   * left to branch from, so the session starts over instead.
-   */
-  detachProviderSession(sessionId: string): void {
-    const db = getConnection();
-    db.prepare(
-      `UPDATE sessions SET
-         provider_session_id = NULL,
-         jsonl_path = NULL,
-         updated_at = CURRENT_TIMESTAMP
-       WHERE session_id = ?`
-    ).run(sessionId);
-  },
-
-  /**
-   * Records that a session has left a provider session behind for good.
-   *
-   * The transcript stays on disk, which is deliberate — the abandoned attempt
-   * is recoverable — but the indexer must not offer it back, and on a session
-   * discovered from disk (whose app id *is* the provider id) rediscovering it
-   * would repoint the row at the conversation the user edited away from.
-   */
-  markProviderSessionSuperseded(input: {
-    providerSessionId: string;
-    provider: string;
-    sessionId: string;
-    jsonlPath: string | null;
-  }): void {
-    const db = getConnection();
-    db.prepare(
-      `INSERT INTO superseded_provider_sessions (provider_session_id, provider, session_id, jsonl_path)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(provider_session_id, provider) DO UPDATE SET
-         session_id = excluded.session_id,
-         jsonl_path = excluded.jsonl_path,
-         created_at = CURRENT_TIMESTAMP`
-    ).run(input.providerSessionId, input.provider, input.sessionId, input.jsonlPath);
-  },
-
   isProviderSessionSuperseded(providerSessionId: string, provider: string): boolean {
     const db = getConnection();
     const row = db
@@ -481,43 +406,6 @@ export const sessionsDb = {
          LIMIT 1`
       )
       .get(providerSessionId) as SessionRow | undefined;
-
-    return normalizeSessionRow(row) ?? null;
-  },
-
-  /**
-   * Finds the newest app-created session for a project that is still waiting
-   * for its provider-native id to be recorded.
-   *
-   * Primary intention: OpenCode can expose a new session in its shared
-   * `opencode.db` before the websocket runtime reports that same provider id
-   * back to our app. At that moment the sidebar already has an optimistic
-   * app-owned session row, but the watcher only knows the provider-native id.
-   *
-   * Without this lookup, the synchronizer would insert a second row keyed by
-   * the provider id, then `assignProviderSessionId()` would merge it a moment
-   * later. That eventually self-heals, but on slow networks the user can still
-   * briefly see two sidebar sessions for the same conversation.
-   *
-   * This helper lets the synchronizer claim the pending app row first, so the
-   * provider id is attached before any watcher-created row exists. The result
-   * is simpler than frontend dedupe and keeps the race resolved at the source.
-   */
-  findLatestPendingAppSession(provider: string, projectPath: string): SessionRow | null {
-    const db = getConnection();
-    const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
-    const row = db
-      .prepare(
-        `SELECT ${SESSION_ROW_COLUMNS}
-         FROM sessions
-         WHERE provider = ?
-           AND project_path = ?
-           AND provider_session_id IS NULL
-           AND isArchived = 0
-         ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC
-         LIMIT 1`
-      )
-      .get(provider, normalizedProjectPath) as SessionRow | undefined;
 
     return normalizeSessionRow(row) ?? null;
   },
@@ -695,20 +583,11 @@ export const sessionsDb = {
     return db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId).changes > 0;
   },
 
-  /** Used by the OpenCode synchronizer to remove indexed child sessions by their native id. */
-  deleteSessionByProviderSessionId(providerSessionId: string, provider: string): boolean {
-    const db = getConnection();
-    return db
-      .prepare('DELETE FROM sessions WHERE provider_session_id = ? AND provider = ?')
-      .run(providerSessionId, provider).changes > 0;
-  },
-
   /**
    * Lists every indexed session that claims a transcript file on disk.
    *
    * Only rows with a `jsonl_path` are returned, which deliberately excludes
-   * app-created sessions still waiting for their first provider write and
-   * OpenCode rows (whose transcripts all live inside one shared sqlite file).
+   * app-created sessions still waiting for their first provider write.
    * Used by the session synchronizer to find rows whose transcript has been
    * deleted underneath the index.
    */

@@ -40,16 +40,16 @@ test('provider model repository stores custom rows only and maintains session re
       'effort_values',
       'effort_default',
     ]);
-    assert.deepEqual(providerModelsDb.listCustomProviderModels('codex'), []);
+    assert.deepEqual(providerModelsDb.listCustomProviderModels('claude'), []);
 
-    const custom = providerModelsDb.createCustomProviderModel('codex', {
+    const custom = providerModelsDb.createCustomProviderModel('claude', {
       model: 'Private Gateway Model',
       id: 'gateway/model-v1',
     });
     assert.equal(custom.modelId, 'gateway/model-v1');
     assert.equal(custom.effort, null);
     assert.equal(
-      providerModelsDb.findCustomProviderModelByModelId('codex', 'gateway/model-v1')?.recordId,
+      providerModelsDb.findCustomProviderModelByModelId('claude', 'gateway/model-v1')?.recordId,
       custom.recordId,
     );
 
@@ -60,10 +60,10 @@ test('provider model repository stores custom rows only and maintains session re
     `).run();
     db.prepare(`
       INSERT INTO sessions (session_id, provider, project_path, model, effort)
-      VALUES ('session-1', 'codex', '/tmp/project-1', 'gateway/model-v1', 'high')
+      VALUES ('session-1', 'claude', '/tmp/project-1', 'gateway/model-v1', 'high')
     `).run();
 
-    const updated = providerModelsDb.updateCustomProviderModel('codex', custom.recordId, {
+    const updated = providerModelsDb.updateCustomProviderModel('claude', custom.recordId, {
       model: 'Private Gateway Model 2',
       id: 'gateway/model-v2',
     });
@@ -73,7 +73,7 @@ test('provider model repository stores custom rows only and maintains session re
     assert.equal(sessionsDb.getSessionById('session-1')?.effort, 'high');
 
     const removed = providerModelsDb.deleteCustomProviderModel(
-      'codex',
+      'claude',
       custom.recordId,
       'gpt-default',
     );
@@ -82,7 +82,7 @@ test('provider model repository stores custom rows only and maintains session re
     // The effort belonged to the deleted model and must not survive onto the
     // fallback, which has its own default.
     assert.equal(sessionsDb.getSessionById('session-1')?.effort, null);
-    assert.equal(providerModelsDb.getCustomProviderModel('codex', custom.recordId), null);
+    assert.equal(providerModelsDb.getCustomProviderModel('claude', custom.recordId), null);
   } finally {
     closeConnection();
     if (previousDatabasePath === undefined) {
@@ -205,7 +205,7 @@ test('migrations add effort columns to an existing provider model table and keep
       UNIQUE(provider, model_id)
     );
     INSERT INTO provider_models (provider, model_id, model_name, sort_order)
-    VALUES ('codex', 'legacy-model', 'Legacy Model', 0);
+    VALUES ('claude', 'legacy-model', 'Legacy Model', 0);
   `);
   legacyDb.close();
 
@@ -219,13 +219,13 @@ test('migrations add effort columns to an existing provider model table and keep
     }>).map((column) => column.name);
     assert.deepEqual(columnNames.slice(-2), ['effort_values', 'effort_default']);
 
-    const [legacy] = providerModelsDb.listCustomProviderModels('codex');
+    const [legacy] = providerModelsDb.listCustomProviderModels('claude');
     assert.equal(legacy?.modelId, 'legacy-model');
     assert.equal(legacy?.effort, null);
 
     // Running the migrations again is a no-op.
     runMigrations(getConnection());
-    assert.equal(providerModelsDb.listCustomProviderModels('codex')[0]?.effort, null);
+    assert.equal(providerModelsDb.listCustomProviderModels('claude')[0]?.effort, null);
   } finally {
     closeConnection();
     if (previousDatabasePath === undefined) {

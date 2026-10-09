@@ -335,190 +335,10 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
 });
 
 /**
- * This test covers Codex repository/user/system skill folders, including both
- * supported user roots, and verifies repository lookup across cwd, parent, and git root.
- */
-test('providerSkillsService lists codex repository, user, and system skills', { concurrency: false }, async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-codex-'));
-  const repoRoot = path.join(tempRoot, 'repo');
-  const workspacePath = path.join(repoRoot, 'packages', 'app');
-  await fs.mkdir(path.join(repoRoot, '.git'), { recursive: true });
-  await fs.mkdir(workspacePath, { recursive: true });
-
-  const restoreHomeDir = patchHomeDir(tempRoot);
-  try {
-    await writeSkill(
-      path.join(workspacePath, '.agents', 'skills'),
-      'codex-cwd-dir',
-      'codex-cwd',
-      'Codex cwd skill',
-    );
-    await writeSkill(
-      path.join(repoRoot, 'packages', '.agents', 'skills'),
-      'codex-parent-dir',
-      'codex-parent',
-      'Codex parent skill',
-    );
-    await writeSkill(
-      path.join(repoRoot, '.agents', 'skills'),
-      'codex-root-dir',
-      'codex-root',
-      'Codex root skill',
-    );
-    await writeSkill(
-      path.join(tempRoot, '.agents', 'skills'),
-      'codex-user-dir',
-      'codex-user',
-      'Codex user skill',
-    );
-    await writeSkill(
-      path.join(tempRoot, '.codex', 'skills'),
-      'codex-home-user-dir',
-      'codex-home-user',
-      'Codex home user skill',
-    );
-    await writeSkill(
-      path.join(tempRoot, '.codex', 'skills', '.system'),
-      'codex-system-dir',
-      'codex-system',
-      'Codex system skill',
-    );
-
-    const skills = await providerSkillsService.listProviderSkills('codex', { workspacePath });
-    const byName = new Map(skills.map((skill) => [skill.name, skill]));
-
-    assert.equal(byName.get('codex-cwd')?.scope, 'repo');
-    assert.equal(byName.get('codex-parent')?.scope, 'repo');
-    assert.equal(byName.get('codex-root')?.scope, 'repo');
-    assert.equal(byName.get('codex-user')?.scope, 'user');
-    assert.equal(byName.get('codex-home-user')?.scope, 'user');
-    assert.equal(byName.get('codex-system')?.scope, 'system');
-    assert.equal(byName.get('codex-root')?.command, '$codex-root');
-  } finally {
-    restoreHomeDir();
-    await fs.rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-/**
- * This test covers OpenCode skill lookup across cwd-to-git-root project folders
- * plus the global OpenCode/Claude/Agents compatibility locations.
- */
-test('providerSkillsService lists opencode project and user compatibility skills', { concurrency: false }, async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-opencode-'));
-  const repoRoot = path.join(tempRoot, 'repo');
-  const workspacePath = path.join(repoRoot, 'packages', 'app');
-  await fs.mkdir(path.join(repoRoot, '.git'), { recursive: true });
-  await fs.mkdir(workspacePath, { recursive: true });
-
-  const restoreHomeDir = patchHomeDir(tempRoot);
-  try {
-    await writeSkill(
-      path.join(workspacePath, '.opencode', 'skills'),
-      'opencode-cwd-dir',
-      'opencode-cwd',
-      'OpenCode cwd skill',
-    );
-    await writeSkill(
-      path.join(repoRoot, 'packages', '.claude', 'skills'),
-      'opencode-claude-parent-dir',
-      'opencode-claude-parent',
-      'OpenCode Claude parent skill',
-    );
-    await writeSkill(
-      path.join(repoRoot, '.agents', 'skills'),
-      'opencode-agents-root-dir',
-      'opencode-agents-root',
-      'OpenCode Agents root skill',
-    );
-    await writeSkill(
-      path.join(tempRoot, '.config', 'opencode', 'skills'),
-      'opencode-user-dir',
-      'opencode-user',
-      'OpenCode user skill',
-    );
-    await writeSkill(
-      path.join(tempRoot, '.claude', 'skills'),
-      'opencode-claude-user-dir',
-      'opencode-claude-user',
-      'OpenCode Claude user skill',
-    );
-    await writeSkill(
-      path.join(tempRoot, '.agents', 'skills'),
-      'opencode-agents-user-dir',
-      'opencode-agents-user',
-      'OpenCode Agents user skill',
-    );
-
-    const skills = await providerSkillsService.listProviderSkills('opencode', { workspacePath });
-    const byName = new Map(skills.map((skill) => [skill.name, skill]));
-
-    assert.equal(byName.get('opencode-cwd')?.scope, 'project');
-    assert.equal(byName.get('opencode-claude-parent')?.scope, 'project');
-    assert.equal(byName.get('opencode-agents-root')?.scope, 'project');
-    assert.equal(byName.get('opencode-user')?.scope, 'user');
-    assert.equal(byName.get('opencode-claude-user')?.scope, 'user');
-    assert.equal(byName.get('opencode-agents-user')?.scope, 'user');
-    assert.equal(byName.get('opencode-cwd')?.command, '/opencode-cwd');
-  } finally {
-    restoreHomeDir();
-    await fs.rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-/**
- * This test covers Cursor skill directory rules, including shared
- * `.agents/skills` project support.
- */
-test('providerSkillsService lists cursor skills from its configured directories', { concurrency: false }, async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-gc-'));
-  const workspacePath = path.join(tempRoot, 'workspace');
-  await fs.mkdir(workspacePath, { recursive: true });
-
-  const restoreHomeDir = patchHomeDir(tempRoot);
-  try {
-    await writeSkill(
-      path.join(tempRoot, '.agents', 'skills'),
-      'agents-user-dir',
-      'agents-user',
-      'Agents user skill',
-    );
-    await writeSkill(
-      path.join(workspacePath, '.agents', 'skills'),
-      'agents-project-dir',
-      'agents-project',
-      'Agents project skill',
-    );
-    await writeSkill(
-      path.join(workspacePath, '.cursor', 'skills'),
-      'cursor-project-dir',
-      'cursor-project',
-      'Cursor project skill',
-    );
-    await writeSkill(
-      path.join(tempRoot, '.cursor', 'skills'),
-      'cursor-user-dir',
-      'cursor-user',
-      'Cursor user skill',
-    );
-
-    const cursorSkills = await providerSkillsService.listProviderSkills('cursor', { workspacePath });
-    const cursorByName = new Map(cursorSkills.map((skill) => [skill.name, skill]));
-    assert.equal(cursorByName.get('agents-project')?.scope, 'project');
-    assert.equal(cursorByName.get('cursor-project')?.scope, 'project');
-    assert.equal(cursorByName.get('cursor-user')?.scope, 'user');
-    assert.equal(cursorByName.get('cursor-user')?.command, '/cursor-user');
-  } finally {
-    restoreHomeDir();
-    await fs.rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-/**
  * This test covers managed global skill creation for providers that own a
  * writable user skill directory.
  */
-test('providerSkillsService adds global skills for claude, codex, and cursor', { concurrency: false }, async () => {
+test('providerSkillsService adds, replaces, and removes managed global claude skills', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-create-'));
   const restoreHomeDir = patchHomeDir(tempRoot);
 
@@ -543,35 +363,35 @@ test('providerSkillsService adds global skills for claude, codex, and cursor', {
       /Claude body\./,
     );
 
-    const createdCodexSkills = await providerSkillsService.addProviderSkills('codex', {
+    const createdUploadedSkills = await providerSkillsService.addProviderSkills('claude', {
       entries: [
         {
-          directoryName: 'uploaded-codex-folder',
+          directoryName: 'uploaded-skill-folder',
           fileName: 'SKILL.md',
-          content: '---\nname: codex-global\ndescription: Codex global skill\n---\n\nCodex body.\n',
+          content: '---\nname: uploaded-global\ndescription: Uploaded global skill\n---\n\nUploaded body.\n',
           files: [
             {
               relativePath: 'scripts/run.js',
-              content: Buffer.from('console.log("codex skill");\n').toString('base64'),
+              content: Buffer.from('console.log("uploaded skill");\n').toString('base64'),
               encoding: 'base64',
             },
           ],
         },
       ],
     });
-    const createdCodexSkill = createdCodexSkills[0];
-    assert.ok(createdCodexSkill);
-    assert.equal(createdCodexSkill.command, '$codex-global');
+    const createdUploadedSkill = createdUploadedSkills[0];
+    assert.ok(createdUploadedSkill);
+    assert.equal(createdUploadedSkill.command, '/uploaded-global');
     assert.equal(
-      createdCodexSkill.sourcePath.endsWith(path.join('.agents', 'skills', 'uploaded-codex-folder', 'SKILL.md')),
+      createdUploadedSkill.sourcePath.endsWith(path.join('.claude', 'skills', 'uploaded-skill-folder', 'SKILL.md')),
       true,
     );
     assert.equal(
-      await fs.readFile(path.join(path.dirname(createdCodexSkill.sourcePath), 'scripts', 'run.js'), 'utf8'),
-      'console.log("codex skill");\n',
+      await fs.readFile(path.join(path.dirname(createdUploadedSkill.sourcePath), 'scripts', 'run.js'), 'utf8'),
+      'console.log("uploaded skill");\n',
     );
 
-    const fallbackNamedSkills = await providerSkillsService.addProviderSkills('codex', {
+    const fallbackNamedSkills = await providerSkillsService.addProviderSkills('claude', {
       entries: [
         {
           fileName: 'fallback / skill.md',
@@ -582,30 +402,30 @@ test('providerSkillsService adds global skills for claude, codex, and cursor', {
     const fallbackNamedSkill = fallbackNamedSkills[0];
     assert.ok(fallbackNamedSkill);
     assert.equal(fallbackNamedSkill.name, 'fallback-skill');
-    assert.equal(fallbackNamedSkill.command, '$fallback-skill');
+    assert.equal(fallbackNamedSkill.command, '/fallback-skill');
     assert.equal(
-      fallbackNamedSkill.sourcePath.endsWith(path.join('.agents', 'skills', 'fallback-skill', 'SKILL.md')),
+      fallbackNamedSkill.sourcePath.endsWith(path.join('.claude', 'skills', 'fallback-skill', 'SKILL.md')),
       true,
     );
 
-    const replacedCodexSkills = await providerSkillsService.addProviderSkills('codex', {
+    const replacedUploadedSkills = await providerSkillsService.addProviderSkills('claude', {
       entries: [
         {
-          directoryName: 'uploaded-codex-folder',
+          directoryName: 'uploaded-skill-folder',
           content: '---\nname: replacement\ndescription: Replacement skill\n---\n\nReplacement body.\n',
         },
       ],
     });
-    assert.equal(replacedCodexSkills[0]?.command, '$replacement');
-    assert.match(await fs.readFile(createdCodexSkill.sourcePath, 'utf8'), /Replacement body\./);
+    assert.equal(replacedUploadedSkills[0]?.command, '/replacement');
+    assert.match(await fs.readFile(createdUploadedSkill.sourcePath, 'utf8'), /Replacement body\./);
     await assert.rejects(
-      fs.stat(path.join(path.dirname(createdCodexSkill.sourcePath), 'scripts', 'run.js')),
+      fs.stat(path.join(path.dirname(createdUploadedSkill.sourcePath), 'scripts', 'run.js')),
       { code: 'ENOENT' },
     );
 
-    const pendingBatchSkillPath = path.join(tempRoot, '.agents', 'skills', 'pending-batch', 'SKILL.md');
+    const pendingBatchSkillPath = path.join(tempRoot, '.claude', 'skills', 'pending-batch', 'SKILL.md');
     await assert.rejects(
-      providerSkillsService.addProviderSkills('codex', {
+      providerSkillsService.addProviderSkills('claude', {
         entries: [
           {
             directoryName: 'pending-batch',
@@ -621,46 +441,25 @@ test('providerSkillsService adds global skills for claude, codex, and cursor', {
     );
     await assert.rejects(fs.stat(pendingBatchSkillPath), { code: 'ENOENT' });
 
-    const createdCursorSkills = await providerSkillsService.addProviderSkills('cursor', {
-      entries: [
-        {
-          directoryName: 'cursor-global-dir',
-          content: '---\nname: cursor-global\ndescription: Cursor global skill\n---\n\nCursor body.\n',
-        },
-      ],
-    });
-    const createdCursorSkill = createdCursorSkills[0];
-    assert.ok(createdCursorSkill);
-    assert.equal(createdCursorSkill.command, '/cursor-global');
-    assert.equal(
-      createdCursorSkill.sourcePath.endsWith(path.join('.cursor', 'skills', 'cursor-global-dir', 'SKILL.md')),
-      true,
-    );
-
     const listedClaudeSkills = await providerSkillsService.listProviderSkills('claude');
     assert.equal(listedClaudeSkills.some((skill) => skill.name === 'claude-global'), true);
+    assert.equal(listedClaudeSkills.some((skill) => skill.name === 'replacement'), true);
 
-    const listedCodexSkills = await providerSkillsService.listProviderSkills('codex');
-    assert.equal(listedCodexSkills.some((skill) => skill.name === 'replacement'), true);
-
-    const listedCursorSkills = await providerSkillsService.listProviderSkills('cursor');
-    assert.equal(listedCursorSkills.some((skill) => skill.name === 'cursor-global'), true);
-
-    const removedCodexSkill = await providerSkillsService.removeProviderSkill('codex', {
-      directoryName: 'uploaded-codex-folder',
+    const removedUploadedSkill = await providerSkillsService.removeProviderSkill('claude', {
+      directoryName: 'uploaded-skill-folder',
     });
-    assert.equal(removedCodexSkill.removed, true);
-    assert.equal(removedCodexSkill.provider, 'codex');
-    assert.equal(removedCodexSkill.directoryName, 'uploaded-codex-folder');
-    await assert.rejects(fs.stat(path.dirname(createdCodexSkill.sourcePath)), { code: 'ENOENT' });
+    assert.equal(removedUploadedSkill.removed, true);
+    assert.equal(removedUploadedSkill.provider, 'claude');
+    assert.equal(removedUploadedSkill.directoryName, 'uploaded-skill-folder');
+    await assert.rejects(fs.stat(path.dirname(createdUploadedSkill.sourcePath)), { code: 'ENOENT' });
 
-    const removedMissingSkill = await providerSkillsService.removeProviderSkill('codex', {
-      directoryName: 'uploaded-codex-folder',
+    const removedMissingSkill = await providerSkillsService.removeProviderSkill('claude', {
+      directoryName: 'uploaded-skill-folder',
     });
     assert.equal(removedMissingSkill.removed, false);
 
     await assert.rejects(
-      providerSkillsService.addProviderSkills('codex', {
+      providerSkillsService.addProviderSkills('claude', {
         entries: [
           {
             content: '---\nname: unsafe-skill\n---\n',
@@ -680,29 +479,4 @@ test('providerSkillsService adds global skills for claude, codex, and cursor', {
     restoreHomeDir();
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
-});
-
-/**
- * OpenCode reuses other providers' skill folders, so it should not accept
- * direct skill writes through the managed provider endpoint.
- */
-test('providerSkillsService rejects managed skill creation for opencode', { concurrency: false }, async () => {
-  await assert.rejects(
-    providerSkillsService.addProviderSkills('opencode', {
-      entries: [
-        {
-          directoryName: 'opencode-global-dir',
-          content: '---\nname: opencode-global\ndescription: Unsupported skill\n---\n\nOpenCode body.\n',
-        },
-      ],
-    }),
-    /does not support managed global skills/i,
-  );
-
-  await assert.rejects(
-    providerSkillsService.removeProviderSkill('opencode', {
-      directoryName: 'opencode-global-dir',
-    }),
-    /does not support managed global skills/i,
-  );
 });

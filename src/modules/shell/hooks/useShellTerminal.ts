@@ -34,8 +34,8 @@ const TERMINAL_OPTIONS: ITerminalOptions = {
 // The options that follow the app's light/dark theme. They are applied when the
 // terminal is created and re-applied to the open terminal on every toggle, so the
 // pty behind it keeps running. xterm answers OSC 10/11 colour queries from
-// `theme`, which is what TUIs that probe the terminal at startup (Codex, Claude
-// Code's "auto" theme) read to choose a light or dark look.
+// `theme`, which is what TUIs that probe the terminal at startup (Claude Code's
+// "auto" theme) read to choose a light or dark look.
 type TerminalColorOptions = Pick<ITerminalOptions, 'theme' | 'minimumContrastRatio'>;
 
 const DARK_TERMINAL_COLORS: TerminalColorOptions = {

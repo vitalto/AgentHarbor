@@ -14,11 +14,9 @@ import {
 /**
  * The receiving half of the provider-selection contract.
  *
- * The git panel used to listen only for the cross-tab `storage` event, which
- * does not fire in the tab that performed the write — so switching provider in
- * the composer left the panel attributing generated commit messages to the old
- * provider for the rest of the session. selectedProvider.test.ts covers the
- * emitting half; this covers the half that had the bug.
+ * Readers used to listen only for the cross-tab `storage` event, which does not
+ * fire in the tab that performed the write. selectedProvider.test.ts covers the
+ * emitting half; this covers the receiving half.
  */
 
 beforeEach(() => {
@@ -35,44 +33,22 @@ test('an unset provider starts at the shared default', () => {
 });
 
 test('a provider stored before mount is picked up', () => {
-  writeSelectedProvider('codex');
+  writeSelectedProvider('claude');
 
   const { result } = renderHook(() => useSelectedProvider());
 
-  assert.equal(result.current, 'codex');
-});
-
-test('a switch made in this tab reaches the panel', () => {
-  const { result } = renderHook(() => useSelectedProvider());
-
-  act(() => {
-    writeSelectedProvider('cursor');
-  });
-
-  assert.equal(result.current, 'cursor');
-});
-
-test('a switch made elsewhere reaches the panel', () => {
-  // Previously a cross-tab `storage` event. The selection lives in auth.db now,
-  // so the same path also carries a switch made on another device.
-  const { result } = renderHook(() => useSelectedProvider());
-
-  act(() => {
-    writeUserPreference('selectedProvider', 'opencode');
-  });
-
-  assert.equal(result.current, 'opencode');
+  assert.equal(result.current, 'claude');
 });
 
 test('an unrelated preference change does not change the reported provider', () => {
-  writeSelectedProvider('codex');
+  writeSelectedProvider('claude');
   const { result } = renderHook(() => useSelectedProvider());
 
   act(() => {
     writeUserPreference('theme', 'dark');
   });
 
-  assert.equal(result.current, 'codex');
+  assert.equal(result.current, 'claude');
 });
 
 test('the panel releases its subscription when it unmounts', () => {
@@ -87,12 +63,12 @@ test('the panel releases its subscription when it unmounts', () => {
   const stopCounting = subscribeToUserPreferences(countLive);
 
   const { unmount } = renderHook(() => useSelectedProvider());
-  writeUserPreference('selectedProvider', 'cursor');
+  writeUserPreference('selectedProvider', 'first-value');
   const withPanelMounted = liveSubscribers;
 
   unmount();
   liveSubscribers = 0;
-  writeUserPreference('selectedProvider', 'opencode');
+  writeUserPreference('selectedProvider', 'second-value');
 
   stopCounting();
   assert.equal(withPanelMounted, 1, 'the counter itself must be notified once per write');

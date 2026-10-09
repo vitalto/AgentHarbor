@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon } from 'lucide-react';
 
-import { useTasksSettings } from '@/modules/task-master';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
@@ -17,7 +16,6 @@ import type {
   SessionNavigationOptions,
 } from '@/shared/types';
 import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
-import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessages';
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
@@ -45,8 +43,6 @@ type ChatInterfaceProps = {
   sendByCtrlEnter?: boolean;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;
-  onTaskClick?: (...args: unknown[]) => void;
-  onShowAllTasks?: (() => void) | null;
 };
 
 /**
@@ -69,9 +65,7 @@ function ChatInterface({
   sendByCtrlEnter,
   externalMessageUpdate,
   newSessionTrigger,
-  onShowAllTasks,
 }: ChatInterfaceProps) {
-  const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe } = useWebSocket();
   const { t } = useTranslation('chat');
   const processingSessions = useProcessingSessions();
@@ -217,7 +211,6 @@ function ChatInterface({
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
-    handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
     handlePaste,
@@ -370,27 +363,6 @@ function ChatInterface({
     }
   }, [onNavigateToSession, selectedSession?.id]);
 
-  const { scheduledMessages, schedule: scheduleMessage, cancel: cancelScheduledMessage } =
-    useScheduledMessages(currentSessionId || selectedSession?.id || null);
-
-  /**
-   * Hands the composer's current text to the server to send later, and clears
-   * the box as a send would — the message has left the composer either way.
-   */
-  const handleScheduleMessage = useCallback(async (scheduledFor: Date) => {
-    const content = input.trim();
-    if (!content) return;
-
-    const scheduled = await scheduleMessage({
-      content,
-      scheduledFor,
-      options: { model: currentProviderModel, effort: currentProviderEffort, permissionMode },
-    });
-    if (scheduled) {
-      setInput('');
-    }
-  }, [currentProviderEffort, currentProviderModel, input, permissionMode, scheduleMessage, setInput]);
-
   const permissionContextValue = useMemo(() => ({
     pendingPermissionRequests,
     handlePermissionDecision,
@@ -427,14 +399,7 @@ function ChatInterface({
   // overlapping the last message.
   const hasActivityIndicator = Boolean(sessionActivity && pendingPermissionRequests.length === 0);
 
-  const selectedProviderLabel =
-    provider === 'cursor'
-      ? t('messageTypes.cursor')
-      : provider === 'codex'
-        ? t('messageTypes.codex')
-        : provider === 'opencode'
-            ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-          : t('messageTypes.claude');
+  const selectedProviderLabel = t('messageTypes.claude');
 
   if (!selectedProject) {
     return (
@@ -480,10 +445,6 @@ function ChatInterface({
               providerModelCatalog={providerModelCatalog}
               providerModelActions={providerModelActions}
               providerModelsLoading={providerModelsLoading}
-              tasksEnabled={tasksEnabled}
-              isTaskMasterInstalled={isTaskMasterInstalled}
-              onShowAllTasks={onShowAllTasks}
-              setInput={setInput}
               isLoadingMoreMessages={isLoadingMoreMessages}
               hasMoreMessages={hasMoreMessages}
               totalMessages={totalMessages}
@@ -553,9 +514,6 @@ function ChatInterface({
           onShowTokenUsage={showCostModal}
           isEditingSentMessage={Boolean(editingAnchorId)}
           onCancelEditMessage={cancelEditMessage}
-          scheduledMessages={scheduledMessages}
-          onScheduleMessage={handleScheduleMessage}
-          onCancelScheduledMessage={cancelScheduledMessage}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
@@ -589,7 +547,6 @@ function ChatInterface({
           renderInputWithMentions={renderInputWithMentions}
           textareaRef={textareaRef}
           input={input}
-          onVoiceTranscript={handleVoiceTranscript}
           onInputChange={handleInputChange}
           onTextareaClick={handleTextareaClick}
           onTextareaKeyDown={handleKeyDown}

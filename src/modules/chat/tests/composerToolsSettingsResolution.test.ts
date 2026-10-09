@@ -9,14 +9,10 @@ import { resetUserPreferences, writeUserPreference } from '@/shared/userSettings
 
 /**
  * The composer resolves the tool-permission settings it sends with every
- * `chat.send` from a per-provider preference key. That lookup used to be a
- * nested ternary whose last branch was Claude's key, so a provider without its
- * own arm silently inherited Claude's `allowedTools` and, worse, Claude's
- * `skipPermissions`.
+ * `chat.send` from the provider's preference key.
  *
  * These tests drive the real hook: they seed the preference store, submit a
- * message and read the options handed to `sendMessage`, so pointing the
- * composer's lookup back at `'claudePermissions'` fails them.
+ * message and read the options handed to `sendMessage`.
  */
 
 const PROJECT: Project = {
@@ -74,22 +70,10 @@ const submit = async (provider: LLMProvider) => {
   return send.options ?? {};
 };
 
-const seedAllProviderSettings = () => {
+const seedClaudeSettings = () => {
   writeUserPreference('claudePermissions', {
     allowedTools: ['claude-tool'],
     skipPermissions: true,
-  });
-  writeUserPreference('cursorPermissions', {
-    allowedTools: ['cursor-tool'],
-    skipPermissions: false,
-  });
-  writeUserPreference('codexPermissions', {
-    allowedTools: ['codex-tool'],
-    skipPermissions: false,
-  });
-  writeUserPreference('opencodePermissions', {
-    allowedTools: ['opencode-tool'],
-    skipPermissions: false,
   });
 };
 
@@ -116,37 +100,17 @@ afterEach(() => {
   localStorage.clear();
 });
 
-test.each<[LLMProvider, string]>([
-  ['claude', 'claude-tool'],
-  ['cursor', 'cursor-tool'],
-  ['codex', 'codex-tool'],
-  ['opencode', 'opencode-tool'],
-])('a %s send carries the tools stored under that provider own preference', async (provider, tool) => {
-  seedAllProviderSettings();
+test('a claude send carries the tools and skipPermissions stored in its preference', async () => {
+  seedClaudeSettings();
 
-  const options = await submit(provider);
+  const options = await submit('claude');
 
-  assert.deepEqual(options.toolsSettings?.allowedTools, [tool]);
+  assert.deepEqual(options.toolsSettings?.allowedTools, ['claude-tool']);
+  assert.equal(options.skipPermissions, true);
 });
 
-test('skipPermissions follows the sending provider, not Claude', async () => {
-  seedAllProviderSettings();
-
-  const claudeOptions = await submit('claude');
-  assert.equal(claudeOptions.skipPermissions, true);
-
-  const opencodeOptions = await submit('opencode');
-  assert.equal(opencodeOptions.skipPermissions, false);
-});
-
-test('a provider with nothing stored sends empty tool settings, not Claude settings', async () => {
-  writeUserPreference('claudePermissions', {
-    allowedTools: ['claude-tool'],
-    disallowedTools: ['nope'],
-    skipPermissions: true,
-  });
-
-  const options = await submit('cursor');
+test('a send with nothing stored carries empty tool settings', async () => {
+  const options = await submit('claude');
 
   assert.deepEqual(options.toolsSettings, {
     allowedTools: [],

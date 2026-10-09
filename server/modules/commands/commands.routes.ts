@@ -28,13 +28,10 @@ const providerModelsService = dependencies.models;
 const process = dependencies.runtime;
 const router = express.Router();
 
-const MODEL_PROVIDERS = ["claude", "cursor", "codex", "opencode"];
+const MODEL_PROVIDERS = ["claude"];
 
 const MODEL_PROVIDER_LABELS = {
   claude: "Claude",
-  cursor: "Cursor",
-  codex: "Codex",
-  opencode: "OpenCode",
 };
 
 const readModelProvider = (value) => {

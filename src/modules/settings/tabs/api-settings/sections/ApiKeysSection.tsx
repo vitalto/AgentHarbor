@@ -1,4 +1,4 @@
-import { ExternalLink, Key, Plus, Trash2 } from 'lucide-react';
+import { Key, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button, Input } from '@/shared/ui';
@@ -45,15 +45,6 @@ export default function ApiKeysSection({
 
       <div className="mb-4">
         <p className="mb-2 text-sm text-muted-foreground">{t('apiKeys.description')}</p>
-        <a
-          href="/api-docs.html"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-        >
-          {t('apiKeys.apiDocsLink')}
-          <ExternalLink className="h-3 w-3" />
-        </a>
       </div>
 
       {showNewKeyForm && (

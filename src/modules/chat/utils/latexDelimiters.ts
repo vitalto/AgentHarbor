@@ -2,7 +2,7 @@
  * Rewrites the LaTeX math delimiters `\(…\)` and `\[…\]` into the `$$…$$` form
  * that remark-math actually understands.
  *
- * Models — Codex in particular — emit math with the LaTeX delimiters, but
+ * Models often emit math with the LaTeX delimiters, but
  * `micromark-extension-math`, which backs remark-math, registers exactly one
  * construct and it sits on `$`. Nothing recognizes `\(`, and because CommonMark
  * reads `\(` and `\[` as backslash escapes the parser eats the backslash, so the

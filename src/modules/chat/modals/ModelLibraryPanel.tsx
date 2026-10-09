@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react';
 
-import { Badge, Button, Input, LLMProviderLogo } from '@/shared/ui';
+import { Badge, Button, Input } from '@/shared/ui';
 import type {
   CustomProviderModelInput,
   LLMProvider,
@@ -19,13 +19,6 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from '@/shared/types';
-
-const PROVIDERS: Array<{ id: LLMProvider; label: string }> = [
-  { id: 'claude', label: 'Claude' },
-  { id: 'codex', label: 'Codex' },
-  { id: 'cursor', label: 'Cursor' },
-  { id: 'opencode', label: 'OpenCode' },
-];
 
 type ModelLibraryPanelProps = {
   initialProvider: LLMProvider;
@@ -80,9 +73,8 @@ export default function ModelLibraryPanel({
   );
   // Levels a custom model of this provider may declare, weakest first, exactly
   // as the server validates them. They come with the catalog rather than from
-  // its built-in models, whose effort metadata depends on which upstream
-  // providers this machine has connected (OpenCode). Empty for providers
-  // without effort support, which hides the section entirely.
+  // its built-in models. Empty for providers without effort support, which
+  // hides the section entirely.
   const providerEffortLevels = providerModelCatalog[selectedProvider]?.EFFORT_LEVELS ?? [];
 
   const resetForm = () => {
@@ -91,13 +83,6 @@ export default function ModelLibraryPanel({
     setModelId('');
     setEffortLevels([]);
     setError(null);
-  };
-
-  const selectProvider = (provider: LLMProvider) => {
-    setSelectedProvider(provider);
-    setConfirmDeleteRecordId(null);
-    setNotice(null);
-    resetForm();
   };
 
   const startEditing = (option: ProviderModelOption) => {
@@ -225,28 +210,6 @@ export default function ModelLibraryPanel({
         )}
       </div>
 
-      <div className="scrollbar-thin flex shrink-0 gap-1 overflow-x-auto rounded-xl border border-border/70 bg-muted/25 p-1">
-        {PROVIDERS.map((provider) => {
-          const selected = provider.id === selectedProvider;
-          return (
-            <button
-              key={provider.id}
-              type="button"
-              onClick={() => selectProvider(provider.id)}
-              aria-pressed={selected}
-              className={`flex min-w-fit flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
-                selected
-                  ? 'bg-background text-foreground shadow-sm ring-1 ring-border/70'
-                  : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
-              }`}
-            >
-              <LLMProviderLogo provider={provider.id} className="h-4 w-4" />
-              {provider.label}
-            </button>
-          );
-        })}
-      </div>
-
       <div className="scrollbar-thin grid min-h-0 flex-1 items-start gap-4 overflow-y-auto pr-1 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(20rem,1.2fr)]">
         <form
           onSubmit={handleSubmit}
@@ -258,7 +221,7 @@ export default function ModelLibraryPanel({
                 {editing ? 'Edit custom model' : 'Add a custom model'}
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                The ID is sent to {PROVIDERS.find((entry) => entry.id === selectedProvider)?.label} exactly as written.
+                The ID is sent to Claude exactly as written.
               </p>
             </div>
             {editing && (

@@ -142,9 +142,9 @@ function compareMessagesChronologically(a: NormalizedMessage, b: NormalizedMessa
  * The time a row sorts by, which is its own except for one case.
  *
  * The optimistic echo of an edited message is the row whose clock cannot be
- * trusted against the rows around it. Providers that rewind by branching —
- * Codex has no way to resume a transcript partway, so an edit copies the kept
- * history into a new one — write the copy with the timestamps of the copy. So
+ * trusted against the rows around it. A provider that rewinds by branching —
+ * copying the kept history into a new transcript — writes the copy with the
+ * timestamps of the copy. So
  * every turn that survived the cut comes back from the next refresh stamped a
  * moment *after* the replacement was typed, and the message the user just sent
  * jumps to the top of the conversation.
@@ -416,7 +416,7 @@ function olderPagePrecedesCachedHistory(
 
 /**
  * Fetches and atomically applies a bounded persisted-tail reconciliation.
- * Every request is finite. Claude/Codex bridge discovery may use more than one
+ * Every request is finite. Bridge discovery may use more than one
  * bounded chunk because their response `total` omits paginated tool results.
  */
 async function refreshLatestSlotFromServer(

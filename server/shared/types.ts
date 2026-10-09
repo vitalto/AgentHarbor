@@ -66,7 +66,7 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode';
+export type LLMProvider = 'claude';
 
 /**
  * One selectable model row in a provider model catalog.
@@ -379,8 +379,8 @@ export type NormalizedMessage = {
   tokenBudget?: unknown;
   /**
    * Timeline of everything a subagent did, attached to the `tool_use` that
-   * spawned it. Present for Claude `Agent`/`Task` calls and Codex
-   * `spawn_agent` calls; absent for every other tool.
+   * spawned it. Present for Claude `Agent`/`Task` calls; absent for every
+   * other tool.
    */
   subagentTools?: SubagentActivity[];
   /** Identity and lifecycle of the subagent this `tool_use` spawned. */
@@ -531,8 +531,8 @@ export type WorkflowInfo = {
 /**
  * One stored memory an assistant reply drew on.
  *
- * Codex appends these to a reply that used its memory files, naming the file
- * and line range it read plus a short note on what it took from there. The
+ * A provider may append these to a reply that used its memory files, naming
+ * the file and line range it read plus a short note on what it took from there. The
  * transcript shows them as a footnote so a memory-derived claim is traceable
  * rather than arriving as an unattributed assertion.
  */
@@ -546,9 +546,8 @@ export type MemoryCitation = {
 /**
  * One entry in a subagent's recorded timeline.
  *
- * Providers store a subagent's work in a separate transcript (Claude:
- * `<session>/subagents/agent-<id>.jsonl`; Codex: a sibling rollout keyed by
- * `agent_thread_id`). Both are flattened into this shape so the transcript can
+ * Claude stores a subagent's work in a separate transcript
+ * (`<session>/subagents/agent-<id>.jsonl`). It is flattened into this shape so the transcript can
  * replay a subagent's run with the same renderers the main thread uses.
  *
  * `kind` decides which fields matter: `tool` uses the tool fields, `text` and
@@ -578,9 +577,9 @@ export type SubagentActivity = {
  * it reported is `stopped`: no outcome exists and none is coming.
  */
 export type SubagentInfo = {
-  /** Provider-native agent id — Claude `agentId`, Codex `agent_thread_id`. */
+  /** Provider-native agent id — Claude `agentId`. */
   id: string;
-  /** Human-facing label: Claude's agent type, or Codex's assigned nickname. */
+  /** Human-facing label: Claude's agent type, or an assigned nickname. */
   name?: string;
   /** Agent type/preset when the provider records one (Claude `agentType`). */
   type?: string;
@@ -694,9 +693,8 @@ export type FetchHistoryResult = {
  *
  * Provider skill adapters should use this to describe the origin of each
  * skill markdown file without leaking provider-specific folder names into route
- * contracts. `repo` is used for Codex repository lookup locations, while
- * `project` is used for providers that treat workspace-local skills as project
- * scoped.
+ * contracts. `repo` is used for repository-level lookup locations, while
+ * `project` is used for workspace-local skills.
  */
 export type ProviderSkillScope = 'user' | 'project' | 'plugin' | 'repo' | 'admin' | 'system';
 
@@ -761,7 +759,7 @@ export type ProviderSkillRemoveInput = {
  *
  * The `command` value is the exact invocation text the selected provider expects
  * for this skill. Claude plugin skills use a namespaced command such as
- * `/plugin-name:skill-name`, while Codex skills use the `$skill-name` form.
+ * `/plugin-name:skill-name`.
  * `sourcePath` points to the skill markdown file that produced the record so
  * callers can distinguish duplicate skill names across scopes.
  */
@@ -1461,78 +1459,6 @@ export type FileTreeServices = {
     targetPath: string;
     message: string;
   }>;
-};
-
-// ---------------------------
-//----------------- VOICE MODULE CONTRACTS ------------
-/**
- * Per-request voice settings parsed from authenticated HTTP headers.
- *
- * The Voice routes create this value from the optional `x-voice-*` headers and
- * pass it to the Voice service. Empty values mean "use the server-configured
- * default"; the backend base URL is intentionally absent because clients must
- * never control the server's outbound destination.
- */
-export type VoiceRequestOverrides = {
-  apiKey?: string;
-  sttModel?: string;
-  ttsModel?: string;
-  ttsVoice?: string;
-  ttsFormat?: string;
-};
-
-/**
- * Uploaded audio accepted by the Voice transcription service.
- *
- * Routes translate Multer's transport-specific file object into this minimal
- * shape so the service does not depend on Express or Multer types.
- */
-export type VoiceAudioUpload = {
-  bytes: Buffer;
-  mimeType: string;
-  fileName: string;
-};
-
-/**
- * Successful speech payload returned by the Voice service.
- *
- * The route copies `contentType` to the client response and pipes `body`
- * without buffering the complete synthesized audio in application memory.
- */
-export type VoiceSpeechPayload = {
-  contentType: string;
-  body: ReadableStream<Uint8Array> | null;
-};
-
-/**
- * Explicit service result used by Voice routes instead of transport-aware
- * exceptions.
- *
- * Services return `ok: false` with the exact client status/message for expected
- * backend, validation, and timeout failures. Routes only translate the result
- * into HTTP output, while unexpected programming errors still reject normally.
- */
-export type VoiceServiceResult<TValue> =
-  | { ok: true; value: TValue }
-  | { ok: false; status: number; error: string };
-
-/**
- * Complete application-service surface consumed by the Voice HTTP router.
- *
- * The composition root supplies a concrete implementation with environment
- * configuration and an injected outbound HTTP adapter. Unit tests use the same
- * contract with handwritten fetch fakes and never patch global state.
- */
-export type VoiceService = {
-  getHealth(): { configured: boolean };
-  transcribe(input: {
-    audio: VoiceAudioUpload;
-    overrides: VoiceRequestOverrides;
-  }): Promise<VoiceServiceResult<{ text: string }>>;
-  synthesizeSpeech(input: {
-    text: string;
-    overrides: VoiceRequestOverrides;
-  }): Promise<VoiceServiceResult<VoiceSpeechPayload>>;
 };
 
 // ---------------------------

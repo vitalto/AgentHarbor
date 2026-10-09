@@ -66,8 +66,8 @@ const STATUS_STYLES: Record<SubagentInfo['status'], string> = {
 
 /**
  * Rendered by chat's MessageComponent for any tool call that spawned a
- * subagent — Claude's `Agent`/`Task` and Codex's `spawn_agent` both normalize
- * to the same shape, so both render through this one panel.
+ * subagent — Claude's `Agent`/`Task` calls normalize to the same shape, so both
+ * render through this one panel.
  *
  * The timeline is mounted only while the panel is open. The shared Collapsible
  * keeps its children mounted when closed, which for an agent that ran a
@@ -106,8 +106,8 @@ export const SubagentPanel = memo(({
   const status = resolveBackgroundTaskStatus(subagent?.status, taskStatus?.status)
     ?? (toolResult && !isAsyncAgentLaunch ? 'completed' : 'running');
   const toolCount = entries.filter((entry) => entry.kind === 'tool').length;
-  // Claude names its agent presets (Explore, Plan); Codex has none, so the
-  // neutral label carries and the assigned nickname shows alongside it.
+  // Claude names its agent presets (Explore, Plan); without one the neutral
+  // label carries and the assigned nickname shows alongside it.
   const label = subagent?.type ?? String(parsedInput.subagent_type ?? '');
   const nickname = subagent?.name && subagent.name !== subagent.type ? subagent.name : '';
   const description = subagent?.description ?? String(parsedInput.description ?? '');

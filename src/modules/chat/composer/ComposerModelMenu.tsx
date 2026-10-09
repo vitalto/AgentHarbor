@@ -46,8 +46,8 @@ function ComposerModelMenu({
   const close = useCallback(() => setIsOpen(false), []);
   const { triggerRef, menuRef, anchor, updateAnchor } = useComposerMenuAnchor(isOpen, close);
 
-  // The model list starts collapsed every time the menu opens, the way Codex
-  // shows reasoning first and keeps the longer model list one click away.
+  // The model list starts collapsed every time the menu opens: reasoning shows
+  // first and the longer model list stays one click away.
   useEffect(() => {
     if (!isOpen) {
       setIsModelSectionOpen(false);

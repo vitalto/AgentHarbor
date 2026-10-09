@@ -83,9 +83,8 @@ function summarizeToolInput(input: unknown): string {
 /**
  * Headers for the surfaces every provider is normalized onto.
  *
- * The canonical tool names are Claude's, so a Codex plan update would otherwise
- * announce itself as `TodoWrite`. Naming the surface instead of the tool keeps
- * the two providers reading as one product.
+ * Naming the surface instead of the raw tool keeps the headers readable
+ * whichever tool produced the row.
  */
 const UNIFIED_TOOL_LABELS: Record<string, string> = {
   TodoWrite: 'Checklist',
@@ -371,9 +370,8 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   // TODO TOOLS
   // ============================================================================
 
-  // Every provider's running checklist normalizes onto this tool — Claude's
-  // TodoWrite and its incremental Task tracker, Codex's update_plan and
-  // todo_list — so one renderer covers all of them.
+  // Every running checklist normalizes onto this tool — Claude's TodoWrite and
+  // its incremental Task tracker — so one renderer covers all of them.
   TodoWrite: {
     input: {
       type: 'collapsible',
@@ -636,8 +634,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   // INTERACTIVE TOOLS
   // ============================================================================
 
-  // Both providers normalize the ask-the-user round trip onto this tool —
-  // Claude's AskUserQuestion and Codex's request_user_input — and the backend
+  // The ask-the-user round trip normalizes onto this tool and the backend
   // folds the chosen answers into the input, so the question and the answer
   // render as one card instead of a question card and an opaque result blob.
   AskUserQuestion: {

@@ -63,8 +63,8 @@ function isGroupableToolMessage(message: ChatMessage): message is ChatMessage & 
 }
 
 // Messages that render nothing (e.g. reasoning hidden when showThinking is off)
-// shouldn't split an otherwise-continuous run of the same tool — providers like
-// Codex interleave hidden reasoning between consecutive tool calls.
+// shouldn't split an otherwise-continuous run of the same tool — a provider may
+// interleave hidden reasoning between consecutive tool calls.
 function rendersNothing(message: ChatMessage, showThinking: boolean): boolean {
   return Boolean(message.isThinking && !showThinking);
 }

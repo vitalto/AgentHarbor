@@ -172,7 +172,7 @@ test('a group that can name nothing still accounts for every call', () => {
 });
 
 test('hidden reasoning between two tool calls does not split the run', () => {
-  // Codex interleaves reasoning between consecutive tool calls; with thinking
+  // A provider may interleave reasoning between consecutive tool calls; with thinking
   // turned off those messages render nothing, so splitting on them would show
   // two ungrouped rows with an invisible gap between them.
   const items = groupConsecutiveTools([

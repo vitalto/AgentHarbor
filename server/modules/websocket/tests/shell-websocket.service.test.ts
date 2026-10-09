@@ -686,10 +686,9 @@ test('claude launches report the app theme they started in, also on reattach', (
     const silentLaunches = [
       launch(dependencies, { provider: 'claude' }, projectPath),
       launch(dependencies, { provider: 'claude', initialCommand: 'claude /login', colorScheme: 'light' }, projectPath),
-      launch(dependencies, { provider: 'codex', colorScheme: 'light' }, projectPath),
       launch(dependencies, { provider: 'plain-shell', isPlainShell: true, colorScheme: 'light' }, projectPath),
     ];
-    assert.deepEqual(silentLaunches.map(themeFrames), [[], [], [], []]);
+    assert.deepEqual(silentLaunches.map(themeFrames), [[], [], []]);
   });
 });
 
@@ -729,20 +728,23 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
 
     launch(
       dependencies,
-      { provider: 'plain-shell', isPlainShell: true, initialCommand: 'npx task-master init', colorScheme: 'light' },
+      { provider: 'plain-shell', isPlainShell: true, initialCommand: 'npx some-tool init', colorScheme: 'light' },
       projectPath
     );
     launch(dependencies, { provider: 'claude', initialCommand: loginCommand, colorScheme: 'light' }, projectPath);
-    launch(dependencies, { provider: 'codex', colorScheme: 'light' }, projectPath);
-    launch(dependencies, { provider: 'codex', colorScheme: 'dark' }, projectPath);
+    launch(
+      dependencies,
+      { provider: 'plain-shell', isPlainShell: true, initialCommand: 'ls', colorScheme: 'dark' },
+      projectPath
+    );
 
     assert.deepEqual(
       calls.map((call) => call.command),
-      ['npx task-master init', loginCommand, 'codex', 'codex']
+      ['npx some-tool init', loginCommand, 'ls']
     );
     assert.deepEqual(
       calls.map((call) => call.env.COLORFGBG),
-      ['0;15', '0;15', '0;15', '15;0']
+      ['0;15', '0;15', '15;0']
     );
   });
 });

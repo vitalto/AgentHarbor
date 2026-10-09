@@ -6,11 +6,8 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import { resetUserPreferences, writeUserPreference } from '@/shared/userSettings';
 
 /**
- * The four per-provider default models used to be four useState slots with four
- * copy-pasted reconciliation effects and a four-branch setter. They are now one
- * Record with one loop. These tests pin the behaviour that has to survive that:
- * each provider keeps its own model, under its own storage key, and choosing a
- * model persists it.
+ * The provider's default model is kept in a Record keyed by provider. These
+ * tests pin that it is read from and persisted to the provider's own storage key.
  */
 
 const okJson = (data: unknown) => Promise.resolve({
@@ -59,56 +56,28 @@ afterEach(() => {
   vi.resetModules();
 });
 
-test('each provider gets its own model from its own storage key', async () => {
+test('the provider reads its model from its own storage key', async () => {
   localStorage.setItem('claude-model', 'claude-stored');
-  localStorage.setItem('cursor-model', 'cursor-stored');
-  localStorage.setItem('codex-model', 'codex-stored');
-  localStorage.setItem('opencode-model', 'opencode-stored');
 
   const { result } = await renderProviderState();
 
   await waitFor(() => {
     assert.equal(result.current.providerModels.claude, 'claude-stored');
   });
-  assert.equal(result.current.providerModels.cursor, 'cursor-stored');
-  assert.equal(result.current.providerModels.codex, 'codex-stored');
-  assert.equal(result.current.providerModels.opencode, 'opencode-stored');
 });
 
-test('a provider with no stored model falls back to its own default, not another provider’s', async () => {
+test('choosing a model persists it under the provider’s key', async () => {
   const { result } = await renderProviderState();
-
   await waitFor(() => {
     assert.ok(result.current.providerModels.claude);
   });
 
-  const models = result.current.providerModels;
-  assert.equal(
-    new Set(Object.values(models)).size,
-    Object.keys(models).length,
-    'each provider must have a distinct default model',
-  );
-});
-
-test('choosing a model persists it under that provider’s key only', async () => {
-  const { result } = await renderProviderState();
-  await waitFor(() => {
-    assert.ok(result.current.providerModels.codex);
-  });
-  const claudeBefore = result.current.providerModels.claude;
-
   act(() => {
-    result.current.setStoredProviderModel('codex', 'codex-chosen');
+    result.current.setStoredProviderModel('claude', 'claude-chosen');
   });
 
-  assert.equal(result.current.providerModels.codex, 'codex-chosen');
-  assert.equal(localStorage.getItem('codex-model'), 'codex-chosen');
-  assert.equal(
-    result.current.providerModels.claude,
-    claudeBefore,
-    'setting one provider must not disturb another',
-  );
-  assert.equal(localStorage.getItem('claude-model'), null);
+  assert.equal(result.current.providerModels.claude, 'claude-chosen');
+  assert.equal(localStorage.getItem('claude-model'), 'claude-chosen');
 });
 
 test('setting the same model twice keeps the record identity stable', async () => {
@@ -136,13 +105,13 @@ test('setting the same model twice keeps the record identity stable', async () =
 test('the active provider’s model is what currentProviderModel reports', async () => {
   // The provider selection is a stored preference; the per-provider model is
   // still a plain localStorage key.
-  writeUserPreference('selectedProvider', 'cursor');
-  localStorage.setItem('cursor-model', 'cursor-active');
+  writeUserPreference('selectedProvider', 'claude');
+  localStorage.setItem('claude-model', 'claude-active');
 
   const { result } = await renderProviderState();
 
   await waitFor(() => {
-    assert.equal(result.current.provider, 'cursor');
+    assert.equal(result.current.provider, 'claude');
   });
-  assert.equal(result.current.currentProviderModel, 'cursor-active');
+  assert.equal(result.current.currentProviderModel, 'claude-active');
 });

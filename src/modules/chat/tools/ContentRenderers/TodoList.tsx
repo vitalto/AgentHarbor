@@ -14,8 +14,8 @@ const normalizeStatus = (status: string): QueueItemStatus => {
  * Rendered by chat's TodoListContent to draw the todo items as a status queue.
  *
  * This is the one checklist view in the app: Claude's TodoWrite and task
- * tracker and Codex's plan updates are all normalized onto the todo shape
- * before they get here, so a checklist looks identical whichever agent built it.
+ * tracker are both normalized onto the todo shape before they get here, so a
+ * checklist looks identical whichever tool built it.
  */
 const TodoList = memo(
   ({

@@ -131,8 +131,8 @@ function ComposerPermissionMenu({
               <ComposerMenuItem
                 key={mode}
                 icon={<ModeIcon className="h-4 w-4" />}
-                label={t(`codex.modes.${mode}`, { defaultValue: mode })}
-                description={t(`codex.descriptions.${mode}`, { defaultValue: '' }) || undefined}
+                label={t(`permissionModes.modes.${mode}`, { defaultValue: mode })}
+                description={t(`permissionModes.descriptions.${mode}`, { defaultValue: '' }) || undefined}
                 isSelected={mode === permissionMode}
                 onSelect={() => {
                   onSelectPermissionMode(mode);
