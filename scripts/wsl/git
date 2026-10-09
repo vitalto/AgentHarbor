@@ -1,0 +1,34 @@
+#!/bin/bash
+# git for an AgentHarbor server in WSL driving the Windows claude.exe.
+#
+# Repositories on Windows drives (/mnt/<drive>/...) go to Windows git.exe: Linux
+# git reads them through the slow 9p mount (seconds per `git status` instead of a
+# fraction), and the two gits record file stats in the shared index differently,
+# so alternating with Claude's own Windows git would make each re-hash the whole
+# tree. Everything else uses Linux git. The server puts this directory first on
+# PATH when AH_CLAUDE_CMD is a Windows binary.
+WINDOWS_GIT="/mnt/c/Program Files/Git/cmd/git.exe"
+LINUX_GIT=/usr/bin/git
+
+case "$PWD" in
+  /mnt/[a-z]/*) ;;
+  *) exec "$LINUX_GIT" "$@" ;;
+esac
+[ -x "$WINDOWS_GIT" ] || exec "$LINUX_GIT" "$@"
+
+args=()
+for arg in "$@"; do
+  if [[ "$arg" =~ ^/mnt/([a-z])(/.*)?$ ]]; then
+    arg="${BASH_REMATCH[1]^^}:${BASH_REMATCH[2]:-/}"
+  fi
+  args+=("$arg")
+done
+
+# Commands that print absolute paths: map Windows paths back to the /mnt form callers expect.
+case " $* " in
+  *" rev-parse "* | *" worktree "*)
+    "$WINDOWS_GIT" "${args[@]}" | sed -E 's#(^|[[:space:]])([A-Za-z]):/#\1/mnt/\L\2/#g'
+    exit "${PIPESTATUS[0]}"
+    ;;
+esac
+exec "$WINDOWS_GIT" "${args[@]}"
