@@ -36,7 +36,7 @@ type UseChatComposerStateArgs = {
   /** The session runs in a tmux window whose TUI takes input while Claude works: send instead of queueing. */
   sendWhileBusy?: boolean;
   /** Asked before a message goes out; returning false keeps it in the composer unsent. */
-  beforeSend?: () => boolean;
+  beforeSend?: (content: string) => boolean;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
@@ -688,7 +688,7 @@ export function useChatComposerState({
         return;
       }
 
-      if (beforeSend && !beforeSend()) {
+      if (beforeSend && !beforeSend(currentInput)) {
         return;
       }
 

@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon } from 'lucide-react';
 
 import { usePaletteOpsRegister } from '@/modules/command-palette';
+import { useNavigate } from 'react-router-dom';
+
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 import { useTuiSessionState } from '@/modules/chat/hooks/useTuiSessionState';
@@ -73,7 +75,8 @@ function ChatInterface({
 }: ChatInterfaceProps) {
   const { subscribe } = useWebSocket();
   const { handleTuiEvent, getTuiState } = useTuiSessionState();
-  const { findWindow, moveToTmux } = useAgentWindows();
+  const { findWindow, moveToTmux, clearConversation } = useAgentWindows();
+  const navigate = useNavigate();
   // Set when a send was held back because the session runs outside tmux; cleared once it is moved or sent.
   const [hasMessageAwaitingMove, setHasMessageAwaitingMove] = useState(false);
   const sendAfterMoveRef = useRef(false);
@@ -235,8 +238,18 @@ function ChatInterface({
     beginEditMessage,
   } = useChatComposerState({
     sendWhileBusy: findWindow(selectedSession?.id || currentSessionId)?.location === 'tmux',
-    beforeSend: () => {
+    beforeSend: (content) => {
       const agent = findWindow(selectedSession?.id || currentSessionId);
+      if (content.trim() === '/clear' && agent?.location === 'tmux') {
+        // Same as the header's clear button: the chat follows the window into its new conversation.
+        void clearConversation(agent.sessionId)
+          .then((newSessionId) => {
+            handleClearInput();
+            navigate(`/session/${newSessionId}`);
+          })
+          .catch((error: unknown) => console.error('[AgentHarbor] /clear failed', error));
+        return false;
+      }
       if (sendAfterMoveRef.current || !agent || agent.location === 'tmux') {
         sendAfterMoveRef.current = false;
         return true;

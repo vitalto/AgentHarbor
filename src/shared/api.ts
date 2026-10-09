@@ -416,6 +416,8 @@ export const api = {
     agentWindows: () => get('/api/providers/agents/windows'),
     openAgentWindow: (sessionId: string) =>
       post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/window`),
+    clearAgentConversation: (sessionId: string) =>
+      post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/clear`),
     moveAgentToTmux: (sessionId: string, force = false) =>
       post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/move-to-tmux`, { force }),
     closeAgentWindow: (sessionId: string, force = false) =>

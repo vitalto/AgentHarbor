@@ -259,6 +259,34 @@ export async function moveSessionToTmux(appSessionId: string, options: { force?:
   return pane ?? ensureAgentWindow(appSessionId);
 }
 
+const CLEAR_TIMEOUT_MS = 30_000;
+
+/**
+ * Runs `/clear` in the session's window: the same Claude process starts a new
+ * conversation (a new session id) and the old one stays in history. Resolves
+ * with the window as it reports the new conversation through the hook.
+ */
+export async function clearAgentConversation(appSessionId: string): Promise<PaneSession> {
+  const pane = await findAgentWindow(appSessionId);
+  if (!pane) {
+    throw new AgentWindowError('This session has no Claude window to clear.');
+  }
+  const previousSessionId = pane.providerSessionId;
+  await waitForInputReady(appSessionId, pane.pane.paneId);
+  await typeIntoAgent(pane.pane.paneId, '/clear');
+
+  const deadline = Date.now() + CLEAR_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const current = (await paneRegistry.refresh())
+      .find((candidate) => candidate.pane.paneId === pane.pane.paneId && candidate.registered);
+    if (current?.providerSessionId && current.providerSessionId !== previousSessionId) {
+      return current;
+    }
+    await delay(POLL_MS);
+  }
+  throw new AgentWindowError('Claude did not start a new conversation after /clear.');
+}
+
 /** Waits until the input box accepts text; menus shown meanwhile are surfaced for the user to answer. */
 export async function waitForInputReady(appSessionId: string, paneId: string): Promise<void> {
   const monitor = getSessionMonitor();

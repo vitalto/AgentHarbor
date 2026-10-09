@@ -5,7 +5,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { AgentBusyElsewhereError, AgentWindowError, closeAgentWindow, ensureAgentWindow, moveSessionToTmux, paneRegistry, readClaudeStatuses } from '@/modules/tmux/index.js';
+import { AgentBusyElsewhereError, AgentWindowError, clearAgentConversation, closeAgentWindow, ensureAgentWindow, moveSessionToTmux, paneRegistry, readClaudeStatuses } from '@/modules/tmux/index.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   BackgroundTaskSummary,
@@ -771,6 +771,39 @@ export const sessionsService = {
       });
     }
     return agents;
+  },
+
+  /**
+   * `/clear` in the session's window. The conversation that follows gets its
+   * own session row (keyed by Claude's new session id, like any indexed one),
+   * which is returned so the chat can switch to it; the old one stays as it was.
+   */
+  async clearAgentConversation(sessionId: string): Promise<{ sessionId: string }> {
+    const current = sessionsDb.getSessionById(sessionId);
+    if (!current) {
+      throw new AppError(`Session "${sessionId}" was not found.`, { code: 'SESSION_NOT_FOUND', statusCode: 404 });
+    }
+    let pane;
+    try {
+      pane = await clearAgentConversation(sessionId);
+    } catch (error) {
+      if (error instanceof AgentWindowError) {
+        throw new AppError(error.message, { code: 'AGENT_CLEAR_FAILED', statusCode: 409 });
+      }
+      throw error;
+    }
+    const newProviderSessionId = pane.providerSessionId as string;
+    const newSessionId = sessionsDb.createSession(
+      newProviderSessionId,
+      'claude',
+      current.project_path ?? pane.cwd,
+      undefined,
+      undefined,
+      undefined,
+      pane.transcriptPath,
+    );
+    await broadcastSessionUpserted(newSessionId);
+    return { sessionId: newSessionId };
   },
 
   /** Ends the session's Claude wherever it runs (see closeAgentWindow); busy elsewhere needs force. */

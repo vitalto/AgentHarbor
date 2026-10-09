@@ -4,6 +4,7 @@ export { writeHookSettings } from '@/modules/tmux/agent-launch.js';
 export {
   AgentBusyElsewhereError,
   AgentWindowError,
+  clearAgentConversation,
   closeAgentWindow,
   ensureAgentWindow,
   startAgentWindow,

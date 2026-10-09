@@ -938,6 +938,14 @@ router.post(
   }),
 );
 
+/** `/clear` in the session's Claude window; responds with the session of the new conversation. */
+router.post(
+  '/sessions/:sessionId/clear',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(await sessionsService.clearAgentConversation(parseSessionId(req.params.sessionId))));
+  }),
+);
+
 /** Ends Claude for this session in any other terminal (only while idle) and continues it in tmux. */
 router.post(
   '/sessions/:sessionId/move-to-tmux',

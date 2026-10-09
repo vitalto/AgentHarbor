@@ -5,7 +5,7 @@ import type { AppTab, Project, ProjectSession } from '@/shared/types';
 import { usePlugins } from '@/modules/plugins';
 import { getSessionTitle } from '@/shared/utils';
 import { useSessionTitleRename } from '@/modules/project-workspace/hooks/useSessionTitleRename';
-import { CloseAgentButton } from '@/modules/live-agents';
+import { ClearConversationButton, CloseAgentButton } from '@/modules/live-agents';
 import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 
 type WorkspaceTitleProps = {
@@ -123,6 +123,7 @@ export default function WorkspaceTitle({
           </div>
         )}
       </div>
+      {liveAgent?.location === 'tmux' && <ClearConversationButton agent={liveAgent} />}
       {liveAgent && <CloseAgentButton agent={liveAgent} icon="power" />}
     </div>
   );

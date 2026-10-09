@@ -108,5 +108,17 @@ export function useAgentWindows() {
     }
   }, []);
 
-  return { windows, findWindow, openWindow, closeWindow, moveToTmux, refresh: refreshAgentWindows };
+  /** `/clear` in the session's window; resolves with the session id of the new conversation. */
+  const clearConversation = useCallback(async (sessionId: string): Promise<string> => {
+    const response = await api.providers.clearAgentConversation(sessionId);
+    const body = (await response.json().catch(() => ({}))) as { data?: { sessionId?: string }; error?: { message?: string } | string };
+    await refreshAgentWindows();
+    if (!response.ok || !body.data?.sessionId) {
+      const message = typeof body.error === 'string' ? body.error : body.error?.message;
+      throw new Error(message ?? 'Could not clear the conversation');
+    }
+    return body.data.sessionId;
+  }, []);
+
+  return { windows, findWindow, openWindow, closeWindow, moveToTmux, clearConversation, refresh: refreshAgentWindows };
 }
