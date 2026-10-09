@@ -1,6 +1,6 @@
 import { memo, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { Check, CheckSquare, Edit2, Loader2, MoreHorizontal, Square, Trash2, X } from 'lucide-react';
+import { Check, CheckSquare, Edit2, Loader2, MoreHorizontal, Power, Square, SquareTerminal, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, buttonVariants } from '@/shared/ui';
@@ -10,6 +10,8 @@ import { PROVIDER_LABELS, createSessionViewModel, formatCompactAge } from '@/mod
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
 import SessionOptions from '@/modules/sidebar/SessionOptions';
+import AgentWindowBadge from '@/modules/sidebar/AgentWindowBadge';
+import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 
 type SidebarSessionItemProps = {
   project: Project;
@@ -66,6 +68,13 @@ function SidebarSessionItem({
   t,
 }: SidebarSessionItemProps) {
   const isCompact = useCompactSidebar();
+  const { findWindow, openWindow, closeWindow } = useAgentWindows();
+  const agentWindow = findWindow(session.id);
+  const toggleAgentWindow = () => {
+    void (agentWindow ? closeWindow(session.id) : openWindow(session.id)).catch((error: unknown) => {
+      console.error('[AgentHarbor] window action failed', error);
+    });
+  };
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
   const compactSessionAge = formatCompactAge(sessionView.sessionTime, currentTime);
@@ -196,7 +205,7 @@ function SidebarSessionItem({
                 isSelected ? 'bg-primary/10' : 'bg-muted/50',
               )}
             >
-              <LLMProviderLogo provider={session.__provider} className="h-3 w-3" />
+              <AgentWindowBadge provider={session.__provider} agentWindow={agentWindow} className="h-3 w-3" />
             </div>
 
             <div className="min-w-0 flex-1">
@@ -347,6 +356,18 @@ function SidebarSessionItem({
                   </span>
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileOptionsOpen(false);
+                    toggleAgentWindow();
+                  }}
+                  className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border bg-muted/35 px-4 py-3 text-left text-foreground transition-colors active:bg-muted"
+                >
+                  {agentWindow ? <Power className="h-5 w-5 flex-shrink-0" /> : <SquareTerminal className="h-5 w-5 flex-shrink-0" />}
+                  <span className="text-sm font-medium">{agentWindow ? 'Close Claude window' : 'Open in tmux'}</span>
+                </button>
+
                 {!isProcessing && (
                   <button
                     type="button"
@@ -421,7 +442,7 @@ function SidebarSessionItem({
                 isSelected ? 'bg-primary/10' : 'bg-muted/50',
               )}
             >
-              <LLMProviderLogo provider={session.__provider} className="h-3 w-3" />
+              <AgentWindowBadge provider={session.__provider} agentWindow={agentWindow} className="h-3 w-3" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">

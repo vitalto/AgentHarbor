@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { Check, Edit2, GitBranch, MoreHorizontal, Trash2, X } from 'lucide-react';
+import { Check, Edit2, GitBranch, MoreHorizontal, Power, SquareTerminal, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { ActionMenu } from '@/shared/ui';
 import { cn } from '@/shared/utils';
 import type { LLMProvider } from '@/shared/types';
 import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
+import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
 import { PROVIDER_LABELS } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 
@@ -70,6 +71,8 @@ export default function SessionOptions({
   // Read from the backend capability matrix rather than branching on the
   // provider id here; the request is cached module-side, so every row shares one.
   const forkableProviders = useSessionForkingProviders();
+  const { findWindow, openWindow, closeWindow } = useAgentWindows();
+  const agentWindow = findWindow(sessionId);
   const canFork = Boolean(onFork) && forkableProviders.has(provider) && !isProcessing;
 
   // While editing, dismiss only when the click lands outside the rename panel,
@@ -174,6 +177,19 @@ export default function SessionOptions({
               loading: isCopyPending,
               closeOnSelect: false,
               onSelect: handleCopyAction,
+            },
+            {
+              key: 'agent-window',
+              label: agentWindow ? 'Close Claude window' : 'Open in tmux',
+              description: agentWindow
+                ? `Ends Claude in tmux window "${agentWindow.windowName}". The conversation stays.`
+                : 'Starts claude --resume in a tmux window you can also reach over ssh.',
+              icon: agentWindow ? Power : SquareTerminal,
+              onSelect: () => {
+                void (agentWindow ? closeWindow(sessionId) : openWindow(sessionId)).catch((error: unknown) => {
+                  console.error('[AgentHarbor] window action failed', error);
+                });
+              },
             },
             ...(canFork && onFork ? [{
               key: 'fork',
