@@ -9,7 +9,6 @@ import { providerTokenUsageService } from '@/modules/providers/services/provider
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
-import { closeAgentWindow } from '@/modules/tmux/index.js';
 import type {
   CustomProviderModelEffort,
   CustomProviderModelInput,
@@ -953,7 +952,8 @@ router.delete(
   '/sessions/:sessionId/window',
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
-    res.json(createApiSuccessResponse({ closed: await closeAgentWindow(sessionId) }));
+    const force = parseOptionalBooleanQuery(req.query.force, 'force') ?? false;
+    res.json(createApiSuccessResponse({ closed: await sessionsService.closeAgent(sessionId, { force }) }));
   }),
 );
 

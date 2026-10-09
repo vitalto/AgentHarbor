@@ -413,8 +413,8 @@ export const api = {
       post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/window`),
     moveAgentToTmux: (sessionId: string, force = false) =>
       post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/move-to-tmux`, { force }),
-    closeAgentWindow: (sessionId: string) =>
-      del(`/api/providers/sessions/${encodeURIComponent(sessionId)}/window`),
+    closeAgentWindow: (sessionId: string, force = false) =>
+      del(`/api/providers/sessions/${encodeURIComponent(sessionId)}/window${force ? '?force=true' : ''}`),
     sessionMessages: (
       sessionId: string,
       pagination: { limit?: number | null; offset?: number } = {},

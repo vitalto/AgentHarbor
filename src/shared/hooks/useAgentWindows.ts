@@ -97,9 +97,15 @@ export function useAgentWindows() {
     }
   }, []);
 
-  const closeWindow = useCallback(async (sessionId: string) => {
-    await api.providers.closeAgentWindow(sessionId);
+  /** Ends the session's Claude (tmux window or the outside process); rejects with AgentMoveError when refused. */
+  const closeWindow = useCallback(async (sessionId: string, options: { force?: boolean } = {}) => {
+    const response = await api.providers.closeAgentWindow(sessionId, options.force ?? false);
+    const body = (await response.json().catch(() => ({}))) as { error?: { message?: string; code?: string } | string };
     await refreshAgentWindows();
+    if (!response.ok) {
+      const error = typeof body.error === 'string' ? { message: body.error } : body.error;
+      throw new AgentMoveError(error?.message ?? 'Could not close the agent', error?.code ?? null);
+    }
   }, []);
 
   return { windows, findWindow, openWindow, closeWindow, moveToTmux, refresh: refreshAgentWindows };

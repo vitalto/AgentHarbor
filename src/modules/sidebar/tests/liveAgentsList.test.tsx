@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { test, vi } from 'vitest';
 
-import type { AgentWindow } from '@/shared/hooks/useAgentWindows';
+import { AgentMoveError, type AgentWindow } from '@/shared/hooks/useAgentWindows';
 
 const agents: AgentWindow[] = [
   {
@@ -18,8 +18,11 @@ const agents: AgentWindow[] = [
   },
 ];
 
-vi.mock('@/shared/hooks/useAgentWindows', () => ({
-  useAgentWindows: () => ({ windows: agents, findWindow: () => null }),
+const closeWindow = vi.fn<(sessionId: string, options: { force?: boolean }) => Promise<void>>();
+
+vi.mock('@/shared/hooks/useAgentWindows', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/hooks/useAgentWindows')>()),
+  useAgentWindows: () => ({ windows: agents, findWindow: () => null, closeWindow }),
 }));
 
 function OpenedSession() {
@@ -43,4 +46,22 @@ test('lists every live agent with where it runs, and opens its chat on click', a
 
   fireEvent.click(screen.getByText('Windows chat'));
   assert.ok(screen.getByText('opened app-2'));
+});
+
+test('the × closes an agent after a confirming click; a busy outside one can be closed anyway', async () => {
+  closeWindow.mockReset();
+  closeWindow
+    .mockRejectedValueOnce(new AgentMoveError('Claude in the other terminal (pid 1248) reports "shell"', 'AGENT_BUSY_ELSEWHERE'))
+    .mockResolvedValueOnce(undefined);
+  const { default: LiveAgentsList } = await import('@/modules/sidebar/LiveAgentsList');
+  render(<MemoryRouter><LiveAgentsList /></MemoryRouter>);
+
+  fireEvent.click(screen.getByLabelText('Close Claude for Windows chat'));
+  assert.equal(closeWindow.mock.calls.length, 0, 'the first click only asks');
+  await act(async () => { fireEvent.click(screen.getByText('Close?')); });
+  assert.ok(screen.getByText(/reports "shell"/));
+
+  await act(async () => { fireEvent.click(screen.getByText('Close anyway')); });
+  assert.deepEqual(closeWindow.mock.calls, [['app-2', { force: false }], ['app-2', { force: true }]]);
+  assert.equal(screen.queryByText('Close anyway'), null);
 });

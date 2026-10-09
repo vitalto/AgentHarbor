@@ -283,10 +283,24 @@ export async function typeIntoAgent(paneId: string, text: string): Promise<void>
   await tmuxService.sendKeys(paneId, ['Enter']);
 }
 
-export async function closeAgentWindow(appSessionId: string): Promise<boolean> {
+/**
+ * Ends the session's Claude: its tmux window, or — when it runs in another
+ * terminal — that process (only while idle, unless forced). The conversation
+ * itself stays and can be resumed.
+ */
+export async function closeAgentWindow(appSessionId: string, options: { force?: boolean } = {}): Promise<boolean> {
   const pane = await findAgentWindow(appSessionId);
   if (!pane) {
-    return false;
+    const providerSessionId = sessionsDb.getSessionById(appSessionId)?.provider_session_id;
+    const outside = providerSessionId ? await findSessionHolders(providerSessionId) : [];
+    const working = outside.find((claude) => claude.activity !== 'idle');
+    if (working && !options.force) {
+      throw new AgentBusyElsewhereError(working);
+    }
+    for (const claude of outside) {
+      await stopClaudeProcess(claude);
+    }
+    return outside.length > 0;
   }
   try {
     await tmuxService.killWindow(pane.pane.windowId);

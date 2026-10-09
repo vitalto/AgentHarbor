@@ -5,7 +5,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { AgentBusyElsewhereError, AgentWindowError, ensureAgentWindow, moveSessionToTmux, paneRegistry, readClaudeStatuses } from '@/modules/tmux/index.js';
+import { AgentBusyElsewhereError, AgentWindowError, closeAgentWindow, ensureAgentWindow, moveSessionToTmux, paneRegistry, readClaudeStatuses } from '@/modules/tmux/index.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   BackgroundTaskSummary,
@@ -751,6 +751,22 @@ export const sessionsService = {
       });
     }
     return agents;
+  },
+
+  /** Ends the session's Claude wherever it runs (see closeAgentWindow); busy elsewhere needs force. */
+  async closeAgent(sessionId: string, options: { force?: boolean } = {}): Promise<boolean> {
+    try {
+      return await closeAgentWindow(sessionId, options);
+    } catch (error) {
+      if (error instanceof AgentBusyElsewhereError) {
+        throw new AppError(error.message, {
+          code: 'AGENT_BUSY_ELSEWHERE',
+          statusCode: 409,
+          details: { pid: error.holder.pid, status: error.holder.status, since: error.holder.statusSince },
+        });
+      }
+      throw error;
+    }
   },
 
   /** Moves a session Claude runs in another terminal into tmux (see moveSessionToTmux). */
