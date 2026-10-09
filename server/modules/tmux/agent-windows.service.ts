@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { getAgentConfig } from '@/modules/tmux/agent-config.js';
+import { readClaudeStatuses, type ClaudeStatus } from '@/modules/tmux/claude-status.js';
 import { buildAgentLaunch, writeHookSettings } from '@/modules/tmux/agent-launch.js';
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { toLocalPath } from '@/modules/tmux/path-translation.js';
@@ -58,7 +59,24 @@ export async function findAgentWindow(appSessionId: string): Promise<PaneSession
   return getSessionMonitor().findPane(appSessionId);
 }
 
-type StartingWindow = { pane: AgentPane; registration: Promise<PaneSession> };
+/**
+ * Called only when the session has no tmux window: any live Claude process for
+ * it then runs somewhere else (a Windows console, another terminal). Resuming
+ * would start a second process writing the same transcript.
+ */
+export function assertNotOpenElsewhere(providerSessionId: string, statuses: Map<string, ClaudeStatus>): void {
+  const running = statuses.get(providerSessionId);
+  if (!running) {
+    return;
+  }
+  const where = running.windowsPid ? 'a Windows terminal' : 'another terminal';
+  throw new AgentWindowError(
+    `This session is already open in ${where} (claude pid ${running.pid}${running.cwd ? `, ${running.cwd}` : ''}). `
+    + 'Close it there first: two Claude processes on one session would both write its history.',
+  );
+}
+
+type StartingWindow ={ pane: AgentPane; registration: Promise<PaneSession> };
 
 /** One launch per session at a time: the chat and the terminal tab may both ask for the same window. */
 const startingWindows = new Map<string, Promise<StartingWindow>>();
@@ -75,6 +93,9 @@ async function launchAgentWindow(appSessionId: string): Promise<StartingWindow> 
   const config = getAgentConfig();
   let providerSessionId = session.provider_session_id;
   const isNewConversation = !providerSessionId;
+  if (providerSessionId) {
+    assertNotOpenElsewhere(providerSessionId, await readClaudeStatuses(config));
+  }
   if (!providerSessionId) {
     providerSessionId = randomUUID();
     sessionsDb.assignProviderSessionId(appSessionId, providerSessionId);

@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
@@ -6,17 +7,27 @@ import { getAgentConfig, type AgentConfig } from '@/modules/tmux/agent-config.js
 /** `waiting` = the TUI shows a permission/question menu and blocks on the user. */
 export type ClaudeActivity = 'busy' | 'waiting' | 'idle';
 
-export type ClaudeStatus = {
+/** One running Claude process, from its `<CLAUDE_CONFIG_DIR>/sessions/<pid>.json`. */
+export type ClaudeProcess = {
   providerSessionId: string;
   activity: ClaudeActivity;
   pid: number;
-  /** Process ids from another OS (Windows claude.exe seen from WSL) cannot be probed from here. */
-  probeablePid: boolean;
+  /** Windows claude.exe seen from WSL: its pid lives in another process table. */
+  windowsPid: boolean;
+  cwd: string | null;
   updatedAt: number;
   startedAt: number | null;
 };
 
+/** The session's most recently updated live process. */
+export type ClaudeStatus = ClaudeProcess & {
+  /** How many live Claude processes hold this session (more than one means a duplicate). */
+  processCount: number;
+};
+
 const MAX_STATUS_FILES = 256;
+const WINDOWS_PROCESS_CACHE_MS = 3000;
+const TASKLIST = '/mnt/c/Windows/System32/tasklist.exe';
 
 /** Last statuses read, for synchronous lookups from history building. */
 let lastStatuses = new Map<string, ClaudeStatus>();
@@ -26,8 +37,12 @@ export function getLiveProcessStartTime(providerSessionId: string | null | undef
   return providerSessionId ? lastStatuses.get(providerSessionId)?.startedAt ?? null : null;
 }
 
+/** Claude writes busy, waiting, idle and more (e.g. `shell` while a command runs); anything not resting counts as busy. */
 function readActivity(value: unknown): ClaudeActivity | null {
-  return value === 'busy' || value === 'waiting' || value === 'idle' ? value : null;
+  if (typeof value !== 'string' || !value) {
+    return null;
+  }
+  return value === 'idle' || value === 'waiting' ? value : 'busy';
 }
 
 function processExists(pid: number): boolean {
@@ -39,45 +54,99 @@ function processExists(pid: number): boolean {
   }
 }
 
+let windowsClaudePids: { readAt: number; pids: Set<number> | null } | null = null;
+
 /**
- * Reads Claude Code's per-process status files (`<CLAUDE_CONFIG_DIR>/sessions/<pid>.json`)
- * keyed by session id. When several files name one session (a crash left one
- * behind), the most recently updated wins.
+ * Live claude.exe pids via WSL interop (works from a systemd service too), or
+ * null when Windows cannot be asked — then every Windows status file is trusted.
  */
-export async function readClaudeStatuses(config: AgentConfig = getAgentConfig()): Promise<Map<string, ClaudeStatus>> {
+async function readWindowsClaudePids(): Promise<Set<number> | null> {
+  if (windowsClaudePids && Date.now() - windowsClaudePids.readAt < WINDOWS_PROCESS_CACHE_MS) {
+    return windowsClaudePids.pids;
+  }
+  const pids = await new Promise<Set<number> | null>((resolve) => {
+    execFile(TASKLIST, ['/FI', 'IMAGENAME eq claude.exe', '/FO', 'CSV', '/NH'], { timeout: 5000 }, (error, stdout) => {
+      if (error) {
+        resolve(null);
+        return;
+      }
+      const found = new Set<number>();
+      for (const line of stdout.split(/\r?\n/)) {
+        const pid = Number(line.split('","')[1]);
+        if (Number.isInteger(pid) && pid > 0) {
+          found.add(pid);
+        }
+      }
+      resolve(found);
+    });
+  });
+  windowsClaudePids = { readAt: Date.now(), pids };
+  return pids;
+}
+
+/** Every live Claude process with a status file; files left behind by crashed processes are skipped. */
+export async function readClaudeProcesses(config: AgentConfig = getAgentConfig()): Promise<ClaudeProcess[]> {
   const directory = path.join(config.claudeHome, 'sessions');
   let names: string[];
   try {
     names = (await fsp.readdir(directory)).filter((name) => name.endsWith('.json')).slice(0, MAX_STATUS_FILES);
   } catch {
-    return new Map();
+    return [];
   }
 
-  const statuses = new Map<string, ClaudeStatus>();
-  await Promise.all(names.map(async (name) => {
-    let record: Record<string, unknown>;
+  const records = await Promise.all(names.map(async (name) => {
     try {
-      record = JSON.parse(await fsp.readFile(path.join(directory, name), 'utf8')) as Record<string, unknown>;
+      return JSON.parse(await fsp.readFile(path.join(directory, name), 'utf8')) as Record<string, unknown>;
     } catch {
-      return;
+      return null;
+    }
+  }));
+
+  const processes: ClaudeProcess[] = [];
+  let windowsPids: Set<number> | null | undefined;
+  for (const record of records) {
+    if (!record) {
+      continue;
     }
     const providerSessionId = typeof record.sessionId === 'string' ? record.sessionId : '';
     const activity = readActivity(record.status);
     const pid = typeof record.pid === 'number' ? record.pid : 0;
     if (!providerSessionId || !activity || pid <= 0) {
-      return;
+      continue;
     }
-    const probeablePid = !(typeof record.pidDomain === 'string' && record.pidDomain.startsWith('win32:')) || process.platform === 'win32';
-    if (probeablePid && !processExists(pid)) {
-      return;
+    const windowsPid = typeof record.pidDomain === 'string' && record.pidDomain.startsWith('win32:') && process.platform !== 'win32';
+    if (windowsPid) {
+      windowsPids ??= await readWindowsClaudePids();
+      if (windowsPids && !windowsPids.has(pid)) {
+        continue;
+      }
+    } else if (!processExists(pid)) {
+      continue;
     }
-    const updatedAt = typeof record.updatedAt === 'number' ? record.updatedAt : 0;
-    const startedAt = typeof record.startedAt === 'number' ? record.startedAt : null;
-    const existing = statuses.get(providerSessionId);
-    if (!existing || existing.updatedAt < updatedAt) {
-      statuses.set(providerSessionId, { providerSessionId, activity, pid, probeablePid, updatedAt, startedAt });
-    }
-  }));
+    processes.push({
+      providerSessionId,
+      activity,
+      pid,
+      windowsPid,
+      cwd: typeof record.cwd === 'string' ? record.cwd : null,
+      updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : 0,
+      startedAt: typeof record.startedAt === 'number' ? record.startedAt : null,
+    });
+  }
+  return processes;
+}
+
+/** Live Claude processes grouped by session id; the most recently updated process represents the session. */
+export async function readClaudeStatuses(config: AgentConfig = getAgentConfig()): Promise<Map<string, ClaudeStatus>> {
+  const statuses = new Map<string, ClaudeStatus>();
+  for (const claude of await readClaudeProcesses(config)) {
+    const existing = statuses.get(claude.providerSessionId);
+    const processCount = (existing?.processCount ?? 0) + 1;
+    statuses.set(
+      claude.providerSessionId,
+      !existing || existing.updatedAt < claude.updatedAt ? { ...claude, processCount } : { ...existing, processCount },
+    );
+  }
   lastStatuses = statuses;
   return statuses;
 }

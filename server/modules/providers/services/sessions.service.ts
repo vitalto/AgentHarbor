@@ -138,6 +138,22 @@ function resolveProjectDisplayName(
   return path.basename(projectPath) || projectPath;
 }
 
+/** A live Claude agent as the sidebar lists it. */
+export type LiveAgent = {
+  sessionId: string;
+  providerSessionId: string;
+  title: string | null;
+  projectPath: string | null;
+  /** tmux: fully controllable; windows/elsewhere: Claude runs in another terminal, watch-only. */
+  location: 'tmux' | 'windows' | 'elsewhere';
+  windowName: string | null;
+  pid: number | null;
+  activity: 'busy' | 'waiting' | 'idle';
+  /** More than one Claude process holds this session (they would both write its history). */
+  duplicateProcesses: boolean;
+};
+
+
 /**
  * Application service for provider-backed session message operations.
  *
@@ -187,10 +203,9 @@ export const sessionsService = {
 
     // Turns typed straight into a Claude window (phone, terminal tab) have no
     // chat run until a viewer subscribes; report them from Claude's own status files.
-    const [statuses, panes] = await Promise.all([readClaudeStatuses(), paneRegistry.refresh()]);
-    const sessionsWithWindow = new Set(panes.map((pane) => pane.providerSessionId));
+    const statuses = await readClaudeStatuses();
     for (const status of statuses.values()) {
-      if (status.activity === 'idle' || (!status.probeablePid && !sessionsWithWindow.has(status.providerSessionId))) {
+      if (status.activity === 'idle') {
         continue;
       }
       const session = sessionsDb.getSessionByProviderSessionId(status.providerSessionId);
@@ -688,28 +703,54 @@ export const sessionsService = {
   },
 
   /**
-   * Sessions that currently have a Claude window in tmux, keyed by app session
-   * id. Windows whose transcript the app has not indexed yet are skipped.
+   * Every live Claude agent: sessions with a tmux window, plus sessions whose
+   * Claude runs outside tmux (a Windows console, another terminal), which can be
+   * watched but not typed into. Sessions the app has not indexed yet are skipped.
    */
-  async listAgentWindows(): Promise<Array<{
-    sessionId: string;
-    providerSessionId: string;
-    windowName: string;
-    activity: 'busy' | 'waiting' | 'idle';
-  }>> {
+  async listAgentWindows(): Promise<LiveAgent[]> {
     const [panes, statuses] = await Promise.all([paneRegistry.refresh(), readClaudeStatuses()]);
-    return panes.flatMap((pane) => {
-      const session = pane.providerSessionId ? sessionsDb.getSessionByProviderSessionId(pane.providerSessionId) : null;
-      if (!session || !pane.providerSessionId) {
-        return [];
+    const describe = (providerSessionId: string) => {
+      const session = sessionsDb.getSessionByProviderSessionId(providerSessionId);
+      return session
+        ? { sessionId: session.session_id, title: session.custom_name, projectPath: session.project_path }
+        : null;
+    };
+
+    const agents: LiveAgent[] = [];
+    const sessionsInTmux = new Set<string>();
+    for (const pane of panes) {
+      const known = pane.providerSessionId ? describe(pane.providerSessionId) : null;
+      if (!known || !pane.providerSessionId) {
+        continue;
       }
-      return [{
-        sessionId: session.session_id,
+      sessionsInTmux.add(pane.providerSessionId);
+      const status = statuses.get(pane.providerSessionId);
+      agents.push({
+        ...known,
         providerSessionId: pane.providerSessionId,
+        location: 'tmux',
         windowName: pane.pane.windowName,
-        activity: statuses.get(pane.providerSessionId)?.activity ?? 'idle',
-      }];
-    });
+        pid: null,
+        activity: status?.activity ?? 'idle',
+        duplicateProcesses: (status?.processCount ?? 1) > 1,
+      });
+    }
+    for (const status of statuses.values()) {
+      const known = sessionsInTmux.has(status.providerSessionId) ? null : describe(status.providerSessionId);
+      if (!known) {
+        continue;
+      }
+      agents.push({
+        ...known,
+        providerSessionId: status.providerSessionId,
+        location: status.windowsPid ? 'windows' : 'elsewhere',
+        windowName: null,
+        pid: status.pid,
+        activity: status.activity,
+        duplicateProcesses: status.processCount > 1,
+      });
+    }
+    return agents;
   },
 
   /** Starts (or finds) the session's Claude window: `claude --resume` in its project directory. */

@@ -171,7 +171,9 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
       emitPrompt(watch, parseTuiPrompt(await deps.tmux.capturePane(startingPaneId).catch(() => [])));
       return;
     }
-    const activity = pane ? statuses.get(providerSessionId)?.activity ?? 'idle' : null;
+    // A session open outside tmux (e.g. a Windows console) is mirrored read-only from its status file and transcript.
+    const runsElsewhere = !pane && statuses.has(providerSessionId);
+    const activity = pane || runsElsewhere ? statuses.get(providerSessionId)?.activity ?? 'idle' : null;
     const active = activity === 'busy' || activity === 'waiting';
 
     if (active && !deps.runs.isProcessing(watch.appSessionId)) {
@@ -200,7 +202,7 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
     if (!watch.turn) {
       return;
     }
-    if (!pane) {
+    if (!pane && !runsElsewhere) {
       broadcast(watch, { kind: 'error', content: 'The Claude window for this session closed.' });
       finishTurn(watch, 1);
       return;

@@ -33,6 +33,8 @@ async function harness() {
   const state = {
     activity: 'idle' as ClaudeActivity,
     paneAlive: true,
+    /** Claude still runs for the session but outside tmux (e.g. a Windows console). */
+    runsElsewhere: false,
     screen: fixture('idle-input'),
     clock: 1_000_000,
     sentKeys: [] as string[][],
@@ -57,11 +59,13 @@ async function harness() {
   const monitor = createSessionMonitor({
     tmux,
     registry,
-    readStatuses: async () => new Map<string, ClaudeStatus>([['p1', {
-      providerSessionId: 'p1', activity: state.activity, pid: 1, probeablePid: false, updatedAt: 0, startedAt: null,
-    }]]),
+    readStatuses: async () => (state.paneAlive || state.runsElsewhere
+      ? new Map<string, ClaudeStatus>([['p1', {
+        providerSessionId: 'p1', activity: state.activity, pid: 1, windowsPid: state.runsElsewhere, cwd: null, updatedAt: 0, startedAt: null, processCount: 1,
+      }]])
+      : new Map<string, ClaudeStatus>()),
     resolveProviderSessionId: () => 'p1',
-    resolveTranscriptPath: () => null,
+    resolveTranscriptPath: () => transcriptPath,
     normalize: (row) => [{ kind: 'text', content: (row as { text: string }).text }],
     runs: {
       isProcessing: () => state.running,
@@ -201,6 +205,28 @@ test('a window still starting up has its menus surfaced and answered before it r
 
   assert.equal(await monitor.chooseOption('app1', 1), true);
   assert.deepEqual(state.sentKeys.at(-1), ['Down', 'Enter']);
+});
+
+test('a session running outside tmux is mirrored read-only and its turns complete', async (t) => {
+  const { monitor, state, append, cleanup } = await harness();
+  t.after(cleanup);
+  state.paneAlive = false;
+  state.runsElsewhere = true;
+  const socket = new FakeSocket();
+  monitor.watch('app1', socket);
+  await monitor.tick();
+
+  state.activity = 'busy';
+  await append('typed in the Windows console');
+  await monitor.tick();
+  assert.equal(state.running, true);
+  assert.deepEqual(state.written, [{ kind: 'text', content: 'typed in the Windows console' }]);
+  assert.ok(!socket.kinds().includes('error'), 'no "window closed" error for a session that runs elsewhere');
+
+  state.activity = 'idle';
+  await monitor.tick();
+  await monitor.tick();
+  assert.deepEqual(state.completed, [0]);
 });
 
 test('screenTail keeps what is printed above the input box', () => {
