@@ -222,8 +222,10 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
     }
     const pane = panesBySession.get(providerSessionId);
     const startingPaneId = startingPanes.get(watch.appSessionId);
-    if (!pane && startingPaneId) {
-      // Not registered yet: only menus on its screen matter, and the turn must not be failed as "window closed".
+    // Still starting (the registry may already guess its session from the newest transcript in its folder):
+    // only menus on its screen matter, e.g. the folder-trust dialog Claude shows on every start in the home
+    // directory, and the turn must not be failed as "window closed".
+    if (startingPaneId && (!pane || !pane.registered)) {
       emitPrompt(watch, parseTuiPrompt(await deps.tmux.capturePane(startingPaneId).catch(() => [])));
       return;
     }
@@ -243,7 +245,8 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
     await syncTranscript(watch, providerSessionId, pane);
     await syncSubagents(watch, providerSessionId);
 
-    if (pane && (activity === 'waiting' || watch.prompt)) {
+    // An unregistered window (started without our hook, or stuck before it fires) may sit on a dialog with no status file.
+    if (pane && (activity === 'waiting' || watch.prompt || !pane.registered)) {
       emitPrompt(watch, parseTuiPrompt(await deps.tmux.capturePane(pane.pane.paneId)));
     } else if (watch.prompt) {
       emitPrompt(watch, null);

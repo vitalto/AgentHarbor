@@ -33,6 +33,7 @@ async function harness() {
   const state = {
     activity: 'idle' as ClaudeActivity,
     paneAlive: true,
+    paneRegistered: true,
     /** Claude still runs for the session but outside tmux (e.g. a Windows console). */
     runsElsewhere: false,
     screen: fixture('idle-input'),
@@ -45,7 +46,7 @@ async function harness() {
   };
   const paneSession = (): PaneSession => ({
     pane: { windowId: '@1', windowName: 'proj', paneId: '%1', panePid: 10, cwd: '/p', dead: false, command: 'claude', currentCommand: 'init' },
-    providerSessionId: 'p1', transcriptPath, cwd: '/p', registered: true,
+    providerSessionId: 'p1', transcriptPath, cwd: '/p', registered: state.paneRegistered,
   });
   const tmux = {
     capturePane: async () => state.screen,
@@ -205,6 +206,19 @@ test('a window still starting up has its menus surfaced and answered before it r
 
   assert.equal(await monitor.chooseOption('app1', 1), true);
   assert.deepEqual(state.sentKeys.at(-1), ['Down', 'Enter']);
+});
+
+test('a starting window guessed by its folder (not yet registered) still has its trust dialog surfaced', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  const socket = new FakeSocket();
+  monitor.watch('app1', socket);
+  state.paneRegistered = false;
+  state.screen = fixture('trust-folder');
+  monitor.setStartingPane('app1', '%1');
+
+  await monitor.tick();
+  assert.deepEqual(socket.kinds(), ['tui_prompt']);
 });
 
 test('a session running outside tmux is mirrored read-only and its turns complete', async (t) => {
