@@ -450,7 +450,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async readTextFile(projectId, filePath) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = await resolveReadablePath(projectRoot, filePath);
+      const resolvedPath = await resolveReadablePath(projectRoot, dependencies.workspace.toLocalPath(filePath));
       try {
         const content = await fileSystem.readTextFile(resolvedPath);
         return { content, path: resolvedPath };
@@ -465,7 +465,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async openFile(projectId, filePath) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = await resolveReadablePath(projectRoot, filePath);
+      const resolvedPath = await resolveReadablePath(projectRoot, dependencies.workspace.toLocalPath(filePath));
       try {
         await fileSystem.access(resolvedPath);
       } catch {
@@ -480,7 +480,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async saveTextFile(projectId, filePath, content) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
+      const resolvedPath = resolvePathInsideProject(projectRoot, dependencies.workspace.toLocalPath(filePath));
       try {
         await fileSystem.writeTextFile(resolvedPath, content);
       } catch (error) {

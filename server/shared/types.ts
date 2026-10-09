@@ -1373,6 +1373,8 @@ export type FileTreeWorkspaceGateway = {
    * this.
    */
   resolveReadOnlyRootPath(candidatePath: string): Promise<string | null>;
+  /** Maps a path as Claude wrote it (`C:\…` from a Windows Claude) to one this server can open. */
+  toLocalPath(candidatePath: string): string;
 };
 
 /**

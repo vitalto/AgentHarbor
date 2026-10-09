@@ -218,7 +218,21 @@ const READ_ONLY_ROOTS = [...new Set([
   '/tmp',
   os.tmpdir(),
   path.join(getClaudeConfigDir(), 'projects'),
-])];
+  windowsClaudeTempRoot(),
+].filter((root): root is string => Boolean(root)))];
+
+/**
+ * A Windows Claude started through WSL interop keeps scratchpads and background
+ * task output in `%TEMP%\claude`, which is under its home on the Windows drive
+ * (the parent of its config directory), not in this server's `/tmp`.
+ */
+export function windowsClaudeTempRoot(env: NodeJS.ProcessEnv = process.env): string | null {
+  const configDir = env.CLAUDE_CONFIG_DIR?.trim();
+  if (!/\.exe$/i.test(env.AH_CLAUDE_CMD?.trim() ?? '') || !configDir || !path.isAbsolute(configDir)) {
+    return null;
+  }
+  return path.join(path.dirname(configDir), 'AppData', 'Local', 'Temp', 'claude');
+}
 
 /**
  * Resolves `targetPath` when it lives under one of `roots`, or `null` when it

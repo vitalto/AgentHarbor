@@ -8,6 +8,7 @@ import multer from 'multer';
 import { projectsDb } from '@/modules/database/index.js';
 import { createFileTreeRouter } from '@/modules/file-tree/file-tree.routes.js';
 import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js';
+import { toLocalPath } from '@/modules/tmux/index.js';
 import type {
   FileTreeFileSystem,
   FileTreeLogger,
@@ -74,6 +75,7 @@ const fileTreeWorkspace: FileTreeWorkspaceGateway = {
   rootPath: WORKSPACES_ROOT,
   validatePath: (candidatePath) => validateWorkspacePath(candidatePath),
   resolveReadOnlyRootPath: (candidatePath) => resolveReadOnlyRootPath(candidatePath),
+  toLocalPath: (candidatePath) => toLocalPath(candidatePath),
 };
 
 const fileTreeLogger: FileTreeLogger = {

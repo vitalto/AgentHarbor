@@ -24,7 +24,7 @@ const previousUserProfile = process.env.USERPROFILE;
 process.env.HOME = fixtureHome;
 process.env.USERPROFILE = fixtureHome;
 
-const { resolvePathUnderRoots, resolveReadOnlyRootPath, validateWorkspacePath } = await import('@/shared/utils.js');
+const { resolvePathUnderRoots, resolveReadOnlyRootPath, validateWorkspacePath, windowsClaudeTempRoot } = await import('@/shared/utils.js');
 
 after(async () => {
   if (previousHome === undefined) {
@@ -136,4 +136,13 @@ test('a root that does not exist does not stop later roots from matching', async
 
 test('traversal out of the temp directory does not resolve', async () => {
   assert.equal(await resolveReadOnlyRootPath(`${os.tmpdir()}/../etc/passwd`), null);
+});
+
+test('a Windows Claude keeps its temp directory beside its home on the Windows drive; a Linux Claude has none', () => {
+  assert.equal(
+    windowsClaudeTempRoot({ AH_CLAUDE_CMD: '/mnt/c/Users/me/.local/bin/claude.exe', CLAUDE_CONFIG_DIR: '/mnt/c/Users/me/.claude' }),
+    '/mnt/c/Users/me/AppData/Local/Temp/claude',
+  );
+  assert.equal(windowsClaudeTempRoot({ AH_CLAUDE_CMD: 'claude', CLAUDE_CONFIG_DIR: '/home/me/.claude' }), null);
+  assert.equal(windowsClaudeTempRoot({ AH_CLAUDE_CMD: '/mnt/c/Users/me/.local/bin/claude.exe' }), null);
 });

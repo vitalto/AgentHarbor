@@ -88,6 +88,7 @@ function createDependencies(
       rootPath: projectRoot,
       validatePath: async (candidatePath) => ({ valid: true, resolvedPath: candidatePath }),
       resolveReadOnlyRootPath: async () => null,
+      toLocalPath: (candidatePath) => candidatePath,
     },
     resolveMimeType: () => 'text/plain',
     fileSystemConcurrency: 4,
@@ -351,6 +352,39 @@ test('readTextFile rejects traversal before invoking the filesystem adapter', as
   assert.deepEqual(readPaths, []);
 });
 
+test('a path a Windows Claude wrote is read, streamed and saved as the server sees it', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const touchedPaths: string[] = [];
+  const fileSystem = createFakeFileSystem({
+    access: async () => undefined,
+    readTextFile: async (filePath) => {
+      touchedPaths.push(filePath);
+      return 'notes';
+    },
+    writeTextFile: async (filePath) => {
+      touchedPaths.push(filePath);
+    },
+    createReadStream: (filePath) => {
+      touchedPaths.push(filePath);
+      return Readable.from([]);
+    },
+  });
+  const dependencies = createDependencies(fileSystem, projectRoot);
+  dependencies.workspace.toLocalPath = (candidatePath) =>
+    candidatePath.replace(/^D:[\\/]project[\\/]/, `${projectRoot}/`).replace(/\\/g, '/');
+  const service = createFileTreeService(dependencies);
+
+  await service.readTextFile('project-1', 'D:\\project\\notes.md');
+  await service.openFile('project-1', 'D:/project/shot.png');
+  await service.saveTextFile('project-1', 'D:\\project\\notes.md', 'edited');
+
+  assert.deepEqual(touchedPaths, [
+    path.join(projectRoot, 'notes.md'),
+    path.join(projectRoot, 'shot.png'),
+    path.join(projectRoot, 'notes.md'),
+  ]);
+});
+
 test('readTextFile reports a directory as a client error, not a 500', async () => {
   const projectRoot = path.resolve('file-tree-test-project');
   const fileSystem = createFakeFileSystem({
@@ -431,6 +465,7 @@ function createRealFileSystemService(projectRoot: string): FileTreeServices {
       rootPath: projectRoot,
       validatePath: (candidatePath) => validateWorkspacePath(candidatePath),
       resolveReadOnlyRootPath: (candidatePath) => resolveReadOnlyRootPath(candidatePath),
+      toLocalPath: (candidatePath) => candidatePath,
     },
     resolveMimeType: () => 'text/plain',
     fileSystemConcurrency: 4,
