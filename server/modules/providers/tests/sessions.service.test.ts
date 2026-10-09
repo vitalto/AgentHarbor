@@ -382,6 +382,25 @@ test('running sessions ignore registry files a crash left behind', { concurrency
   });
 });
 
+test('a CLI session whose turn ended with only a background shell left is not running', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('shell-session', 'claude', '/tmp/running-project');
+    sessionsDb.assignProviderSessionId('shell-session', 'claude-native-shell');
+
+    // Claude writes `busy` during a foreground command and `shell` once the turn
+    // is over while a run_in_background command still runs.
+    await withClaudeCliRegistry(
+      [{ pid: process.pid, sessionId: 'claude-native-shell', status: 'shell', startedAt: 6_000 }],
+      async () => await withProviders(
+        { claude: { run: async () => undefined, abort: () => false } },
+        async () => {
+          assert.deepEqual(await sessionsService.listRunningSessions(), []);
+        },
+      ),
+    );
+  });
+});
+
 test('a CLI turn does not duplicate a session already running a chat run', { concurrency: false }, async () => {
   await withIsolatedDatabase(async () => {
     sessionsDb.createAppSession('both-session', 'claude', '/tmp/running-project');

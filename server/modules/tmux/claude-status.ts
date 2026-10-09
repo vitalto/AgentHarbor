@@ -11,7 +11,7 @@ export type ClaudeActivity = 'busy' | 'waiting' | 'idle';
 export type ClaudeProcess = {
   providerSessionId: string;
   activity: ClaudeActivity;
-  /** Claude's own word for it (busy, shell, waiting, idle…). */
+  /** Claude's own word for it (busy, waiting, idle, shell…). */
   status: string;
   /** Since when Claude has reported that status (epoch ms), if it says. */
   statusSince: number | null;
@@ -41,12 +41,21 @@ export function getLiveProcessStartTime(providerSessionId: string | null | undef
   return providerSessionId ? lastStatuses.get(providerSessionId)?.startedAt ?? null : null;
 }
 
-/** Claude writes busy, waiting, idle and more (e.g. `shell` while a command runs); anything not resting counts as busy. */
+/**
+ * Claude writes `shell` once a turn is over (even one ended by an API error)
+ * while a run_in_background command still runs — the agent itself rests; a
+ * foreground command reports `busy`. Unknown words count as busy.
+ */
+const RESTING_STATUSES = new Set(['idle', 'shell']);
+
 function readActivity(value: unknown): ClaudeActivity | null {
   if (typeof value !== 'string' || !value) {
     return null;
   }
-  return value === 'idle' || value === 'waiting' ? value : 'busy';
+  if (RESTING_STATUSES.has(value)) {
+    return 'idle';
+  }
+  return value === 'waiting' ? 'waiting' : 'busy';
 }
 
 function processExists(pid: number): boolean {
