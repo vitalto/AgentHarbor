@@ -1,12 +1,12 @@
-<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Background fills entire canvas - iOS will handle corner rounding -->
-  <rect width="512" height="512" fill="hsl(240 5.9% 10%)"/>
-  
-  <!-- MessageSquare icon - scaled and centered -->
-  <path d="M128 144C128 126.327 142.327 112 160 112H352C369.673 112 384 126.327 384 144V272C384 289.673 369.673 304 352 304H224L128 400V144Z" 
-        stroke="white" 
-        stroke-width="32" 
-        stroke-linecap="round" 
-        stroke-linejoin="round" 
-        fill="none"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 64 64">
+  <rect width="64" height="64" fill="#0f2b46"/>
+  <g transform="translate(32 32) scale(0.72) translate(-32 -32)">
+  <g fill="none" stroke="#ffb938" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 20.5 L22.5 29 L12 37.5"/>
+    <circle cx="42" cy="13.5" r="5"/>
+    <path d="M42 18.5 V50.5"/>
+    <path d="M34.5 26 H49.5"/>
+    <path d="M28 40.5 Q29.5 50.5 42 50.5 Q54.5 50.5 56 40.5"/>
+  </g>
+  </g>
 </svg>
