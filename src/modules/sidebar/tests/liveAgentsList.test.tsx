@@ -6,6 +6,9 @@ import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { test, vi } from 'vitest';
 
 import { AgentMoveError, type AgentWindow } from '@/shared/hooks/useAgentWindows';
+import type * as AgentWindowsModuleNamespace from '@/shared/hooks/useAgentWindows';
+
+type AgentWindowsModule = typeof AgentWindowsModuleNamespace;
 
 const agents: AgentWindow[] = [
   {
@@ -21,7 +24,7 @@ const agents: AgentWindow[] = [
 const closeWindow = vi.fn<(sessionId: string, options: { force?: boolean }) => Promise<void>>();
 
 vi.mock('@/shared/hooks/useAgentWindows', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/shared/hooks/useAgentWindows')>()),
+  ...(await importOriginal<AgentWindowsModule>()),
   useAgentWindows: () => ({ windows: agents, findWindow: () => null, closeWindow }),
 }));
 

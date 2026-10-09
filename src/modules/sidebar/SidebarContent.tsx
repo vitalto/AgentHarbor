@@ -10,6 +10,7 @@ import SidebarFooter from '@/modules/sidebar/SidebarFooter';
 import SidebarHeader from '@/modules/sidebar/SidebarHeader';
 import SidebarProjectList from '@/modules/sidebar/SidebarProjectList';
 import SidebarRecentConversations from '@/modules/sidebar/SidebarRecentConversations';
+import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 
 function HighlightedSnippet({ snippet, highlights }: { snippet: string; highlights: { start: number; end: number }[] }) {
   const parts: ReactNode[] = [];
@@ -177,6 +178,9 @@ export default function SidebarContent({
   t,
 }: SidebarContentProps) {
   const showConversationSearch = searchMode === 'conversations' && searchFilter.trim().length >= 2;
+  // The Running tab lists live agents too, so its badge counts them (an idle tmux agent is not "processing").
+  const { windows: liveAgents } = useAgentWindows();
+  const runningTabCount = Math.max(runningSessionsCount, liveAgents.length);
   const hasSearchResults = Boolean(
     conversationResults
     && (conversationResults.titleResults.length > 0 || conversationResults.results.length > 0),
@@ -195,7 +199,7 @@ export default function SidebarContent({
         isMobile={isMobile}
         isLoading={isLoading}
         projectsCount={projects.length}
-        runningSessionsCount={runningSessionsCount}
+        runningSessionsCount={runningTabCount}
         archivedSessionsCount={archivedSessionsCount}
         isArchivedSessionsLoading={isArchivedSessionsLoading}
         searchFilter={searchFilter}
@@ -211,7 +215,6 @@ export default function SidebarContent({
       />
 
       <ScrollArea className="flex-1 overflow-y-auto overscroll-contain md:px-1.5 md:py-2">
-        {!showConversationSearch && <LiveAgentsList />}
         {showConversationSearch ? (
           isSearching && !conversationResults ? (
             <div className="px-4 py-12 text-center md:py-8">
@@ -394,7 +397,9 @@ export default function SidebarContent({
             t={t}
           />
         ) : searchMode === 'running' ? (
-          projectListProps.filteredProjects.length === 0 ? (
+          <>
+          <LiveAgentsList />
+          {projectListProps.filteredProjects.length === 0 ? (
             <div className="px-4 py-12 text-center md:py-8">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-border/70 bg-muted/50 md:mb-3">
                 <Activity className="h-6 w-6 text-muted-foreground" />
@@ -425,7 +430,8 @@ export default function SidebarContent({
               </div>
               <SidebarProjectList {...projectListProps} />
             </div>
-          )
+          )}
+          </>
         ) : searchMode === 'archived' ? (
           isArchivedSessionsLoading ? (
             <div className="space-y-2 px-2 py-1" aria-live="polite" aria-busy="true">
