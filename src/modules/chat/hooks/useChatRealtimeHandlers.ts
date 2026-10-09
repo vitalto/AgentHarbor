@@ -226,6 +226,8 @@ export function useChatRealtimeHandlers({
           return;
         }
 
+        case 'subagents_updated':
+          // A subagent of this session wrote to its own transcript; reload so its tool card shows the new steps.
         case 'transcript_reset':
           // The transcript was rewritten under the live tail (e.g. compaction); reload it.
           if (sid && sid === activeViewSessionId) {

@@ -1,3 +1,7 @@
+import type { Dirent } from 'node:fs';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+
 import { readClaudeStatuses, type ClaudeStatus } from '@/modules/tmux/claude-status.js';
 import { paneRegistry, type PaneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { tmuxService, type TmuxService } from '@/modules/tmux/tmux.service.js';
@@ -45,6 +49,9 @@ type Watch = {
   promptKey: string | null;
   screenKey: string | null;
   lastScreenAt: number;
+  subagentsCheckedAt: number;
+  /** Newest write time among the session's subagent transcripts, as last seen. */
+  subagentsWrittenAt: number | null;
   turn: { startedAt: number; sawActivity: boolean; idleTicks: number } | null;
   turnWaiters: Array<(exitCode: number) => void>;
 };
@@ -52,9 +59,35 @@ type Watch = {
 const OPEN_STATE = 1;
 const TICK_MS = 750;
 const SCREEN_INTERVAL_MS = 1200;
+/** Subagent folders can hold dozens of large transcripts on a slow mount; look at them only this often. */
+const SUBAGENTS_CHECK_MS = 3000;
 const SCREEN_TAIL_LINES = 14;
 /** A turn the web just sent that never turned busy (e.g. a slash command) is over after this long. */
 const TURN_START_GRACE_MS = 20_000;
+
+/** Latest mtime of the .jsonl files in a directory tree (workflows nest one level deeper), or null if it does not exist. */
+async function newestWriteUnder(directory: string, depth = 0): Promise<number | null> {
+  let entries: Dirent[];
+  try {
+    entries = await fsp.readdir(directory, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  let newest: number | null = null;
+  for (const entry of entries) {
+    const entryPath = path.join(directory, entry.name);
+    let candidate: number | null = null;
+    if (entry.isDirectory() && depth < 3) {
+      candidate = await newestWriteUnder(entryPath, depth + 1);
+    } else if (entry.name.endsWith('.jsonl')) {
+      candidate = (await fsp.stat(entryPath).catch(() => null))?.mtimeMs ?? null;
+    }
+    if (candidate !== null && (newest === null || candidate > newest)) {
+      newest = candidate;
+    }
+  }
+  return newest;
+}
 
 function sendJson(socket: MonitorSocket, payload: unknown): void {
   if (socket.readyState === OPEN_STATE) {
@@ -89,7 +122,7 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
     if (!watch) {
       watch = {
         appSessionId, sockets: new Set(), tail: null, tailPath: null, prompt: null, promptKey: null,
-        screenKey: null, lastScreenAt: 0, turn: null, turnWaiters: [],
+        screenKey: null, lastScreenAt: 0, subagentsCheckedAt: 0, subagentsWrittenAt: null, turn: null, turnWaiters: [],
       };
       watches.set(appSessionId, watch);
     }
@@ -159,6 +192,29 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
     }
   }
 
+/**
+   * Subagents (Agent tool, workflows) write their own transcripts under
+   * `<session>/subagents/`, often long after the main turn ended (background
+   * agents). The live tail sees only the main transcript, so a change there is
+   * announced and the viewer re-reads the history, which attaches subagent
+   * timelines to their tool cards.
+   */
+  async function syncSubagents(watch: Watch, providerSessionId: string): Promise<void> {
+    if (!watch.tailPath || now() - watch.subagentsCheckedAt < SUBAGENTS_CHECK_MS) {
+      return;
+    }
+    watch.subagentsCheckedAt = now();
+    const writtenAt = await newestWriteUnder(path.join(path.dirname(watch.tailPath), providerSessionId, 'subagents'));
+    if (writtenAt === null) {
+      return;
+    }
+    const previous = watch.subagentsWrittenAt;
+    watch.subagentsWrittenAt = writtenAt;
+    if (previous !== null && writtenAt > previous) {
+      broadcast(watch, { kind: 'subagents_updated' });
+    }
+  }
+
   async function tickWatch(watch: Watch, panesBySession: Map<string, PaneSession>, statuses: Map<string, ClaudeStatus>) {
     const providerSessionId = deps.resolveProviderSessionId(watch.appSessionId);
     if (!providerSessionId) {
@@ -185,6 +241,7 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
     }
 
     await syncTranscript(watch, providerSessionId, pane);
+    await syncSubagents(watch, providerSessionId);
 
     if (pane && (activity === 'waiting' || watch.prompt)) {
       emitPrompt(watch, parseTuiPrompt(await deps.tmux.capturePane(pane.pane.paneId)));

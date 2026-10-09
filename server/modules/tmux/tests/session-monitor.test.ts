@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFile, mkdtemp, readFileSync, rm, writeFile } from 'node:fs';
+import { appendFile, mkdirSync, mkdtemp, readFileSync, rm, utimesSync, writeFile, writeFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import os from 'node:os';
 import path from 'node:path';
@@ -86,7 +86,7 @@ async function harness() {
     now: () => state.clock,
   });
   const append = (text: string) => promisify(appendFile)(transcriptPath, `${JSON.stringify({ text })}\n`);
-  return { monitor, state, append, cleanup: () => promisify(rm)(directory, { recursive: true, force: true }) };
+  return { monitor, state, append, directory, cleanup: () => promisify(rm)(directory, { recursive: true, force: true }) };
 }
 
 test('activity typed in the terminal becomes a run that streams rows and completes on idle', async (t) => {
@@ -233,4 +233,27 @@ test('screenTail keeps what is printed above the input box', () => {
   const tail = screenTail(fixture('streaming'));
   assert.equal(tail.at(-1), '* Kneading… (3s · thinking with high effort)');
   assert.ok(!tail.some((line) => line.includes('manual mode on')));
+});
+
+test('writes by a subagent are announced so the viewer reloads its timeline', async (t) => {
+  const { monitor, state, directory, cleanup } = await harness();
+  t.after(cleanup);
+  const subagents = path.join(directory, 'p1', 'subagents');
+  mkdirSync(subagents, { recursive: true });
+  const agentTranscript = path.join(subagents, 'agent-a1.jsonl');
+  writeFileSync(agentTranscript, '{}\n');
+  utimesSync(agentTranscript, new Date(1_000_000), new Date(1_000_000));
+
+  const socket = new FakeSocket();
+  monitor.watch('app1', socket);
+  await monitor.tick();
+  assert.ok(!socket.kinds().includes('subagents_updated'), 'the first look only takes a baseline');
+
+  utimesSync(agentTranscript, new Date(2_000_000), new Date(2_000_000));
+  await monitor.tick();
+  assert.ok(!socket.kinds().includes('subagents_updated'), 'checked at most every few seconds');
+
+  state.clock += 3500;
+  await monitor.tick();
+  assert.deepEqual(socket.kinds().filter((kind) => kind === 'subagents_updated'), ['subagents_updated']);
 });
