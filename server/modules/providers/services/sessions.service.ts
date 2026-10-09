@@ -5,7 +5,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
+import { AgentWindowError, ensureAgentWindow, paneRegistry, readClaudeStatuses } from '@/modules/tmux/index.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   BackgroundTaskSummary,
@@ -185,12 +185,15 @@ export const sessionsService = {
       }
     }
 
-    // The chat-run registry only knows about turns CloudCLI drives itself, so
-    // without this a session working under the Claude CLI — including one
-    // CloudCLI spawned for its own Shell view — looks idle. A session already
-    // listed above keeps its richer entry.
-    for (const live of await listBusyClaudeCliSessions()) {
-      const session = sessionsDb.getSessionByProviderSessionId(live.providerSessionId);
+    // Turns typed straight into a Claude window (phone, terminal tab) have no
+    // chat run until a viewer subscribes; report them from Claude's own status files.
+    const [statuses, panes] = await Promise.all([readClaudeStatuses(), paneRegistry.refresh()]);
+    const sessionsWithWindow = new Set(panes.map((pane) => pane.providerSessionId));
+    for (const status of statuses.values()) {
+      if (status.activity === 'idle' || (!status.probeablePid && !sessionsWithWindow.has(status.providerSessionId))) {
+        continue;
+      }
+      const session = sessionsDb.getSessionByProviderSessionId(status.providerSessionId);
       if (!session || runningById.has(session.session_id)) {
         continue;
       }
@@ -198,12 +201,10 @@ export const sessionsService = {
       entries.push({
         sessionId: session.session_id,
         provider: session.provider as LLMProvider,
-        startedAt: live.startedAt,
+        startedAt: status.startedAt ?? status.updatedAt,
         lastSeq: chatRunRegistry.getRun(session.session_id)?.lastSeq ?? 0,
-        // There is no run here to abort: the turn belongs to a CLI process
-        // CloudCLI does not own, so it can be reported but not interrupted.
         canInterrupt: false,
-        statusText: 'Running in the Claude CLI',
+        statusText: status.activity === 'waiting' ? 'Waiting for your answer' : 'Working in the terminal',
       });
       runningById.set(session.session_id, entries[entries.length - 1]);
     }
@@ -684,6 +685,44 @@ export const sessionsService = {
       action: 'deleted',
       deletedFromDisk: removedFromDisk,
     };
+  },
+
+  /**
+   * Sessions that currently have a Claude window in tmux, keyed by app session
+   * id. Windows whose transcript the app has not indexed yet are skipped.
+   */
+  async listAgentWindows(): Promise<Array<{
+    sessionId: string;
+    providerSessionId: string;
+    windowName: string;
+    activity: 'busy' | 'waiting' | 'idle';
+  }>> {
+    const [panes, statuses] = await Promise.all([paneRegistry.refresh(), readClaudeStatuses()]);
+    return panes.flatMap((pane) => {
+      const session = pane.providerSessionId ? sessionsDb.getSessionByProviderSessionId(pane.providerSessionId) : null;
+      if (!session || !pane.providerSessionId) {
+        return [];
+      }
+      return [{
+        sessionId: session.session_id,
+        providerSessionId: pane.providerSessionId,
+        windowName: pane.pane.windowName,
+        activity: statuses.get(pane.providerSessionId)?.activity ?? 'idle',
+      }];
+    });
+  },
+
+  /** Starts (or finds) the session's Claude window: `claude --resume` in its project directory. */
+  async openAgentWindow(sessionId: string): Promise<{ sessionId: string; windowName: string }> {
+    try {
+      const pane = await ensureAgentWindow(sessionId);
+      return { sessionId, windowName: pane.pane.windowName };
+    } catch (error) {
+      if (error instanceof AgentWindowError) {
+        throw new AppError(error.message, { code: 'AGENT_WINDOW_FAILED', statusCode: 409 });
+      }
+      throw error;
+    }
   },
 
   /**

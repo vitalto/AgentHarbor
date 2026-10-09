@@ -9,6 +9,7 @@ import { providerTokenUsageService } from '@/modules/providers/services/provider
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { closeAgentWindow } from '@/modules/tmux/index.js';
 import type {
   CustomProviderModelEffort,
   CustomProviderModelInput,
@@ -919,6 +920,30 @@ router.post(
     const sessionId = parseSessionId(req.params.sessionId);
     const result = sessionsService.restoreSessionById(sessionId);
     res.json(createApiSuccessResponse(result));
+  }),
+);
+
+/** Which sessions have a live Claude window right now, and what each is doing. */
+router.get(
+  '/agents/windows',
+  asyncHandler(async (_req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(await sessionsService.listAgentWindows()));
+  }),
+);
+
+router.post(
+  '/sessions/:sessionId/window',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    res.status(201).json(createApiSuccessResponse(await sessionsService.openAgentWindow(sessionId)));
+  }),
+);
+
+router.delete(
+  '/sessions/:sessionId/window',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    res.json(createApiSuccessResponse({ closed: await closeAgentWindow(sessionId) }));
   }),
 );
 

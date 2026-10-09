@@ -14,7 +14,15 @@ import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
     providerRuntimeService,
+    sessionsService,
 } from '@/modules/providers/index.js';
+import {
+    configureSessionMonitor,
+    findAgentWindow,
+    getAgentConfig,
+    typeIntoAgent,
+    writeHookSettings,
+} from '@/modules/tmux/index.js';
 import { chatRunRegistry, createWebSocketServer } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
@@ -74,6 +82,29 @@ const app = express();
 const server = http.createServer(app);
 const gitRoutes = createGitModule();
 
+// Every Claude session is a TUI in a tmux window; the monitor mirrors its
+// activity (from whichever terminal it was typed in) into chat runs.
+const sessionMonitor = configureSessionMonitor({
+    resolveProviderSessionId: (appSessionId) => sessionsDb.getSessionById(appSessionId)?.provider_session_id ?? null,
+    resolveTranscriptPath: (appSessionId) => sessionsDb.getSessionById(appSessionId)?.jsonl_path ?? null,
+    normalize: (row, providerSessionId) => sessionsService.normalizeMessage('claude', row, providerSessionId),
+    runs: {
+        isProcessing: (appSessionId) => chatRunRegistry.isProcessing(appSessionId),
+        startRun: (appSessionId, providerSessionId) => chatRunRegistry.startRun({
+            appSessionId,
+            provider: 'claude',
+            providerSessionId,
+            connection: null,
+            userId: null,
+        })?.writer ?? null,
+        getWriter: (appSessionId) => (chatRunRegistry.isProcessing(appSessionId) ? chatRunRegistry.getRun(appSessionId)?.writer ?? null : null),
+        attach: (appSessionId, socket) => void chatRunRegistry.attachConnection(appSessionId, socket),
+        complete: (appSessionId, exitCode) => chatRunRegistry.completeRun(appSessionId, { exitCode }),
+    },
+});
+writeHookSettings(getAgentConfig());
+sessionMonitor.start();
+
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
 // A completed run stays subscribable while its session's background work
 // (agents, workflows, backgrounded commands) is still reporting through it.
@@ -86,6 +117,20 @@ createWebSocketServer(server, {
     },
     chat: {
         runtime: providerRuntimeService,
+        terminal: {
+            watch: (sessionId, socket) => sessionMonitor.watch(sessionId, socket),
+            unwatchSocket: (socket) => sessionMonitor.unwatchSocket(socket),
+            chooseOption: (sessionId, optionIndex) => sessionMonitor.chooseOption(sessionId, optionIndex),
+            sendKeys: (sessionId, keys) => sessionMonitor.sendKeys(sessionId, keys),
+            typeWhileBusy: async (sessionId, text) => {
+                const pane = await findAgentWindow(sessionId);
+                if (!pane) {
+                    return false;
+                }
+                await typeIntoAgent(pane.pane.paneId, text);
+                return true;
+            },
+        },
     },
     shell: {
         resolveProviderSessionId: (sessionId, provider) => {
@@ -303,7 +348,7 @@ async function startServer() {
         const isProduction = fs.existsSync(distIndexPath);
 
         // Log Claude implementation mode
-        console.log(`${terminalTextStyles.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
+        console.log(`${terminalTextStyles.info('[INFO]')} Claude sessions run in tmux session "${getAgentConfig().tmuxSession}" (${getAgentConfig().claudeCommand})`);
         console.log('');
 
         if (isProduction) {

@@ -27,14 +27,7 @@ export function readAgentConfig(env: NodeJS.ProcessEnv = process.env): AgentConf
   };
 }
 
-let cachedConfig: AgentConfig | null = null;
-
+/** Read on every call (it is cheap) so env and home-directory overrides in tests apply. */
 export function getAgentConfig(): AgentConfig {
-  cachedConfig ??= readAgentConfig();
-  return cachedConfig;
-}
-
-/** Tests swap the process-wide config; passing null restores env-derived defaults. */
-export function setAgentConfigForTests(config: AgentConfig | null): void {
-  cachedConfig = config;
+  return readAgentConfig();
 }

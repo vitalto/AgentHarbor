@@ -80,9 +80,20 @@ export type ProviderRuntimeGateway = {
   getPendingApprovalsForSession(sessionId: string): unknown[];
 };
 
+/** The live Claude windows behind sessions (tmux), as the chat gateway needs them. */
+export type TerminalGateway = {
+  watch(sessionId: string, socket: WebSocket): void;
+  unwatchSocket(socket: WebSocket): void;
+  chooseOption(sessionId: string, optionIndex: number): Promise<boolean>;
+  sendKeys(sessionId: string, keys: string[]): Promise<boolean>;
+  /** Types into the session's window while Claude is busy (the TUI queues it); false when there is no window. */
+  typeWhileBusy(sessionId: string, text: string): Promise<boolean>;
+};
+
 type ChatWebSocketDependencies = {
   /** Central dispatcher for every provider SDK/CLI runtime. */
   runtime: ProviderRuntimeGateway;
+  terminal?: TerminalGateway;
 };
 
 /**
@@ -155,6 +166,14 @@ async function handleChatSend(
   const resolved = resolveSendTarget(ws, data, dependencies, 'chat.send');
   if (!resolved) {
     return;
+  }
+
+  if (chatRunRegistry.isProcessing(resolved.sessionId)) {
+    // Claude's TUI queues input typed while it works, so a busy session takes the message too.
+    const content = typeof data.content === 'string' ? data.content : '';
+    if (await dependencies.terminal?.typeWhileBusy(resolved.sessionId, content)) {
+      return;
+    }
   }
 
   await dispatchRun(ws, userId, resolved.sessionId, resolved.session, data, dependencies);
@@ -305,80 +324,33 @@ async function dispatchRun(
   return { started: true, error: failure };
 }
 
+const TUI_KEYS = new Set(['Escape', 'Enter', 'Up', 'Down', 'BTab', 'C-c', 'Tab']);
+
 /**
- * Handles `chat.edit-send`: replaces an already-sent message and everything
- * after it with a new turn.
- *
- * Nothing is deleted. The provider resumes the conversation partway and
- * appends the replacement, so the abandoned attempt stays in the transcript
- * file and is simply no longer part of the live conversation — the same shape
- * Claude Code's rewind produces.
+ * Handles `chat.tui-keys`: answers a menu the Claude TUI shows (`optionIndex`)
+ * or presses raw keys in the session's window (`keys`, whitelisted).
  */
-async function handleChatEditSend(
-  ws: WebSocket,
-  userId: string | number | null,
-  data: AnyRecord,
-  dependencies: ChatWebSocketDependencies
-): Promise<void> {
-  const resolved = resolveSendTarget(ws, data, dependencies, 'chat.edit-send');
-  if (!resolved) {
+async function handleTuiKeys(ws: WebSocket, data: AnyRecord, dependencies: ChatWebSocketDependencies): Promise<void> {
+  const sessionId = readRequiredSessionId(data);
+  if (!sessionId) {
+    sendProtocolError(ws, 'SESSION_ID_REQUIRED', 'chat.tui-keys requires a sessionId.');
     return;
   }
 
-  const { sessionId, session, provider } = resolved;
-  const anchorId = typeof data.anchorId === 'string' ? data.anchorId.trim() : '';
-  if (!anchorId) {
-    sendProtocolError(ws, 'ANCHOR_REQUIRED', 'chat.edit-send requires the anchorId of the message being replaced.', sessionId);
+  const terminal = dependencies.terminal;
+  if (!terminal) {
+    sendProtocolError(ws, 'TUI_NOT_AVAILABLE', 'No terminal backend is configured.', sessionId);
     return;
   }
-
-  let resumeThroughId: string | null;
-  try {
-    const anchor = await sessionsService.resolveEditAnchor(sessionId, anchorId);
-    if (!anchor) {
-      sendProtocolError(
-        ws,
-        'EDIT_NOT_SUPPORTED',
-        `Provider "${provider}" cannot replace an already-sent message.`,
-        sessionId
-      );
-      return;
-    }
-    if (!anchor.found) {
-      sendProtocolError(ws, 'ANCHOR_NOT_FOUND', 'That message is no longer in the transcript.', sessionId);
-      return;
-    }
-    resumeThroughId = anchor.resumeThroughId;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    sendProtocolError(ws, 'ANCHOR_LOOKUP_FAILED', `Could not read the transcript: ${message}`, sessionId);
-    return;
+  const delivered = typeof data.optionIndex === 'number'
+    ? await terminal.chooseOption(sessionId, data.optionIndex)
+    : await terminal.sendKeys(
+      sessionId,
+      (Array.isArray(data.keys) ? data.keys : []).filter((key: unknown): key is string => typeof key === 'string' && TUI_KEYS.has(key)),
+    );
+  if (!delivered) {
+    sendProtocolError(ws, 'TUI_NOT_AVAILABLE', 'The session has no live Claude window or the menu is gone.', sessionId);
   }
-
-  // Claude resumes its transcript partway, so the anchor rides along as a
-  // run option.
-  await dispatchRun(
-    ws,
-    userId,
-    sessionId,
-    session,
-    data,
-    dependencies,
-    // `null` is meaningful: the edited turn was the first prompt, so the
-    // conversation starts over instead of resuming.
-    { resumeAnchorId: resumeThroughId ?? undefined, resumeFromScratch: resumeThroughId === null },
-    (run) => {
-      // Emitted through the run's writer so it is sequenced and replayed like
-      // any other event — a second tab watching this session has to truncate
-      // too.
-      run.writer.send({
-        kind: 'history_truncated',
-        provider,
-        sessionId,
-        anchorId,
-      });
-    },
-  );
 }
 
 /**
@@ -489,6 +461,9 @@ function handleChatSubscribe(
       ? Math.max(0, Math.floor(lastSeqRaw))
       : 0;
 
+    // Live tmux session: stream what Claude does there (even when typed elsewhere) to this socket.
+    dependencies.terminal?.watch(sessionId, ws);
+
     const run = chatRunRegistry.getRun(sessionId);
     const isProcessing = chatRunRegistry.isProcessing(sessionId);
 
@@ -550,6 +525,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  *
  * Inbound protocol (client to server):
  * - `chat.send`                { sessionId, content, options? }
+ * - `chat.tui-keys`            { sessionId, optionIndex } | { sessionId, keys: string[] }
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId }
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
@@ -581,8 +557,8 @@ export function handleChatConnection(
       const messageType = typeof data.type === 'string' ? data.type : '';
 
       switch (messageType) {
-        case 'chat.edit-send':
-          await handleChatEditSend(ws, userId, data, dependencies);
+        case 'chat.tui-keys':
+          await handleTuiKeys(ws, data, dependencies);
           return;
         case 'chat.send':
           await handleChatSend(ws, userId, data, dependencies);
@@ -613,5 +589,6 @@ export function handleChatConnection(
   ws.on('close', () => {
     console.log('[INFO] Chat client disconnected');
     connectedClients.delete(ws);
+    dependencies.terminal?.unwatchSocket(ws);
   });
 }
