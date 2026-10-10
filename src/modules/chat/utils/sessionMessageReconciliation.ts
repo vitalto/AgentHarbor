@@ -10,10 +10,19 @@ type UserTurnFingerprint = {
   fileCount: number;
 };
 
+/**
+ * The Claude TUI does not record a prompt verbatim: it drops invisible format
+ * characters (the LRM/FSI/PDI Telegram puts around quoted names) and expands
+ * tabs, so the echo is compared on visible characters only.
+ */
+function visibleCharacters(text: string): string {
+  return text.replace(/[\p{Cf}\s]+/gu, '');
+}
+
 function userTurnFingerprint(message: NormalizedMessage): UserTurnFingerprint | null {
   if (message.kind !== 'text' || message.role !== 'user') return null;
 
-  const text = (message.content || '').trim();
+  const text = visibleCharacters(message.content || '');
   const imageCount = Array.isArray(message.images) ? message.images.length : 0;
   const fileCount = Array.isArray(message.files) ? message.files.length : 0;
   if (!text && imageCount === 0 && fileCount === 0) return null;

@@ -70,6 +70,28 @@ test('keeps the existing optimistic text reconciliation behavior', () => {
   assert.deepEqual(removeOptimisticUserEchoes([persisted], [local]), []);
 });
 
+test('an echo matches the copy the Claude TUI rewrote: invisible bidi marks dropped, tabs expanded', () => {
+  // Telegram wraps quoted names in LRM/FSI/PDI; the TUI strips them and turns
+  // a tab into spaces, so the transcript never repeats the typed text exactly.
+  const local = createUserMessage('local_text', '2026-10-10T09:09:52.000Z', {
+    content: '> \u200e\u2068Добрый день\u2069\nцена:\t100',
+    images: [{ path: 'C:/Users/test/.agentharbor/assets/image.png' }],
+  });
+  const persisted = createUserMessage('claude_text', '2026-10-10T09:09:58.000Z', {
+    content: '> Добрый день\nцена:    100',
+    images: [{ data: 'data:image/png;base64,AAAA' }],
+  });
+
+  assert.deepEqual(removeOptimisticUserEchoes([persisted], [local]), []);
+});
+
+test('an echo is not retired by a turn that differs in visible text', () => {
+  const local = createUserMessage('local_text', '2026-10-10T09:09:52.000Z', { content: 'цена 100' });
+  const persisted = createUserMessage('claude_text', '2026-10-10T09:09:58.000Z', { content: 'цена 1000' });
+
+  assert.deepEqual(removeOptimisticUserEchoes([persisted], [local]), [local]);
+});
+
 test('a replacement echo survives a kept turn that repeats its text', () => {
   // The exact shape a rewind that branches produces: the turn that survived
   // the cut is re-stamped to the moment of the copy, one second before the
