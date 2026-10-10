@@ -221,11 +221,14 @@ export function keysForOption(prompt: TuiPrompt, targetIndex: number): string[] 
 
 const INPUT_PROMPT = /^[>❯]\s?/;
 const PASTING = /^\s*Pasting…/;
+const CONFIRM_SEND = /press Enter to send/;
 
 export type InputBox = {
   text: string;
   /** The TUI is still absorbing a paste: the box looks empty but the text is about to appear. */
   pasting: boolean;
+  /** Enter only stripped invisible characters from the message ("review and press Enter to send"); it was not sent. */
+  confirmingSend: boolean;
 };
 
 /** The prompt input box (`> ` between two horizontal rules) when it is on screen and no menu covers it. */
@@ -245,7 +248,12 @@ export function readInputBox(lines: string[]): InputBox | null {
       .map((line) => line.trim())
       .join('\n')
       .trim();
-    return { text, pasting: lines.slice(closingRule + 1).some((line) => PASTING.test(line)) };
+    const belowBox = lines.slice(closingRule + 1);
+    return {
+      text,
+      pasting: belowBox.some((line) => PASTING.test(line)),
+      confirmingSend: belowBox.some((line) => CONFIRM_SEND.test(line)),
+    };
   }
   return null;
 }

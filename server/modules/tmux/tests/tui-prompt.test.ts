@@ -109,10 +109,18 @@ test('isInputReady: true for idle and busy input boxes, false under a menu or di
 });
 
 test('readInputBox: an unsent message stays readable, a paste in progress is flagged', () => {
-  assert.deepEqual(readInputBox(screen('idle-input')), { text: '', pasting: false });
-  assert.deepEqual(readInputBox(screen('pasting')), { text: '', pasting: true });
+  assert.deepEqual(readInputBox(screen('idle-input')), { text: '', pasting: false, confirmingSend: false });
+  assert.deepEqual(readInputBox(screen('pasting')), { text: '', pasting: true, confirmingSend: false });
   const unsent = readInputBox(screen('input-unsent'));
   assert.equal(unsent?.pasting, false);
   assert.match(unsent?.text ?? '', /^What is on this screenshot\?\n\n\\wsl\.localhost\\Ubuntu\\[\s\S]*screenshot\.png$/);
   assert.equal(readInputBox(screen('bash-permission')), null);
+});
+
+test('readInputBox: a message Enter only cleaned of invisible characters is flagged as awaiting a second Enter', () => {
+  assert.deepEqual(readInputBox(screen('invisible-characters-removed')), {
+    text: 'скажи ок Добрый день',
+    pasting: false,
+    confirmingSend: true,
+  });
 });

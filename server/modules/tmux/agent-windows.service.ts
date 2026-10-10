@@ -19,7 +19,7 @@ const POLL_MS = 300;
 const INPUT_POLL_MS = 100;
 const PASTE_LANDING_TIMEOUT_MS = 10_000;
 const SUBMIT_CONFIRM_TIMEOUT_MS = 3_000;
-const SUBMIT_ATTEMPTS = 3;
+const SUBMIT_ATTEMPTS = 4;
 const PROCESS_EXIT_TIMEOUT_MS = 10_000;
 /** A pane's interop process and its claude.exe start within a few seconds of each other. */
 const PANE_PROCESS_MATCH_MS = 60_000;
@@ -325,7 +325,25 @@ async function waitForInputBox(
   return null;
 }
 
-const withoutWhitespace = (text: string) => text.replace(/\s+/g, '');
+/** Compared without what Enter may rewrite: whitespace and invisible characters, which tmux draws as U+FFFD. */
+const visibleText = (text: string) => text.replace(/[\p{Cf}\s\uFFFD]+/gu, '');
+const PASTE_PLACEHOLDER = /\[(?:Pasted text|Image) #\d+/;
+
+/**
+ * Claude took the message once the pasted text left the box: it may be empty
+ * then, or show the "edit queued messages" hint while Claude is busy. A box
+ * that still holds the paste, or only lost its invisible characters to Enter,
+ * still has the message unsent.
+ */
+export function hasTakenMessage(box: InputBox | null, pastedBoxText: string): boolean {
+  if (box === null) {
+    return true;
+  }
+  if (box.pasting || box.confirmingSend || PASTE_PLACEHOLDER.test(box.text)) {
+    return false;
+  }
+  return visibleText(box.text) !== visibleText(pastedBoxText);
+}
 
 /** Pastes and waits until the TUI has absorbed it; resolves with the input box text it left. */
 async function pasteIntoInputBox(paneId: string, text: string): Promise<string> {
@@ -343,8 +361,7 @@ async function pasteIntoInputBox(paneId: string, text: string): Promise<string> 
  * Pastes the message and presses Enter until Claude takes it. A fixed pause is
  * not enough: the TUI absorbs a paste at its own pace ("Pasting…"), and a
  * just-started Claude has dropped the Enter, leaving the message unsent in its
- * input box. Taken means the pasted text left the box: it may be empty then,
- * or show the "edit queued messages" hint while Claude is busy.
+ * input box.
  *
  * Each image path is pasted on its own first: only a paste that is exactly an
  * image file path becomes an `[Image #N]` attachment.
@@ -357,15 +374,16 @@ export async function typeIntoAgent(paneId: string, text: string, imagePaths: st
   if (text.trim()) {
     boxText = await pasteIntoInputBox(paneId, imagePaths.length > 0 ? ` ${text}` : text);
   }
-  const pastedText = withoutWhitespace(boxText);
   for (let attempt = 0; attempt < SUBMIT_ATTEMPTS; attempt += 1) {
     await tmuxService.sendKeys(paneId, ['Enter']);
-    const submitted = await waitForInputBox(
+    // Claude Code strips invisible characters (Telegram wraps quoted names in
+    // LRM/FSI/PDI) on the first Enter and waits for a second one.
+    const settled = await waitForInputBox(
       paneId,
-      (box) => box === null || (!box.pasting && withoutWhitespace(box.text) !== pastedText),
+      (box) => box?.confirmingSend === true || hasTakenMessage(box, boxText),
       SUBMIT_CONFIRM_TIMEOUT_MS,
     );
-    if (submitted) {
+    if (settled && hasTakenMessage(settled.box, boxText)) {
       return;
     }
   }
