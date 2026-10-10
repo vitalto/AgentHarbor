@@ -94,7 +94,7 @@ test('launch command registers the pane through the hook', async (t) => {
   assert.equal(fresh.env.WSLENV, undefined);
 });
 
-test('the PreToolUse hook sends UAC attempts to elevate, only while the broker runs', async (t) => {
+test('the PreToolUse hook sends UAC attempts to elevate, only once the broker is installed', async (t) => {
   const { config, cleanup } = await setup([]);
   t.after(cleanup);
   writeHookSettings(config);
@@ -104,7 +104,7 @@ test('the PreToolUse hook sends UAC attempts to elevate, only while the broker r
 
   const runHook = (command: string) => spawnSync('bash', ['-c', hook.hooks[0].command], {
     input: JSON.stringify({ tool_name: 'Bash', tool_input: { command, description: 'sudo-free description' } }),
-    env: { ...process.env, AH_STATE_DIR: config.stateDir },
+    env: { ...process.env, AH_STATE_DIR: config.stateDir, PROGRAMDATA: path.join(config.stateDir, 'programdata') },
     encoding: 'utf8',
   });
   const blocked = [
@@ -120,8 +120,8 @@ test('the PreToolUse hook sends UAC attempts to elevate, only while the broker r
     assert.equal(runHook(command).status, 0, `no broker, so no block: ${command}`);
   }
 
-  await mkdir(path.join(config.stateDir, 'elevation'), { recursive: true });
-  await writeFile(path.join(config.stateDir, 'elevation', 'broker.alive'), new Date().toISOString());
+  await mkdir(path.join(config.stateDir, 'programdata', 'ElevationBroker'), { recursive: true });
+  await writeFile(path.join(config.stateDir, 'programdata', 'ElevationBroker', 'broker.ps1'), '# broker');
   for (const command of blocked) {
     const result = runHook(command);
     assert.equal(result.status, 2, command);

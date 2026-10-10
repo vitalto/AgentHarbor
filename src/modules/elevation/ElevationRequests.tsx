@@ -101,7 +101,7 @@ function ElevationRequestCard({ request, brokerOnline, onDecided }: {
       <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded bg-muted px-2 py-1.5 font-mono text-xs text-foreground">{request.command}</pre>
       {!brokerOnline && (
         <div className="mt-2 text-xs text-red-600 dark:text-red-400">
-          The elevation broker is not running, so an approval would not run anything. Start the scheduled task "Elevation broker" on the PC.
+          The elevation broker is not running, so an approval would not run anything yet. The agent's elevate restarts it within seconds; if this stays, check the scheduled task "Elevation broker" on the PC.
         </div>
       )}
       {error && <div className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</div>}

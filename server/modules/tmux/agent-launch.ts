@@ -23,13 +23,13 @@ const ELEVATION_HINT =
 
 /**
  * Blocks the ways agents usually trigger UAC (Start-Process -Verb RunAs, runas /user, Windows
- * sudo) and points them to `elevate` (TerminalShare/windows/elevation). Only while the elevation
- * broker is alive, so without it everything behaves as before. The `case` filter spawns nothing
+ * sudo) and points them to `elevate` (TerminalShare/windows/elevation). Only once the elevation
+ * broker is installed (it starts on demand), so without it everything behaves as before. The `case` filter spawns nothing
  * for ordinary commands, since this runs before every shell call.
  */
 const ELEVATION_HOOK_COMMAND = String.raw`input=$(cat)
 case "$input" in *[Rr][Uu][Nn][Aa][Ss]*|*[Ss][Uu][Dd][Oo]*) ;; *) exit 0 ;; esac
-[ -n "$(find "$AH_STATE_DIR/elevation/broker.alive" -mmin -1 2>/dev/null)" ] || exit 0
+[ -f "${'$'}{PROGRAMDATA:-C:/ProgramData}/ElevationBroker/broker.ps1" ] || exit 0
 command=$(printf '%s' "$input" | sed -n 's/.*"command":"\(\([^"\\]\|\\.\)*\)".*/\1/p')
 if printf '%s' "$command" | grep -qiE -- '-verb[^a-z]{1,6}runas|(^|[^a-z0-9_-])runas(\.exe)?[[:space:]]+/' \
   || { printf '%s' "$command" | grep -qiE -- '(^|[^a-z0-9_.-])sudo(\.exe)?[[:space:]]' && ! printf '%s' "$command" | grep -qiE -- 'wsl|ssh'; }; then
