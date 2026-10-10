@@ -109,6 +109,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 <div dir="auto" className="break-words font-serif text-sm">
                   <Markdown
                     breaks
+                    literalBackslashes
                     className="prose prose-sm max-w-none font-serif dark:prose-invert"
                   >
                     {message.content}

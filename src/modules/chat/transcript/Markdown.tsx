@@ -22,7 +22,15 @@ type MarkdownProps = {
   className?: string;
   /** Render single newlines as hard line breaks (for user-typed messages). */
   breaks?: boolean;
+  /** Show every backslash as typed (for user-typed messages): `C:\Users\vital\.claude` keeps the one before the dot. */
+  literalBackslashes?: boolean;
 };
+
+/** Turns off markdown's backslash escapes, so `\.` stays two characters instead of becoming a dot. */
+function remarkLiteralBackslashes(this: { data(): Record<string, unknown> }) {
+  const data = this.data() as { micromarkExtensions?: unknown[] };
+  (data.micromarkExtensions ??= []).push({ disable: { null: ['characterEscape'] } });
+}
 
 // Links to the wider web (or in-page anchors) keep normal browser navigation;
 // everything else is treated as a workspace file reference.
@@ -258,7 +266,7 @@ const markdownComponents = {
  * render model-authored markdown with this module's shared prose styling,
  * code highlighting and table rules.
  */
-function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 'className'>) {
+function MarkdownBodyRenderer({ children, breaks = false, literalBackslashes = false }: Omit<MarkdownProps, 'className'>) {
   const content = useMemo(
     // The LaTeX pass runs second because it reads the code spans the fence pass
     // normalizes, and must leave the LaTeX inside them literal.
@@ -278,9 +286,12 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
       if (breaks) {
         plugins.push(remarkBreaks);
       }
+      if (literalBackslashes) {
+        plugins.push(remarkLiteralBackslashes);
+      }
       return plugins as any;
     },
-    [breaks, hasMath],
+    [breaks, hasMath, literalBackslashes],
   );
   const rehypePlugins = useMemo(() => (hasMath ? [rehypeKatex] : EMPTY_PLUGINS), [hasMath]);
   const { openFileInEditor, openDirectory } = usePaletteOps();
@@ -353,10 +364,10 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
 export const MarkdownBody = memo(MarkdownBodyRenderer);
 
 /** Markdown in its own prose container. The form every non-streaming caller uses. */
-export const Markdown = memo(function Markdown({ children, className, breaks }: MarkdownProps) {
+export const Markdown = memo(function Markdown({ children, className, breaks, literalBackslashes }: MarkdownProps) {
   return (
     <div className={className}>
-      <MarkdownBody breaks={breaks}>{children}</MarkdownBody>
+      <MarkdownBody breaks={breaks} literalBackslashes={literalBackslashes}>{children}</MarkdownBody>
     </div>
   );
 });
