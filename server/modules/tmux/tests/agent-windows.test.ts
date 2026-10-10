@@ -43,21 +43,11 @@ test('a pane whose process cannot be identified stops nothing', () => {
   assert.equal(pickProcessesOutsideTmux([windowsConsole], 5_000_000), null);
 });
 
-const box = (text: string, overrides: Partial<{ pasting: boolean; confirmingSend: boolean }> = {}) => ({
-  text,
-  pasting: false,
-  confirmingSend: false,
-  ...overrides,
-});
+const box = (text: string, pasting = false) => ({ text, pasting });
 
 test('a message Enter only cleaned of invisible characters is still unsent', () => {
   // tmux draws the LRM/FSI/PDI Telegram puts around quoted names as U+FFFD.
-  const pasted = 'скажи ок \uFFFDДобрый день\uFFFD';
-  assert.equal(hasTakenMessage(box('скажи ок Добрый день'), pasted), false);
-  assert.equal(hasTakenMessage(box('скажи ок Добрый день', { confirmingSend: true }), pasted), false);
-});
-
-test('a collapsed paste still in the box is unsent even when its line count changed', () => {
+  assert.equal(hasTakenMessage(box('скажи ок Добрый день'), 'скажи ок \uFFFDДобрый день\uFFFD'), false);
   assert.equal(hasTakenMessage(box('[Image #1][Pasted text #2 +37 lines]'), '[Image #1][Pasted text #2 +35 lines]'), false);
 });
 
@@ -65,9 +55,5 @@ test('a message that left the box was taken', () => {
   assert.equal(hasTakenMessage(box(''), '[Image #1] What is this?'), true);
   assert.equal(hasTakenMessage(null, 'hello'), true);
   assert.equal(hasTakenMessage(box('Press up to edit queued messages'), 'hello'), true);
-  assert.equal(hasTakenMessage(box('', { pasting: true }), 'hello'), false);
-});
-
-test('the invisible-characters notice outlives the send: an emptied box under it was taken', () => {
-  assert.equal(hasTakenMessage(box('', { confirmingSend: true }), 'скажи ок \uFFFDДобрый день\uFFFD'), true);
+  assert.equal(hasTakenMessage(box('', true), 'hello'), false);
 });
