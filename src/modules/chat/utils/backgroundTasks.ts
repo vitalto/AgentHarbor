@@ -30,7 +30,10 @@ export function resolveBackgroundTaskStatus(
  * that launched nothing.
  */
 export function readBackgroundTaskStatus(message: ChatMessage): BackgroundTaskStatus | undefined {
-  return resolveBackgroundTaskStatus(message.workflow?.status ?? message.subagent?.status, message.taskStatus?.status);
+  return resolveBackgroundTaskStatus(
+    message.workflow?.status ?? message.subagent?.status ?? message.backgroundCommand?.status,
+    message.taskStatus?.status,
+  );
 }
 
 /**
@@ -42,6 +45,9 @@ export function readBackgroundTaskStatus(message: ChatMessage): BackgroundTaskSt
 export function readBackgroundTaskId(message: ChatMessage): string | undefined {
   if (message.taskStatus?.taskId) {
     return message.taskStatus.taskId;
+  }
+  if (message.backgroundCommand?.taskId) {
+    return message.backgroundCommand.taskId;
   }
   // A workflow's acknowledgement names its task; a backgrounded command's
   // names it `backgroundTaskId`; a background agent's carries only `agentId`,
@@ -85,7 +91,7 @@ export function collectRunningBackgroundTasks(messages: ChatMessage[]): Backgrou
       taskId,
       toolUseId: message.toolId,
       taskType: live?.taskType ?? TASK_TYPE_BY_TOOL[message.toolName ?? ''] ?? 'local_agent',
-      description: live?.description ?? message.subagent?.description ?? '',
+      description: live?.description ?? message.subagent?.description ?? describeBackgroundCommand(message) ?? '',
       ...(workflowName ? { workflowName } : {}),
       // The call is the launch: the SDK's start event follows it within the
       // same second.
@@ -93,6 +99,24 @@ export function collectRunningBackgroundTasks(messages: ChatMessage[]): Backgrou
     });
   }
   return tasks;
+}
+
+const MAX_COMMAND_LABEL_LENGTH = 80;
+
+/**
+ * What a backgrounded command is called: the description the agent gave it,
+ * else the head of the command itself. Undefined for a row that launched none.
+ */
+export function describeBackgroundCommand(message: ChatMessage): string | undefined {
+  const command = message.backgroundCommand;
+  if (!command) {
+    return undefined;
+  }
+  if (command.description) {
+    return command.description;
+  }
+  const head = command.command.split('\n', 1)[0]?.trim() ?? '';
+  return head.length > MAX_COMMAND_LABEL_LENGTH ? `${head.slice(0, MAX_COMMAND_LABEL_LENGTH - 1)}…` : head;
 }
 
 /** `1m 5s`, the way the CLI prints a task's elapsed time. */

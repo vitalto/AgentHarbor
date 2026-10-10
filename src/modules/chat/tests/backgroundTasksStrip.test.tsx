@@ -418,6 +418,91 @@ describe('the background tasks strip, for tasks only the activity map has a word
   });
 });
 
+describe('the background tasks strip, for a backgrounded command', () => {
+  const commandRow = (backgroundCommand: ChatMessage['backgroundCommand']) => toolRow({
+    toolName: 'Bash',
+    toolId: 'toolu_bash_1',
+    toolInput: '{}',
+    backgroundCommand,
+  });
+
+  it('names the command by its description and says how long it has run', () => {
+    vi.useFakeTimers({ now: Date.parse('2026-10-10T20:11:05.000Z') });
+    try {
+      render(
+        <BackgroundTasksStrip
+          sessionId="session-1"
+          sendMessage={() => {}}
+          onReveal={() => {}}
+          onLoadAll={() => {}}
+          messages={[commandRow({
+            taskId: 'bjob1',
+            status: 'running',
+            command: 'npm run dev -- -p 3015',
+            description: 'Start the dev server',
+            startedAt: Date.parse('2026-10-10T20:10:00.000Z'),
+          })]}
+        />,
+      );
+
+      expect(screen.getAllByRole('button')[0].textContent).toBe('CommandStart the dev server· 1m 5s');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('falls back to the head of the command, and lists nothing once it settled', () => {
+    const { rerender } = render(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={() => {}}
+        onReveal={() => {}}
+        onLoadAll={() => {}}
+        messages={[commandRow({ taskId: 'bjob1', status: 'running', command: 'tail -f server.log\necho never', startedAt: 0 })]}
+      />,
+    );
+    expect(screen.getAllByRole('button')[0].textContent).toBe('Commandtail -f server.log');
+
+    rerender(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={() => {}}
+        onReveal={() => {}}
+        onLoadAll={() => {}}
+        messages={[commandRow({ taskId: 'bjob1', status: 'completed', command: 'tail -f server.log', startedAt: 0 })]}
+      />,
+    );
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('offers ✕ only for the task types the runtime can stop', () => {
+    const sendMessage = vi.fn();
+    render(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={sendMessage}
+        onReveal={() => {}}
+        onLoadAll={() => {}}
+        canStopTask={(taskType) => taskType === 'local_bash'}
+        messages={[
+          commandRow({ taskId: 'bjob1', status: 'running', command: 'npm test', startedAt: 0 }),
+          toolRow({
+            toolName: 'Agent',
+            toolId: 'toolu_agent_1',
+            isSubagentContainer: true,
+            taskStatus: { status: 'running', taskId: 'agent-1', description: 'Survey the repo' },
+          }),
+        ]}
+      />,
+    );
+
+    const stopButtons = screen.getAllByRole('button', { name: 'Stop' });
+    expect(stopButtons).toHaveLength(1);
+    fireEvent.click(stopButtons[0]);
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'chat.stop-task', sessionId: 'session-1', taskId: 'bjob1' });
+  });
+});
+
 describe('visibleCountToReveal', () => {
   it('keeps the window when the row is already inside it', () => {
     // 942 rows, window of 100: row 900 has 42 rows after it, itself included.

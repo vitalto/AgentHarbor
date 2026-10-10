@@ -381,6 +381,8 @@ export type ChatMessage = {
   subagentActivity?: SubagentActivity[];
   /** The workflow run this row launched, as the backend read it on the last history load. */
   workflow?: WorkflowInfo;
+  /** The backgrounded command this row launched, as the backend read it on the last history load. */
+  backgroundCommand?: BackgroundCommandInfo;
   /** The latest live word on the background task this row launched, while the run is in flight. */
   taskStatus?: LiveTaskStatus;
   /** Set on the row that stands for a background task's completion report, with the status it reported. */
@@ -562,6 +564,8 @@ export type NormalizedMessage = {
   subagent?: SubagentInfo;
   /** The workflow run a `Workflow` call launched, attached by the backend from the run's journal. */
   workflow?: WorkflowInfo;
+  /** The backgrounded command a `Bash` call launched, attached by the backend. */
+  backgroundCommand?: BackgroundCommandInfo;
   /** Stored memory this reply drew on, when the provider reports it. */
   memoryCitations?: MemoryCitation[];
   isFinal?: boolean;
@@ -611,6 +615,17 @@ export type WorkflowInfo = {
   agents: WorkflowAgentInfo[];
   agentCounts: { total: number; completed: number; failed: number; running: number; stopped: number };
   scriptPath?: string;
+};
+
+/** A backgrounded command (`Bash` with `run_in_background`); `stopped` is one whose Claude process ended before it reported. */
+export type BackgroundCommandInfo = {
+  taskId: string;
+  status: BackgroundTaskStatus;
+  command: string;
+  description?: string;
+  outputFile?: string;
+  /** Epoch ms of the launch. */
+  startedAt: number;
 };
 
 /**

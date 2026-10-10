@@ -27,6 +27,9 @@ import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksS
  */
 const INITIAL_MOUNTED_TAIL_ROWS = 30;
 
+/** Claude runs as a TUI in tmux, where the server can end a backgrounded command's shell but has no handle on an agent or workflow. */
+const canClaudeStopTask = (taskType: string) => taskType === 'local_bash';
+
 type ChatMessagesPaneProps = {
   scrollContainerRef: RefObject<HTMLDivElement>;
   onWheel: () => void;
@@ -197,6 +200,7 @@ function ChatMessagesPane({
               sendMessage={sendMessage}
               onReveal={revealMessage}
               onLoadAll={loadAllMessages}
+              canStopTask={provider === 'claude' ? canClaudeStopTask : undefined}
             />
           </div>
           <div className="pointer-events-auto">

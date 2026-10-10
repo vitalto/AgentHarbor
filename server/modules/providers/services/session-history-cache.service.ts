@@ -35,6 +35,7 @@ type CacheEntry = {
   mtimeMs: number;
   /** File size in bytes; doubles as the entry's cost against the byte budget. */
   size: number;
+  liveRunStartedAt: number | null;
   full: FetchHistoryResult;
 };
 
@@ -44,6 +45,12 @@ type GetFullHistoryArgs = {
   transcriptPath: string | null | undefined;
   /** Loads the complete transcript (`limit: null, offset: 0`) from the provider. */
   loadFull: () => Promise<FetchHistoryResult>;
+  /**
+   * When the CLI process behind the session started, or null when none is up.
+   * The history reader answers background work's status from it, so an entry
+   * read under another process (or none) is stale even if the file is not.
+   */
+  liveRunStartedAt?: number | null;
 };
 
 /**
@@ -82,7 +89,7 @@ export function createSessionHistoryCache(
      * the session is not cacheable (no transcript path, or the file cannot be
      * stat'ed) — the caller then falls back to a plain provider read.
      */
-    async getFullHistory({ sessionId, transcriptPath, loadFull }: GetFullHistoryArgs): Promise<FetchHistoryResult | null> {
+    async getFullHistory({ sessionId, transcriptPath, loadFull, liveRunStartedAt = null }: GetFullHistoryArgs): Promise<FetchHistoryResult | null> {
       if (!transcriptPath) {
         return null;
       }
@@ -105,6 +112,7 @@ export function createSessionHistoryCache(
         && cached.transcriptPath === transcriptPath
         && cached.mtimeMs === stat.mtimeMs
         && cached.size === stat.size
+        && cached.liveRunStartedAt === liveRunStartedAt
       ) {
         // Re-insert to mark as most recently used.
         entries.delete(sessionId);
@@ -126,6 +134,7 @@ export function createSessionHistoryCache(
           transcriptPath,
           mtimeMs: stat.mtimeMs,
           size: stat.size,
+          liveRunStartedAt,
           full,
         });
         evictOverBudget();

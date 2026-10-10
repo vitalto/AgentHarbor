@@ -6,6 +6,7 @@ import readline from 'node:readline';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type {
   AnyRecord,
+  BackgroundCommandInfo,
   CompactionInfo,
   FetchHistoryOptions,
   FetchHistoryResult,
@@ -73,6 +74,7 @@ type ClaudeToolResult = {
   subagentTools?: SubagentActivity[];
   subagent?: SubagentInfo;
   workflow?: WorkflowInfo;
+  backgroundCommand?: BackgroundCommandInfo;
   toolUseResult?: unknown;
 };
 
@@ -440,6 +442,87 @@ function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTask
   return notifications;
 }
 
+const COMMAND_STATUS_BY_NOTIFICATION: Record<string, BackgroundCommandInfo['status']> = {
+  completed: 'completed',
+  failed: 'failed',
+  killed: 'stopped',
+  stopped: 'stopped',
+};
+
+/** Ids of the tasks a `TaskStop` (or the older `KillShell`) reports it ended. */
+function readStoppedTaskId(toolUseResult: unknown): string | null {
+  const result = readObjectRecord(toolUseResult);
+  if (!result || typeof result.message !== 'string' || !/^Successfully (stopped|killed)/.test(result.message)) {
+    return null;
+  }
+  const taskId = result.task_id ?? result.shell_id;
+  return typeof taskId === 'string' && taskId ? taskId : null;
+}
+
+function readOutputFile(acknowledgement: unknown): string | undefined {
+  const text = typeof acknowledgement === 'string' ? acknowledgement : '';
+  return /Output is being written to: (.+?)\. You will be notified/.exec(text)?.[1];
+}
+
+/**
+ * Every backgrounded command a transcript launched, keyed by the tool call
+ * that launched it, with where it stands. A command runs inside the Claude
+ * process that launched it, so one without a word on its end is `running`
+ * only while a process that started before the launch is still up.
+ */
+export function settleBackgroundCommands(
+  rows: AnyRecord[],
+  liveRunStartedAt: number | null,
+): Map<string, BackgroundCommandInfo> {
+  const toolInputs = new Map<string, AnyRecord>();
+  const stoppedTaskIds = new Set<string>();
+  for (const row of rows) {
+    const content = row.message?.content;
+    if (row.type === 'assistant' && Array.isArray(content)) {
+      for (const part of content) {
+        if (part?.type === 'tool_use' && typeof part.id === 'string') {
+          toolInputs.set(part.id, readObjectRecord(part.input) ?? {});
+        }
+      }
+    }
+    const stoppedTaskId = readStoppedTaskId(row.toolUseResult);
+    if (stoppedTaskId) {
+      stoppedTaskIds.add(stoppedTaskId);
+    }
+  }
+
+  const notifications = collectTaskNotifications(rows);
+  const commands = new Map<string, BackgroundCommandInfo>();
+  for (const row of rows) {
+    if (readBackgroundLaunch(row.toolUseResult) !== 'bash') {
+      continue;
+    }
+    const toolUseId = readLaunchToolUseId(row);
+    if (!toolUseId) {
+      continue;
+    }
+    const taskId = String(row.toolUseResult.backgroundTaskId);
+    const startedAt = Date.parse(String(row.timestamp ?? ''));
+    const notification = notifications.get(toolUseId);
+    const reported = notification ? COMMAND_STATUS_BY_NOTIFICATION[notification.status] ?? 'failed' : undefined;
+    const launchedByLiveRun = liveRunStartedAt !== null && Number.isFinite(startedAt) && startedAt >= liveRunStartedAt;
+    const status = reported
+      ?? (stoppedTaskIds.has(taskId) ? 'stopped' : launchedByLiveRun ? 'running' : 'stopped');
+    const input = toolInputs.get(toolUseId) ?? {};
+    const acknowledgement = row.message?.content?.find?.((part: AnyRecord) => part?.type === 'tool_result')?.content;
+    const outputFile = readOutputFile(acknowledgement);
+    commands.set(toolUseId, {
+      taskId,
+      status,
+      command: typeof input.command === 'string' ? input.command : '',
+      ...(typeof input.description === 'string' && input.description ? { description: input.description } : {}),
+      ...(outputFile ? { outputFile } : {}),
+      startedAt: Number.isFinite(startedAt) ? startedAt : 0,
+    });
+  }
+  return commands;
+}
+
 /** Reads the `tool_use_id` off the tool-result row that launched background work. */
 function readLaunchToolUseId(message: AnyRecord): string | null {
   const content = message.message?.content;
@@ -477,13 +560,17 @@ function replaceLaunchToolResultContent(message: AnyRecord, replacement: string)
  * so a conversation is a path through it rather than the whole file. Editing a
  * sent message makes a second path appear alongside the first.
  */
-async function readTranscriptRows(jsonlPath: string, providerSessionId: string): Promise<AnyRecord[]> {
+async function readTranscriptRows(
+  jsonlPath: string,
+  providerSessionId: string,
+  isWanted: (line: string) => boolean = () => true,
+): Promise<AnyRecord[]> {
   const rows: AnyRecord[] = [];
   const fileStream = fs.createReadStream(jsonlPath);
   const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
   for await (const line of rl) {
-    if (!line.trim()) {
+    if (!line.trim() || !isWanted(line)) {
       continue;
     }
     try {
@@ -497,6 +584,42 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
   }
 
   return rows;
+}
+
+/** The only rows `settleBackgroundCommands` reads; skipping the rest keeps a multi-megabyte transcript cheap to poll. */
+const BACKGROUND_COMMAND_ROW_MARKERS = ['"run_in_background":true', '"backgroundTaskId"', 'task-notification', '"Successfully stopped', '"Successfully killed'];
+
+type RunningBackgroundCommand = BackgroundCommandInfo & { toolUseId: string };
+
+const runningCommandsByTranscript = new Map<string, { key: string; liveRunStartedAt: number | null; commands: RunningBackgroundCommand[] }>();
+
+/**
+ * The backgrounded commands a session's live Claude still runs, for the
+ * running-sessions poll. Re-read only when the transcript changed.
+ */
+export async function listRunningBackgroundCommands(
+  jsonlPath: string,
+  providerSessionId: string,
+  liveRunStartedAt: number | null,
+): Promise<RunningBackgroundCommand[]> {
+  let key: string;
+  try {
+    const { size, mtimeMs } = await fsp.stat(jsonlPath);
+    key = `${providerSessionId}:${size}:${mtimeMs}`;
+  } catch {
+    return [];
+  }
+  const cached = runningCommandsByTranscript.get(jsonlPath);
+  if (cached?.key === key && cached.liveRunStartedAt === liveRunStartedAt) {
+    return cached.commands;
+  }
+  const rows = await readTranscriptRows(jsonlPath, providerSessionId, (line) =>
+    BACKGROUND_COMMAND_ROW_MARKERS.some((marker) => line.includes(marker)));
+  const commands = [...settleBackgroundCommands(rows, liveRunStartedAt)]
+    .filter(([, command]) => command.status === 'running')
+    .map(([toolUseId, command]) => ({ ...command, toolUseId }));
+  runningCommandsByTranscript.set(jsonlPath, { key, liveRunStartedAt, commands });
+  return commands;
 }
 
 /** True for a row the user typed, as opposed to a tool result or an injected note. */
@@ -798,6 +921,8 @@ async function getSessionMessages(
     const launchedByLiveRun = (message: AnyRecord): boolean =>
       liveRunStartedAt !== null && Date.parse(String(message.timestamp ?? '')) >= liveRunStartedAt;
 
+    const backgroundCommands = settleBackgroundCommands(messages, liveRunStartedAt);
+
     for (const message of messages) {
       const launch = readBackgroundLaunch(message.toolUseResult);
       if (!launch) {
@@ -805,6 +930,9 @@ async function getSessionMessages(
       }
 
       const toolUseId = readLaunchToolUseId(message);
+      if (launch === 'bash' && toolUseId) {
+        message.backgroundCommand = backgroundCommands.get(toolUseId);
+      }
       const notification = toolUseId ? notificationsByToolUseId.get(toolUseId) : undefined;
       // A workflow and a backgrounded shell command have no foreground form;
       // only an agent can hand its answer back inline.
@@ -1850,6 +1978,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               subagentTools: raw.subagentTools,
               subagent: raw.subagent,
               workflow: raw.workflow,
+              backgroundCommand: raw.backgroundCommand,
               toolUseResult: raw.toolUseResult,
             });
           }
@@ -1879,6 +2008,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
         msg.subagentTools = toolResult.subagentTools;
         msg.subagent = toolResult.subagent;
         msg.workflow = toolResult.workflow;
+        msg.backgroundCommand = toolResult.backgroundCommand;
       }
     }
 

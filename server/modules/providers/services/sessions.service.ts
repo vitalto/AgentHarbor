@@ -5,7 +5,8 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { AgentBusyElsewhereError, AgentWindowError, clearAgentConversation, closeAgentWindow, ensureAgentWindow, moveSessionToTmux, paneRegistry, readClaudeStatuses } from '@/modules/tmux/index.js';
+import { AgentBusyElsewhereError, AgentWindowError, clearAgentConversation, closeAgentWindow, ensureAgentWindow, getLiveProcessStartTime, moveSessionToTmux, paneRegistry, readClaudeStatuses } from '@/modules/tmux/index.js';
+import { listRunningBackgroundCommands } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   BackgroundTaskSummary,
@@ -206,11 +207,39 @@ export const sessionsService = {
     // chat run until a viewer subscribes; report them from Claude's own status files.
     const statuses = await readClaudeStatuses();
     for (const status of statuses.values()) {
-      if (status.activity === 'idle') {
+      const runsBackgroundCommand = status.status === 'shell';
+      if (status.activity === 'idle' && !runsBackgroundCommand) {
         continue;
       }
       const session = sessionsDb.getSessionByProviderSessionId(status.providerSessionId);
       if (!session || runningById.has(session.session_id)) {
+        continue;
+      }
+
+      if (runsBackgroundCommand) {
+        // The turn is over but a backgrounded command still runs: listed as background work, like an SDK run's.
+        const commands = session.jsonl_path
+          ? await listRunningBackgroundCommands(session.jsonl_path, status.providerSessionId, status.startedAt)
+          : [];
+        if (commands.length === 0) {
+          continue;
+        }
+        entries.push({
+          sessionId: session.session_id,
+          provider: session.provider as LLMProvider,
+          startedAt: Math.min(...commands.map((command) => command.startedAt)),
+          lastSeq: chatRunRegistry.getRun(session.session_id)?.lastSeq ?? 0,
+          background: true,
+          canInterrupt: false,
+          tasks: commands.map((command) => ({
+            taskId: command.taskId,
+            toolUseId: command.toolUseId,
+            taskType: 'local_bash',
+            description: command.description ?? command.command,
+            startedAt: command.startedAt,
+          })),
+        });
+        runningById.set(session.session_id, entries[entries.length - 1]);
         continue;
       }
 
@@ -497,6 +526,7 @@ export const sessionsService = {
     const fullHistory = await sessionHistoryCache.getFullHistory({
       sessionId,
       transcriptPath,
+      liveRunStartedAt: provider === 'claude' ? getLiveProcessStartTime(providerSessionId) : null,
       loadFull: () => providerSessions.fetchHistory(sessionId, {
         limit: null,
         offset: 0,

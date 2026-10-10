@@ -387,6 +387,8 @@ export type NormalizedMessage = {
   subagent?: SubagentInfo;
   /** The workflow run this `tool_use` launched, read from its journal on disk. */
   workflow?: WorkflowInfo;
+  /** The backgrounded command this `tool_use` launched. */
+  backgroundCommand?: BackgroundCommandInfo;
   /** Stored memory the reply drew on, when the provider reports it. */
   memoryCitations?: MemoryCitation[];
   toolUseResult?: unknown;
@@ -539,6 +541,22 @@ export type WorkflowInfo = {
   agents: WorkflowAgentInfo[];
   agentCounts: { total: number; completed: number; failed: number; running: number; stopped: number };
   scriptPath?: string;
+};
+
+/**
+ * A backgrounded command (`Bash` with `run_in_background`), attached to the
+ * `tool_use` that launched it. `status` follows the background agent's rule:
+ * the task notification's word (or a `TaskStop` that ended it), else `running`
+ * only while the Claude process that launched it is still up, else `stopped`.
+ */
+export type BackgroundCommandInfo = {
+  taskId: string;
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+  command: string;
+  description?: string;
+  outputFile?: string;
+  /** Epoch ms of the launch acknowledgement. */
+  startedAt: number;
 };
 
 /**

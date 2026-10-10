@@ -507,6 +507,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           subagent: msg.subagent,
           subagentActivity,
           workflow: msg.workflow,
+          backgroundCommand: msg.backgroundCommand,
           taskStatus: msg.toolId ? liveTasksByToolUseId.get(msg.toolId) : undefined,
           memoryCitations: msg.memoryCitations,
           ...sharedMetadata,

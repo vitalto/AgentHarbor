@@ -1,7 +1,11 @@
+import { sessionsDb } from '@/modules/database/index.js';
+import { listRunningBackgroundCommands } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import {
   ensureAgentWindow,
+  findSessionHolders,
   getSessionMonitor,
   stageAttachmentForClaude,
+  stopBackgroundCommand,
   typeIntoAgent,
   waitForInputReady,
 } from '@/modules/tmux/index.js';
@@ -53,5 +57,22 @@ export const claudeTmuxRuntime: IProviderRuntime = {
 
   async abort(sessionId: string) {
     return getSessionMonitor().sendKeys(sessionId, ['Escape']);
+  },
+
+  /** Only backgrounded commands: the TUI offers no way to stop one agent, and its shells are plain child processes. */
+  async stopBackgroundTask(sessionId: string, taskId: string) {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session?.jsonl_path || !session.provider_session_id) {
+      return false;
+    }
+    const holders = await findSessionHolders(session.provider_session_id);
+    const liveRunStartedAt = Math.min(...holders.map((holder) => holder.startedAt ?? Number.POSITIVE_INFINITY));
+    const commands = await listRunningBackgroundCommands(
+      session.jsonl_path,
+      session.provider_session_id,
+      Number.isFinite(liveRunStartedAt) ? liveRunStartedAt : null,
+    );
+    const command = commands.find((candidate) => candidate.taskId === taskId);
+    return command ? stopBackgroundCommand(holders, command.command) : false;
   },
 };

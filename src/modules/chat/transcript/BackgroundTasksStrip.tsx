@@ -1,12 +1,14 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { X } from 'lucide-react';
 
 import type { BackgroundTaskSummary, ChatMessage } from '@/shared/types';
 import {
+  describeBackgroundCommand,
   describeWorkflowAgent,
   findCurrentWorkflowAgent,
+  formatTaskDuration,
   listRunningBackgroundLaunches,
   ownBackgroundTasks,
   readBackgroundTaskId,
@@ -37,7 +39,32 @@ type BackgroundTasksStripProps = {
   onReveal: (message: ChatMessage) => void;
   /** Loads the rest of the transcript, for a task whose launch row is not loaded yet. */
   onLoadAll: () => void;
+  /**
+   * Whether the session's runtime can stop a task of this type; its ✕ is
+   * hidden otherwise rather than offered and refused. All types when absent.
+   */
+  canStopTask?: (taskType: string) => boolean;
 };
+
+const ELAPSED_TICK_MS = 1_000;
+
+/** The current time, ticking each second while `enabled`, for elapsed-time labels. */
+function useTickingNow(enabled: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+    const timer = window.setInterval(() => setNow(Date.now()), ELAPSED_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, [enabled]);
+  return now;
+}
+
+function readTaskType(message: ChatMessage): string {
+  return message.taskStatus?.taskType
+    ?? (message.toolName === 'Workflow' ? 'local_workflow' : message.toolName === 'Bash' ? 'local_bash' : 'local_agent');
+}
 
 /** The one-line description the launch was given, as the card reads it. */
 function readLaunchDescription(message: ChatMessage): string {
@@ -57,11 +84,15 @@ function readLaunchDescription(message: ChatMessage): string {
 }
 
 /** What one running task's chip says: its kind, its name, and how far it has got. */
-function describeTask(message: ChatMessage, t: TFunction) {
+function describeTask(message: ChatMessage, t: TFunction, now: number) {
   const live = message.taskStatus;
   const name = message.toolName === 'Workflow'
     ? message.workflow?.name || live?.workflowName || ''
-    : message.subagent?.description || live?.description || '';
+    : message.subagent?.description || live?.description || describeBackgroundCommand(message) || '';
+  if (message.backgroundCommand) {
+    const elapsed = message.backgroundCommand.startedAt ? formatTaskDuration(Math.max(0, now - message.backgroundCommand.startedAt)) : '';
+    return { kind: t('workflow.backgroundCommand', 'Command'), name, progress: elapsed };
+  }
   const kind = message.toolName === 'Workflow'
     ? t('workflow.title', 'Workflow')
     : message.toolName === 'Bash'
@@ -101,7 +132,7 @@ function describeTask(message: ChatMessage, t: TFunction) {
  * scrolling to its card when clicked and stoppable from its ✕. Renders
  * nothing while nothing runs, which is most of the time.
  */
-export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMessage, onReveal, onLoadAll }: BackgroundTasksStripProps) => {
+export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMessage, onReveal, onLoadAll, canStopTask = () => true }: BackgroundTasksStripProps) => {
   const { t } = useTranslation();
   const running = listRunningBackgroundLaunches(messages);
   // A loaded row that has a word on its task — settled or not — is the word;
@@ -112,6 +143,7 @@ export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMess
     messages.filter((message) => readBackgroundTaskStatus(message) !== undefined).map((message) => message.toolId),
   );
   const fromMap = ownBackgroundTasks(tasks ?? []).filter((task) => !settledToolIds.has(task.toolUseId));
+  const now = useTickingNow(running.some((message) => message.backgroundCommand));
 
   if (running.length === 0 && fromMap.length === 0) {
     return null;
@@ -124,7 +156,7 @@ export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMess
       className="flex max-w-full flex-wrap items-center gap-1.5 rounded-md border border-border/60 bg-background/95 px-2 py-1 text-[11px] text-muted-foreground shadow-sm backdrop-blur"
     >
       {running.map((message) => {
-        const { kind, name, progress } = describeTask(message, t);
+        const { kind, name, progress } = describeTask(message, t, now);
         const taskId = readBackgroundTaskId(message);
         const title = [kind, name, progress].filter(Boolean).join(' · ');
         return (
@@ -140,7 +172,7 @@ export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMess
               {name && <span className="min-w-0 truncate">{name}</span>}
               {progress && <span className="min-w-0 truncate text-muted-foreground/70">· {progress}</span>}
             </button>
-            {sessionId && taskId && (
+            {sessionId && taskId && canStopTask(readTaskType(message)) && (
               <button
                 type="button"
                 onClick={() => sendMessage({ type: 'chat.stop-task', sessionId, taskId })}
@@ -189,7 +221,7 @@ export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMess
                 {label}
               </button>
             )}
-            {sessionId && (
+            {sessionId && canStopTask(task.taskType) && (
               <button
                 type="button"
                 onClick={() => sendMessage({ type: 'chat.stop-task', sessionId, taskId: task.taskId })}
