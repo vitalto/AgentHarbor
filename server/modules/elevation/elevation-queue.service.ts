@@ -13,8 +13,8 @@ export type ElevationRequest = {
   /** Windows path the command runs in. */
   cwd: string;
   requestedAt: string;
-  /** Windows pid of the claude.exe that asked, when `elevate` ran under one. */
-  claudePid: number | null;
+  /** Claude's own session id (CLAUDE_CODE_SESSION_ID), when `elevate` ran under Claude. */
+  providerSessionId: string | null;
   sessionId: string | null;
   sessionTitle: string | null;
 };
@@ -66,7 +66,7 @@ function parseRequest(id: string, text: string): Omit<ElevationRequest, 'session
     command: raw.command,
     cwd: raw.cwd,
     requestedAt: typeof raw.requestedAt === 'string' ? raw.requestedAt : new Date(0).toISOString(),
-    claudePid: typeof raw.claudePid === 'number' && raw.claudePid > 0 ? raw.claudePid : null,
+    providerSessionId: typeof raw.providerSessionId === 'string' && raw.providerSessionId ? raw.providerSessionId : null,
   };
 }
 
@@ -79,11 +79,11 @@ export type ElevationQueue = {
 /** Used by the elevation module's barrel (and its tests, with a temporary queue folder). */
 export function createElevationQueue({
   queueDir,
-  findSessionByClaudePid,
+  findSession,
   now = Date.now,
 }: {
   queueDir: string;
-  findSessionByClaudePid: (claudePid: number) => Promise<ElevationSession | null>;
+  findSession: (providerSessionId: string) => ElevationSession | null;
   now?: () => number;
 }): ElevationQueue {
   const requestsDir = path.join(queueDir, 'requests');
@@ -124,10 +124,10 @@ export function createElevationQueue({
       }
       const ids = names.filter((name) => name.endsWith('.json')).map((name) => name.slice(0, -'.json'.length));
       const pending = (await Promise.all(ids.map(readPendingRequest))).filter((request) => request !== null);
-      const requests = await Promise.all(pending.map(async (request) => {
-        const session = request.claudePid ? await findSessionByClaudePid(request.claudePid) : null;
+      const requests = pending.map((request) => {
+        const session = request.providerSessionId ? findSession(request.providerSessionId) : null;
         return { ...request, sessionId: session?.sessionId ?? null, sessionTitle: session?.title ?? null };
-      }));
+      });
       requests.sort((left, right) => left.requestedAt.localeCompare(right.requestedAt));
       return {
         brokerOnline: brokerHeartbeat !== null && now() - brokerHeartbeat <= BROKER_SILENCE_LIMIT_MS,

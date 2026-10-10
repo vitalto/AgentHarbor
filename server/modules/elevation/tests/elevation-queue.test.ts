@@ -26,13 +26,13 @@ async function withQueue(run: (queueDir: string) => Promise<void>) {
 async function queueRequest(queueDir: string, id: string, fields: Record<string, unknown> = {}) {
   const requestPath = path.join(queueDir, 'requests', `${id}.json`);
   await writeFile(requestPath, JSON.stringify({
-    id, command: 'New-NetFirewallRule -DisplayName "x"', cwd: 'D:\\Develop\\Тест', claudePid: 4242,
+    id, command: 'New-NetFirewallRule -DisplayName "x"', cwd: 'D:\\Develop\\Тест', providerSessionId: 'claude-session-1',
     requestedAt: '2026-10-10T12:00:00.000Z', ...fields,
   }));
   return requestPath;
 }
 
-const findSession = async (claudePid: number) => (claudePid === 4242 ? { sessionId: 's1', title: 'Firewall work' } : null);
+const findSession = (providerSessionId: string) => (providerSessionId === 'claude-session-1' ? { sessionId: 's1', title: 'Firewall work' } : null);
 
 test('lists only live, unanswered requests, with the asking session', async () => {
   await withQueue(async (queueDir) => {
@@ -44,7 +44,7 @@ test('lists only live, unanswered requests, with the asking session', async () =
     await writeFile(path.join(queueDir, 'results', `${ANSWERED_ID}.json`), '{"status":"running"}');
     await writeFile(path.join(queueDir, 'requests', 'not-an-id.json'), '{}');
 
-    const queue = createElevationQueue({ queueDir, findSessionByClaudePid: findSession });
+    const queue = createElevationQueue({ queueDir, findSession });
     const snapshot = await queue.read();
     assert.equal(snapshot.brokerOnline, false);
     assert.deepEqual(snapshot.requests.map((request) => [request.id, request.sessionId, request.sessionTitle]), [[FRESH_ID, 's1', 'Firewall work']]);
@@ -57,7 +57,7 @@ test('lists only live, unanswered requests, with the asking session', async () =
 test('an approval carries the hash of exactly the command and folder that were shown', async () => {
   await withQueue(async (queueDir) => {
     await queueRequest(queueDir, FRESH_ID);
-    const queue = createElevationQueue({ queueDir, findSessionByClaudePid: findSession });
+    const queue = createElevationQueue({ queueDir, findSession });
 
     await queue.decide(FRESH_ID, true);
     const decision = JSON.parse(await readFile(path.join(queueDir, 'decisions', `${FRESH_ID}.json`), 'utf8'));
@@ -73,7 +73,7 @@ test('an approval carries the hash of exactly the command and folder that were s
 test('unknown, malformed and path-like ids cannot be decided', async () => {
   await withQueue(async (queueDir) => {
     await queueRequest(queueDir, FRESH_ID, { command: '' });
-    const queue = createElevationQueue({ queueDir, findSessionByClaudePid: findSession });
+    const queue = createElevationQueue({ queueDir, findSession });
     await assert.rejects(queue.decide(FRESH_ID, true), ElevationRequestNotFoundError);
     await assert.rejects(queue.decide('../../etc/passwd', true), ElevationRequestNotFoundError);
     await assert.rejects(queue.decide(SILENT_ID, true), ElevationRequestNotFoundError);
