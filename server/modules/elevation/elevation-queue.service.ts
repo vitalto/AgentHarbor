@@ -20,7 +20,7 @@ export type ElevationRequest = {
 };
 
 export type ElevationQueueSnapshot = {
-  /** The broker refreshes its heartbeat every second; without it an approval would never run. */
+  /** The broker refreshes its heartbeat every 5 s; without it an approval would never run. */
   brokerOnline: boolean;
   requests: ElevationRequest[];
 };
@@ -34,7 +34,7 @@ export class ElevationRequestNotFoundError extends Error {
 }
 
 const REQUEST_ID_PATTERN = /^[0-9a-f]{32}$/;
-// `elevate` touches its request every second; the broker refuses requests silent for 30 s.
+// `elevate` touches its request every 5 s; the broker refuses requests silent for 30 s.
 const CLIENT_SILENCE_LIMIT_MS = 20_000;
 const BROKER_SILENCE_LIMIT_MS = 15_000;
 
