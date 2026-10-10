@@ -49,6 +49,18 @@ export const useWebSocket = () => {
   return context;
 };
 
+/**
+ * Frames worth delivering late: the composer already shows the message as
+ * sent, so dropping it during a reconnect (every deploy restarts the server)
+ * would lose it silently. Key presses and menu answers are not held — they
+ * only make sense on the screen they were aimed at.
+ */
+const HELD_WHILE_DISCONNECTED = new Set(['chat.send', 'chat.edit-send']);
+
+const isHeldWhileDisconnected = (message: unknown) =>
+  typeof message === 'object' && message !== null
+  && HELD_WHILE_DISCONNECTED.has(String((message as { type?: unknown }).type));
+
 const buildWebSocketUrl = (token: string | null) => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   if (IS_PLATFORM) return `${protocol}//${window.location.host}/ws`; // Platform mode: Use same domain as the page (goes through proxy)
@@ -75,6 +87,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   // not read as a lost connection, or every page load would flash the indicator.
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const heldMessagesRef = useRef<string[]>([]);
   const { isLoading: isAuthLoading, token, user } = useAuth();
 
   const dispatch = useCallback((event: ServerEvent) => {
@@ -105,6 +118,11 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
       websocket.onopen = () => {
         setConnectionStatus('connected');
+        const heldMessages = heldMessagesRef.current;
+        heldMessagesRef.current = [];
+        for (const heldMessage of heldMessages) {
+          websocket.send(heldMessage);
+        }
         if (hasConnectedRef.current) {
           // This is a reconnect — signal so components can catch up on missed messages
           dispatch({ kind: 'websocket_reconnected', timestamp: Date.now() });
@@ -156,6 +174,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     // re-run of the effect (e.g. on token refresh) would short-circuit connect()
     // at its unmounted guard and leave the socket permanently disconnected.
     unmountedRef.current = false;
+    if (!IS_PLATFORM && !isAuthLoading && !user) {
+      heldMessagesRef.current = [];
+    }
     if (!IS_PLATFORM && (isAuthLoading || !user)) {
       return undefined;
     }
@@ -189,6 +210,8 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     const socket = wsRef.current;
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(message));
+    } else if (isHeldWhileDisconnected(message)) {
+      heldMessagesRef.current.push(JSON.stringify(message));
     } else {
       console.warn('WebSocket not connected');
     }

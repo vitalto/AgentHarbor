@@ -44,7 +44,11 @@ class FakeWebSocket {
     FakeWebSocket.instances.push(this);
   }
 
-  send() {}
+  sent: unknown[] = [];
+
+  send(data: string) {
+    this.sent.push(JSON.parse(data));
+  }
 
   // A real socket closed by the page still fires `close`; firing it here means
   // a swap that forgot to detach its handler would be caught.
@@ -70,12 +74,14 @@ const { WebSocketProvider, useWebSocket } = await import('@/shared/context/WebSo
 /** Every status the provider rendered, in order, so a one-render flash is caught too. */
 let seen: string[] = [];
 let isConnected: boolean | null = null;
+let sendMessage: ((message: unknown) => void) | null = null;
 
 function RecordStatus() {
   const value = useWebSocket();
   seen.push(String(value.connectionStatus));
   useEffect(() => {
     isConnected = value.isConnected;
+    sendMessage = value.sendMessage;
   });
   return null;
 }
@@ -203,4 +209,42 @@ test('signing out while connected stops reporting a live connection', () => {
   assert.equal(socket(0).readyState, FakeWebSocket.CLOSED, 'the socket was closed on sign-out');
   assert.equal(lastStatus(), 'connecting');
   assert.equal(isConnected, false, 'isConnected no longer reports the closed socket as live');
+});
+
+test('a message sent while the socket is down goes out once it reconnects', () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  renderProvider();
+  act(() => socket(0).serverOpens());
+  act(() => socket(0).serverDrops());
+
+  const photo = { type: 'chat.send', sessionId: 's1', content: '', options: { attachments: [{ path: '/a.jpg' }] } };
+  sendMessage?.(photo);
+  // A key press is only meaningful on the screen it was aimed at.
+  sendMessage?.({ type: 'chat.tui-keys', sessionId: 's1', keys: ['Enter'] });
+
+  act(() => { vi.advanceTimersByTime(3000); });
+  assert.deepEqual(socket(1).sent, [], 'nothing goes out before the handshake completes');
+  act(() => socket(1).serverOpens());
+  assert.deepEqual(socket(1).sent, [photo]);
+
+  // Delivered once: a later reconnect does not repeat it.
+  act(() => socket(1).serverDrops());
+  act(() => { vi.advanceTimersByTime(3000); });
+  act(() => socket(2).serverOpens());
+  assert.deepEqual(socket(2).sent, []);
+});
+
+test('messages held during an outage are dropped on sign-out', () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  const view = renderProvider();
+  act(() => socket(0).serverOpens());
+  act(() => socket(0).serverDrops());
+  sendMessage?.({ type: 'chat.send', sessionId: 's1', content: 'hello' });
+
+  AUTH.current = { user: null, token: null, isLoading: false };
+  view.rerender(<WebSocketProvider><RecordStatus /></WebSocketProvider>);
+  AUTH.current = { user: AUTH.user, token: 'token-2', isLoading: false };
+  view.rerender(<WebSocketProvider><RecordStatus /></WebSocketProvider>);
+  act(() => socket(1).serverOpens());
+  assert.deepEqual(socket(1).sent, []);
 });
