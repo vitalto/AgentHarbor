@@ -7,7 +7,7 @@ import { api } from '@/shared/api';
 const MODES = [
   { value: 'bypassPermissions', label: 'Bypass' },
   { value: 'auto', label: 'Auto' },
-  { value: 'default', label: 'Ask (manual)' },
+  { value: 'default', label: 'Ask' },
   { value: 'acceptEdits', label: 'Accept edits' },
   { value: 'plan', label: 'Plan' },
 ] as const;
