@@ -559,6 +559,12 @@ export type BackgroundCommandInfo = {
   startedAt: number;
 };
 
+/** The end of a backgrounded command's output file; `truncated` when earlier output was cut off. */
+export type BackgroundCommandOutput = {
+  text: string;
+  truncated: boolean;
+};
+
 /**
  * One stored memory an assistant reply drew on.
  *

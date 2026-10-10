@@ -589,19 +589,19 @@ async function readTranscriptRows(
 /** The only rows `settleBackgroundCommands` reads; skipping the rest keeps a multi-megabyte transcript cheap to poll. */
 const BACKGROUND_COMMAND_ROW_MARKERS = ['"run_in_background":true', '"backgroundTaskId"', 'task-notification', '"Successfully stopped', '"Successfully killed'];
 
-type RunningBackgroundCommand = BackgroundCommandInfo & { toolUseId: string };
+export type SessionBackgroundCommand = BackgroundCommandInfo & { toolUseId: string };
 
-const runningCommandsByTranscript = new Map<string, { key: string; liveRunStartedAt: number | null; commands: RunningBackgroundCommand[] }>();
+const commandsByTranscript = new Map<string, { key: string; liveRunStartedAt: number | null; commands: SessionBackgroundCommand[] }>();
 
 /**
- * The backgrounded commands a session's live Claude still runs, for the
- * running-sessions poll. Re-read only when the transcript changed.
+ * Every backgrounded command a session's transcript launched, in launch order,
+ * with where it stands. Re-read only when the transcript changed.
  */
-export async function listRunningBackgroundCommands(
+export async function listBackgroundCommands(
   jsonlPath: string,
   providerSessionId: string,
   liveRunStartedAt: number | null,
-): Promise<RunningBackgroundCommand[]> {
+): Promise<SessionBackgroundCommand[]> {
   let key: string;
   try {
     const { size, mtimeMs } = await fsp.stat(jsonlPath);
@@ -609,17 +609,26 @@ export async function listRunningBackgroundCommands(
   } catch {
     return [];
   }
-  const cached = runningCommandsByTranscript.get(jsonlPath);
+  const cached = commandsByTranscript.get(jsonlPath);
   if (cached?.key === key && cached.liveRunStartedAt === liveRunStartedAt) {
     return cached.commands;
   }
   const rows = await readTranscriptRows(jsonlPath, providerSessionId, (line) =>
     BACKGROUND_COMMAND_ROW_MARKERS.some((marker) => line.includes(marker)));
   const commands = [...settleBackgroundCommands(rows, liveRunStartedAt)]
-    .filter(([, command]) => command.status === 'running')
     .map(([toolUseId, command]) => ({ ...command, toolUseId }));
-  runningCommandsByTranscript.set(jsonlPath, { key, liveRunStartedAt, commands });
+  commandsByTranscript.set(jsonlPath, { key, liveRunStartedAt, commands });
   return commands;
+}
+
+/** The backgrounded commands a session's live Claude still runs, for the running-sessions poll. */
+export async function listRunningBackgroundCommands(
+  jsonlPath: string,
+  providerSessionId: string,
+  liveRunStartedAt: number | null,
+): Promise<SessionBackgroundCommand[]> {
+  return (await listBackgroundCommands(jsonlPath, providerSessionId, liveRunStartedAt))
+    .filter((command) => command.status === 'running');
 }
 
 /** True for a row the user typed, as opposed to a tool result or an injected note. */

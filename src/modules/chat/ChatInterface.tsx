@@ -10,6 +10,8 @@ import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 import { useTuiSessionState } from '@/modules/chat/hooks/useTuiSessionState';
 import OutsideTmuxNotice from '@/modules/chat/composer/OutsideTmuxNotice';
 import SessionAgentsPanel from '@/modules/chat/composer/SessionAgentsPanel';
+import SessionProcessesPanel from '@/modules/chat/composer/SessionProcessesPanel';
+import { readComposerActivity } from '@/modules/chat/utils/backgroundTasks';
 import PermissionModePicker from '@/modules/chat/composer/PermissionModePicker';
 import type { TuiKey } from '@/modules/chat/utils/tuiPrompt';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
@@ -151,7 +153,6 @@ function ChatInterface({
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,
-    revealMessage,
     loadAllMessages,
     loadFullTranscript,
     allMessagesLoaded,
@@ -266,7 +267,6 @@ function ChatInterface({
     currentProviderModel,
     currentProviderEffort,
     isLoading: isProcessing,
-    processingSessions,
     canAbortSession,
     tokenBudget,
     sendMessage,
@@ -425,7 +425,8 @@ function ChatInterface({
   // Mirrors ChatComposer's own visibility check so the message pane can
   // reserve enough bottom space to keep the floating status tab from
   // overlapping the last message.
-  const hasActivityIndicator = Boolean(sessionActivity && !viewedTui.prompt);
+  const composerActivity = readComposerActivity(sessionActivity);
+  const hasActivityIndicator = Boolean(composerActivity && !viewedTui.prompt);
 
   const selectedProviderLabel = t('messageTypes.claude');
 
@@ -480,9 +481,6 @@ function ChatInterface({
               visibleMessageCount={visibleMessageCount}
               visibleMessages={visibleMessages}
               loadEarlierMessages={loadEarlierMessages}
-              revealMessage={revealMessage}
-              backgroundTasks={sessionActivity?.tasks}
-              sendMessage={sendMessage}
               loadAllMessages={loadAllMessages}
               allMessagesLoaded={allMessagesLoaded}
               isLoadingAllMessages={isLoadingAllMessages}
@@ -523,6 +521,10 @@ function ChatInterface({
           {/* The composer's activity pill ("Brewing… / Stop") floats above it; keep these panels clear of it. */}
           <div className={hasActivityIndicator ? 'mb-9' : undefined}>
           {viewedSessionId && (
+            <SessionProcessesPanel sessionId={viewedSessionId} refreshKey={chatMessages.length} />
+          )}
+
+          {viewedSessionId && (
             <SessionAgentsPanel
               sessionId={viewedSessionId}
               onFileOpen={onFileOpen}
@@ -555,7 +557,7 @@ function ChatInterface({
           onTuiKey={pressTuiKey}
           hasLiveWindow={findWindow(viewedSessionId)?.location === 'tmux'}
           permissionModeControl={viewedSessionId ? <PermissionModePicker sessionId={viewedSessionId} /> : null}
-          activity={sessionActivity}
+          activity={composerActivity}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
           tokenBudget={tokenBudget}

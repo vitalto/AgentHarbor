@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { memo, useCallback, useMemo } from 'react';
 import type { RefObject } from 'react';
 
-import type { BackgroundTaskSummary,
+import type {
   ChatMessage,
   Project,
   ProjectSession,
@@ -18,7 +18,6 @@ import ProviderSelectionEmptyState from '@/modules/chat/transcript/ProviderSelec
 import ToolGroupContainer from '@/modules/chat/transcript/ToolGroupContainer';
 import LoadAllMessagesOverlay from '@/modules/chat/transcript/LoadAllMessagesOverlay';
 import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
-import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksStrip';
 
 /**
  * How many of the newest rows mount with real content on the first commit,
@@ -26,9 +25,6 @@ import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksS
  * near the viewport. Covers a bit more than one screen of typical rows.
  */
 const INITIAL_MOUNTED_TAIL_ROWS = 30;
-
-/** Claude runs as a TUI in tmux, where the server can end a backgrounded command's shell but has no handle on an agent or workflow. */
-const canClaudeStopTask = (taskType: string) => taskType === 'local_bash';
 
 type ChatMessagesPaneProps = {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -57,11 +53,6 @@ type ChatMessagesPaneProps = {
   visibleMessageCount: number;
   visibleMessages: ChatMessage[];
   loadEarlierMessages: () => void;
-  revealMessage: (message: ChatMessage) => void;
-  /** The session's running background tasks from the activity map, for the strip to list ones whose rows are not loaded. */
-  backgroundTasks?: BackgroundTaskSummary[];
-  /** The chat websocket's send, which the background-tasks strip stops a task over. */
-  sendMessage: (message: unknown) => void;
   loadAllMessages: () => void;
   allMessagesLoaded: boolean;
   isLoadingAllMessages: boolean;
@@ -122,9 +113,6 @@ function ChatMessagesPane({
   visibleMessageCount,
   visibleMessages,
   loadEarlierMessages,
-  revealMessage,
-  backgroundTasks,
-  sendMessage,
   loadAllMessages,
   allMessagesLoaded,
   isLoadingAllMessages,
@@ -190,19 +178,7 @@ function ChatMessagesPane({
       }`}
     >
       {chatMessages.length > 0 && (
-        <div className="pointer-events-none sticky right-4 top-3 z-10 mb-2 flex items-start justify-between gap-2 sm:px-4">
-          {/* Running background work stays in view while the transcript scrolls under it. */}
-          <div className="pointer-events-auto min-w-0 pl-4 sm:pl-0">
-            <BackgroundTasksStrip
-              messages={chatMessages}
-              tasks={backgroundTasks}
-              sessionId={selectedSession?.id || currentSessionId}
-              sendMessage={sendMessage}
-              onReveal={revealMessage}
-              onLoadAll={loadAllMessages}
-              canStopTask={provider === 'claude' ? canClaudeStopTask : undefined}
-            />
-          </div>
+        <div className="pointer-events-none sticky right-4 top-3 z-10 mb-2 flex items-start justify-end gap-2 sm:px-4">
           <div className="pointer-events-auto">
             <ChatExportMenu
               messages={chatMessages}

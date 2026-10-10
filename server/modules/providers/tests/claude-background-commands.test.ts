@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
-import { settleBackgroundCommands } from '@/modules/providers/list/claude/claude-sessions.provider.js';
+import { listBackgroundCommands, listRunningBackgroundCommands, settleBackgroundCommands } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import type { AnyRecord } from '@/shared/types.js';
 
 const OUTPUT_FILE = 'C:\\Users\\vital\\AppData\\Local\\Temp\\claude\\D--x\\s1\\tasks\\bjob1.output';
@@ -95,4 +98,23 @@ test('a command the agent stopped with TaskStop is stopped even before any notif
   ];
 
   assert.equal(settleBackgroundCommands(rows, liveSince).get('toolu_1')?.status, 'stopped');
+});
+
+test('a transcript lists its finished commands too, the running-sessions poll only the running ones', async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'ah-bg-commands-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const transcript = path.join(directory, 's1.jsonl');
+  const rows = [
+    ...launch('toolu_1', 'bjob1', '2026-10-10T20:10:00.000Z', { command: 'npm test' }),
+    ...launch('toolu_2', 'bjob2', '2026-10-10T20:11:00.000Z', { command: 'npm run dev' }),
+    notification('toolu_1', 'bjob1', 'completed'),
+  ].map((row) => ({ ...row, sessionId: 's1' }));
+  await writeFile(transcript, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`);
+
+  const all = await listBackgroundCommands(transcript, 's1', liveSince);
+  assert.deepEqual(all.map((command) => [command.taskId, command.status, command.toolUseId]), [
+    ['bjob1', 'completed', 'toolu_1'],
+    ['bjob2', 'running', 'toolu_2'],
+  ]);
+  assert.deepEqual((await listRunningBackgroundCommands(transcript, 's1', liveSince)).map((command) => command.taskId), ['bjob2']);
 });

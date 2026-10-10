@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 
-import type { BackgroundTaskStatus, BackgroundTaskSummary, ChatMessage, WorkflowAgentProgress } from '@/shared/types';
+import type { BackgroundTaskStatus, BackgroundTaskSummary, ChatMessage, SessionActivity, WorkflowAgentProgress } from '@/shared/types';
 
 /**
  * Settles one background task's status from its two sources.
@@ -176,4 +176,18 @@ export function describeBackgroundTask(task: BackgroundTaskSummary, t: TFunction
     default:
       return t('claudeStatus.backgroundTask.agent', { description: task.description, defaultValue: 'Agent {{description}}' });
   }
+}
+
+/**
+ * The composer's activity tab for this activity, or null when there is none to
+ * show: a session whose only work is backgrounded commands is already listed,
+ * command by command, in the processes panel above the composer.
+ */
+export function readComposerActivity(activity: SessionActivity | null | undefined): SessionActivity | null {
+  if (!activity) {
+    return null;
+  }
+  const tasks = activity.tasks ?? [];
+  const onlyCommands = tasks.length > 0 && tasks.every((task) => task.taskType === 'local_bash');
+  return activity.background && onlyCommands ? null : activity;
 }

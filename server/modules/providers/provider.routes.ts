@@ -85,6 +85,19 @@ const parseWorkflowAgentId = (value: unknown): string => {
   return agentId;
 };
 
+const BACKGROUND_TASK_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+const parseBackgroundTaskId = (value: unknown): string => {
+  const taskId = readPathParam(value, 'taskId');
+  if (!BACKGROUND_TASK_ID_PATTERN.test(taskId)) {
+    throw new AppError('Invalid background task id.', {
+      code: 'INVALID_BACKGROUND_TASK_ID',
+      statusCode: 400,
+    });
+  }
+  return taskId;
+};
+
 const readOptionalQueryString = (value: unknown): string | undefined => {
   if (typeof value !== 'string') {
     return undefined;
@@ -1050,6 +1063,22 @@ router.get(
   '/sessions/:sessionId/subagents',
   asyncHandler(async (req: Request, res: Response) => {
     res.json(createApiSuccessResponse(await sessionsService.listSubagents(parseSessionId(req.params.sessionId))));
+  }),
+);
+
+router.get(
+  '/sessions/:sessionId/background-commands',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(await sessionsService.listBackgroundCommands(parseSessionId(req.params.sessionId))));
+  }),
+);
+
+router.get(
+  '/sessions/:sessionId/background-commands/:taskId/output',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const taskId = parseBackgroundTaskId(req.params.taskId);
+    res.json(createApiSuccessResponse(await sessionsService.readBackgroundCommandOutput(sessionId, taskId)));
   }),
 );
 

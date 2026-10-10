@@ -32,7 +32,6 @@ const submitWhileBusy = async (sendWhileBusy: boolean, beforeSend?: () => boolea
       currentProviderModel: 'test-model',
       currentProviderEffort: 'medium',
       isLoading: true,
-      processingSessions: new Map(),
       canAbortSession: true,
       tokenBudget: null,
       sendMessage: (message) => { sent.push(message as { type: string; content?: string }); },

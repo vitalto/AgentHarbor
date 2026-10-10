@@ -5,10 +5,11 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { AgentBusyElsewhereError, AgentWindowError, clearAgentConversation, closeAgentWindow, ensureAgentWindow, getLiveProcessStartTime, moveSessionToTmux, paneRegistry, readClaudeStatuses } from '@/modules/tmux/index.js';
-import { listRunningBackgroundCommands } from '@/modules/providers/list/claude/claude-sessions.provider.js';
+import { AgentBusyElsewhereError, AgentWindowError, clearAgentConversation, closeAgentWindow, ensureAgentWindow, getLiveProcessStartTime, moveSessionToTmux, paneRegistry, readClaudeProcesses, readClaudeStatuses, toLocalPath } from '@/modules/tmux/index.js';
+import { listBackgroundCommands, listRunningBackgroundCommands, type SessionBackgroundCommand } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
+  BackgroundCommandOutput,
   BackgroundTaskSummary,
   FetchHistoryOptions,
   FetchHistoryResult,
@@ -18,6 +19,9 @@ import type {
   SessionSubagent,
 } from '@/shared/types.js';
 import { AppError, sliceTailPage } from '@/shared/utils.js';
+
+const MAX_FINISHED_BACKGROUND_COMMANDS = 20;
+const BACKGROUND_OUTPUT_TAIL_BYTES = 16 * 1024;
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -589,6 +593,59 @@ export const sessionsService = {
       throw new AppError(`Subagent "${agentId}" was not found.`, { code: 'SUBAGENT_NOT_FOUND', statusCode: 404 });
     }
     return activity;
+  },
+
+  /**
+   * The commands a Claude session backgrounded (`run_in_background`), the
+   * still-running ones first, then the most recent finished ones.
+   */
+  async listBackgroundCommands(sessionId: string): Promise<SessionBackgroundCommand[]> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, { code: 'SESSION_NOT_FOUND', statusCode: 404 });
+    }
+    if (session.provider !== 'claude' || !session.jsonl_path || !session.provider_session_id) {
+      return [];
+    }
+    const holders = (await readClaudeProcesses()).filter((claude) => claude.providerSessionId === session.provider_session_id);
+    const liveRunStartedAt = holders.length > 0
+      ? Math.min(...holders.map((holder) => holder.startedAt ?? Number.POSITIVE_INFINITY))
+      : null;
+    const commands = await listBackgroundCommands(
+      session.jsonl_path,
+      session.provider_session_id,
+      liveRunStartedAt !== null && Number.isFinite(liveRunStartedAt) ? liveRunStartedAt : null,
+    );
+    const newestFirst = [...commands].reverse();
+    return [
+      ...newestFirst.filter((command) => command.status === 'running'),
+      ...newestFirst.filter((command) => command.status !== 'running').slice(0, MAX_FINISHED_BACKGROUND_COMMANDS),
+    ];
+  },
+
+  /** The end of what one backgrounded command has written so far. */
+  async readBackgroundCommandOutput(sessionId: string, taskId: string): Promise<BackgroundCommandOutput> {
+    const command = (await sessionsService.listBackgroundCommands(sessionId)).find((candidate) => candidate.taskId === taskId);
+    if (!command?.outputFile) {
+      throw new AppError(`Background command "${taskId}" was not found.`, { code: 'BACKGROUND_COMMAND_NOT_FOUND', statusCode: 404 });
+    }
+    let handle: fsp.FileHandle;
+    try {
+      handle = await fsp.open(toLocalPath(command.outputFile), 'r');
+    } catch {
+      return { text: '', truncated: false };
+    }
+    try {
+      const { size } = await handle.stat();
+      const start = Math.max(0, size - BACKGROUND_OUTPUT_TAIL_BYTES);
+      const buffer = Buffer.alloc(size - start);
+      await handle.read(buffer, 0, buffer.length, start);
+      const text = buffer.toString('utf8');
+      // A tail that starts mid-line (or mid-character) starts at the next full line instead.
+      return start > 0 ? { text: text.slice(text.indexOf('\n') + 1), truncated: true } : { text, truncated: false };
+    } finally {
+      await handle.close();
+    }
   },
 
   async readWorkflowAgentActivity(sessionId: string, runId: string, agentId: string): Promise<WorkflowAgentActivity> {

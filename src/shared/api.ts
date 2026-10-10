@@ -280,6 +280,11 @@ export const api = {
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/subagents`),
   subagentActivity: (sessionId: string, agentId: string) =>
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(agentId)}`),
+  // The commands a session backgrounded, and the end of one's output.
+  sessionBackgroundCommands: (sessionId: string) =>
+    get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/background-commands`),
+  backgroundCommandOutput: (sessionId: string, taskId: string) =>
+    get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/background-commands/${encodeURIComponent(taskId)}/output`),
   workflowAgentActivity: (sessionId: string, runId: string, agentId: string) =>
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/agents/${encodeURIComponent(agentId)}`),
 
