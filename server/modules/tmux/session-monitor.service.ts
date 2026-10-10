@@ -272,6 +272,7 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
 
     // An unregistered window (started without our hook, or stuck before it fires) may sit on a dialog with no status file.
     if (pane && (activity === 'waiting' || watch.prompt || !pane.registered)) {
+      await deps.tmux.restoreShrunkWindow(pane.pane.windowId).catch(() => false);
       emitPrompt(watch, parseTuiPrompt(await deps.tmux.capturePane(pane.pane.paneId)));
     } else if (watch.prompt) {
       emitPrompt(watch, null);

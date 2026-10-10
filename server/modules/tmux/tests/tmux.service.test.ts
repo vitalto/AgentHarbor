@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import os from 'node:os';
 import test from 'node:test';
+import { promisify } from 'node:util';
 
 import { createTmuxService } from '@/modules/tmux/tmux.service.js';
 
@@ -41,6 +43,23 @@ test('tmux adapter round-trips windows, pasted text and keys', async (t) => {
   await tmux.killWindow(pane.windowId);
   const remaining = await tmux.listPanes();
   assert.ok(!remaining.some((candidate) => candidate.paneId === pane.paneId));
+});
+
+test('a window a small client left behind is restored to the default size once nobody shows it', async (t) => {
+  await tmux.startDetachedSession(os.tmpdir());
+  t.after(() => tmux.killServer());
+  const pane = await tmux.newWindow({ cwd: os.tmpdir(), name: 'agent', command: 'cat' });
+  const run = (args: string[]) => promisify(execFile)('tmux', [...tmux.socketArgs(), ...args]);
+  const windowSize = async () => (await run(['display-message', '-p', '-t', pane.windowId, '#{window_width}x#{window_height}'])).stdout.trim();
+  await run(['set-option', '-g', 'default-size', '100x30']);
+
+  await run(['resize-window', '-t', pane.windowId, '-x', '45', '-y', '17']);
+  assert.equal(await tmux.restoreShrunkWindow(pane.windowId), true);
+  assert.equal(await windowSize(), '100x30');
+  const windowSizeOption = (await run(['show-options', '-wv', '-t', pane.windowId, 'window-size'])).stdout.trim();
+  assert.equal(windowSizeOption, '', 'the window follows its viewers again');
+
+  assert.equal(await tmux.restoreShrunkWindow(pane.windowId), false, 'a window at the default size is left alone');
 });
 
 test('hasSession is false when the server is not running', async () => {

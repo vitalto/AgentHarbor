@@ -41,6 +41,11 @@ function parsePaneLine(line: string): AgentPane | null {
 
 export class TmuxError extends Error {}
 
+function parseSize(text: string): { width: number; height: number } {
+  const [width, height] = text.trim().split('x').map(Number);
+  return { width: width || 0, height: height || 0 };
+}
+
 /**
  * Arguments addressing the tmux server. Without an explicit socket name, a
  * server running inside tmux follows $TMUX; spelled out as -S so processes
@@ -71,6 +76,20 @@ export function createTmuxService(options: { socketName?: string; session?: stri
         child.stdin?.end(stdin);
       }
     });
+
+  /** How many attached clients (any session of the group, e.g. a phone on main or another browser) show this window. */
+  const countViewers = async (windowId: string): Promise<number> => {
+    let output: string;
+    try {
+      output = await run(['list-sessions', '-F', `#{session_attached}${FIELD_SEPARATOR}#{window_id}`]);
+    } catch {
+      return 0;
+    }
+    return output.split('\n').reduce((count, line) => {
+      const [attached, currentWindowId] = line.split(FIELD_SEPARATOR);
+      return currentWindowId === windowId ? count + (Number(attached) || 0) : count;
+    }, 0);
+  };
 
   return {
     sessionName,
@@ -114,18 +133,29 @@ export function createTmuxService(options: { socketName?: string; session?: stri
       return pane;
     },
 
-    /** How many attached clients (any session of the group, e.g. a phone on main or another browser) show this window. */
-    async countViewers(windowId: string): Promise<number> {
-      let output: string;
-      try {
-        output = await run(['list-sessions', '-F', `#{session_attached}${FIELD_SEPARATOR}#{window_id}`]);
-      } catch {
-        return 0;
+    countViewers,
+
+    /**
+     * With window-size=latest a window keeps the size of the last client that
+     * showed it, so after a phone (ssh or the Shell tab) leaves, Claude goes on
+     * drawing into 45x18 and a question menu taller than that loses its first
+     * option and the question off the top. Once nobody shows the window it goes
+     * back to the server's default size; the next viewer still resizes it.
+     * Returns whether it resized.
+     */
+    async restoreShrunkWindow(windowId: string): Promise<boolean> {
+      const [current, preferred] = await Promise.all([
+        run(['display-message', '-p', '-t', windowId, '#{window_width}x#{window_height}']).then(parseSize),
+        run(['show-options', '-gv', 'default-size']).then(parseSize),
+      ]);
+      const shrunk = current.width < preferred.width || current.height < preferred.height;
+      if (!shrunk || (await countViewers(windowId)) > 0) {
+        return false;
       }
-      return output.split('\n').reduce((count, line) => {
-        const [attached, currentWindowId] = line.split(FIELD_SEPARATOR);
-        return currentWindowId === windowId ? count + (Number(attached) || 0) : count;
-      }, 0);
+      await run(['resize-window', '-t', windowId, '-x', String(preferred.width), '-y', String(preferred.height)]);
+      // resize-window pins the window to manual sizing; unset it so viewers resize it again.
+      await run(['set-option', '-wu', '-t', windowId, 'window-size']);
+      return true;
     },
 
     async killWindow(windowId: string): Promise<void> {

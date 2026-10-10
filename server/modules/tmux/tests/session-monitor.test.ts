@@ -45,6 +45,7 @@ async function harness() {
     written: [] as unknown[],
     completed: [] as number[],
     attached: 0,
+    restoredWindows: [] as string[],
   };
   const paneSession = (): PaneSession => ({
     pane: { windowId: '@1', windowName: 'proj', paneId: '%1', panePid: 10, cwd: '/p', dead: false, command: 'claude', currentCommand: 'init' },
@@ -52,6 +53,7 @@ async function harness() {
   });
   const tmux = {
     capturePane: async () => state.screen,
+    restoreShrunkWindow: async (windowId: string) => void state.restoredWindows.push(windowId),
     sendKeys: async (_pane: string, keys: string[]) => void state.sentKeys.push(keys),
     pasteText: async (_pane: string, text: string) => state.onPaste(text),
   } as unknown as TmuxService;
@@ -177,6 +179,7 @@ test('a waiting menu is broadcast as a prompt, answered by key, and cleared', as
   const promptFrame = socket.frames.find((frame) => frame.kind === 'tui_prompt');
   assert.ok(promptFrame);
   assert.equal((promptFrame.prompt as { question: string }).question, 'Do you want to proceed?');
+  assert.deepEqual(state.restoredWindows, ['@1'], 'a window a phone shrank is restored before its menu is read');
 
   assert.equal(await monitor.chooseOption('app1', 3), true);
   assert.deepEqual(state.sentKeys.at(-1), ['Down', 'Down', 'Down', 'Enter']);
