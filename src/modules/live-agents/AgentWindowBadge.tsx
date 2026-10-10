@@ -26,7 +26,10 @@ export function describeAgentActivity(agentWindow: AgentWindow): string {
 type AgentWindowBadgeProps = {
   provider: LLMProvider;
   agentWindow: AgentWindow | null;
+  /** Size of the provider logo. */
   className?: string;
+  /** Size of the live-window glyph, which is drawn as its own framed square and may fill the whole slot. */
+  windowIconClassName?: string;
 };
 
 /**
@@ -34,7 +37,7 @@ type AgentWindowBadgeProps = {
  * Claude runs (in tmux, or a monitor glyph when it runs in another terminal),
  * a warning when two processes hold it, the provider logo otherwise.
  */
-export default function AgentWindowBadge({ provider, agentWindow, className }: AgentWindowBadgeProps) {
+export default function AgentWindowBadge({ provider, agentWindow, className, windowIconClassName = className }: AgentWindowBadgeProps) {
   if (!agentWindow) {
     return <LLMProviderLogo provider={provider} className={className} />;
   }
@@ -45,9 +48,10 @@ export default function AgentWindowBadge({ provider, agentWindow, className }: A
     : `${describeAgentLocation(agentWindow)} · ${style.label}`;
   return (
     <Tooltip content={tooltip} position="top">
-      <span data-testid="agent-window-badge" className="inline-flex">
+      {/* Block-level: inline, the glyph sat on the text baseline of the tooltip's inline-block and rode high. */}
+      <span data-testid="agent-window-badge" className="flex">
         <Icon
-          className={cn(className, agentWindow.duplicateProcesses ? 'text-red-600 dark:text-red-400' : style.className)}
+          className={cn(windowIconClassName, agentWindow.duplicateProcesses ? 'text-red-600 dark:text-red-400' : style.className)}
           aria-label={tooltip}
         />
       </span>

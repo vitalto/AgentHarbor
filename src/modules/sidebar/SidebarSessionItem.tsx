@@ -207,7 +207,7 @@ function SidebarSessionItem({
                 isSelected ? 'bg-primary/10' : 'bg-muted/50',
               )}
             >
-              <AgentWindowBadge provider={session.__provider} agentWindow={agentWindow} className="h-3 w-3" />
+              <AgentWindowBadge provider={session.__provider} agentWindow={agentWindow} className="h-3 w-3" windowIconClassName="!h-5 !w-5" />
             </div>
 
             <div className="min-w-0 flex-1">
@@ -454,7 +454,7 @@ function SidebarSessionItem({
                 isSelected ? 'bg-primary/10' : 'bg-muted/50',
               )}
             >
-              <AgentWindowBadge provider={session.__provider} agentWindow={agentWindow} className="h-3 w-3" />
+              <AgentWindowBadge provider={session.__provider} agentWindow={agentWindow} className="h-3 w-3" windowIconClassName="!h-5 !w-5" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
