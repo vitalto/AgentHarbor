@@ -2,6 +2,8 @@ export type TuiPromptOption = {
   label: string;
   detail: string | null;
   selected: boolean;
+  /** AskUserQuestion's "Type something." slot: an inline text field, not a choice. */
+  freeText: boolean;
 };
 
 export type TuiPrompt = {
@@ -18,6 +20,9 @@ const ANY_RULE = /^\s*[─━╌]{10,}\s*$/;
 const NUMBERED_OPTION = /^(\s*)(?:([>❯›])\s*)?(\d+)\.\s+(.*)$/;
 const CURSOR_LINE = /^(\s*)([>❯›])(\s+)(\S.*)$/;
 const FOOTER_SEARCH_DEPTH = 4;
+const FREE_TEXT_PLACEHOLDER = 'Type something.';
+/** Shown in the footer only while the cursor sits on the free-text slot; its label is then whatever was typed. */
+const FREE_TEXT_FOOTER_HINT = /ctrl\+g to edit/;
 
 function leadingSpaces(line: string): number {
   return line.length - line.trimStart().length;
@@ -40,6 +45,30 @@ function findFooter(lines: string[]): number {
     }
   }
   return -1;
+}
+
+/** AskUserQuestion's tab bar with several questions: `←  [×] Q1  [ ] Q2  √ Submit  →`. */
+const QUESTION_SET_TABS = /^\s*←\s.*\bSubmit\s+→$/;
+
+/**
+ * Index of the menu's key-hint footer, or — for the question set's review step
+ * ("Ready to submit your answers?"), which draws no footer — the line just
+ * below its last option. -1 when no menu is open.
+ */
+function findMenuEnd(lines: string[]): number {
+  const footer = findFooter(lines);
+  if (footer >= 0) {
+    return footer;
+  }
+  const last = lastNonEmptyIndex(lines);
+  if (last < 0 || !NUMBERED_OPTION.test(lines[last])) {
+    return -1;
+  }
+  let dialogTop = last - 1;
+  while (dialogTop >= 0 && !DIALOG_BORDER.test(lines[dialogTop])) {
+    dialogTop -= 1;
+  }
+  return dialogTop >= 0 && QUESTION_SET_TABS.test(lines[dialogTop + 1] ?? '') ? last + 1 : -1;
 }
 
 /** Joins a wrapped continuation onto text; a line that filled the screen was hard-wrapped mid-word. */
@@ -96,7 +125,7 @@ function readNumberedOptions(lines: string[], footerIndex: number, screenWidth: 
       }
       previousLine = continuationLine;
     }
-    return { label: labelText, detail, selected: raw.selected };
+    return { label: labelText, detail, selected: raw.selected, freeText: false };
   });
   return { options, topIndex: found[0].index };
 }
@@ -136,7 +165,7 @@ function readCursorOptions(lines: string[], footerIndex: number): OptionBlock | 
   const options: TuiPromptOption[] = [];
   for (let index = top; index <= bottom; index += 1) {
     const cursor = CURSOR_LINE.exec(lines[index]);
-    options.push({ label: (cursor ? cursor[4] : lines[index]).trim(), detail: null, selected: index === cursorIndex });
+    options.push({ label: (cursor ? cursor[4] : lines[index]).trim(), detail: null, selected: index === cursorIndex, freeText: false });
   }
   return { options, topIndex: top };
 }
@@ -157,7 +186,7 @@ function readBody(lines: string[], optionsTopIndex: number): string[] {
 
 /** Recognises a Claude Code selection menu (permission, question, trust dialog) at the bottom of a pane. */
 export function parseTuiPrompt(lines: string[]): TuiPrompt | null {
-  const footerIndex = findFooter(lines);
+  const footerIndex = findMenuEnd(lines);
   if (footerIndex < 0) {
     return null;
   }
@@ -167,17 +196,27 @@ export function parseTuiPrompt(lines: string[]): TuiPrompt | null {
     return null;
   }
 
+  const cursorOnFreeText = FREE_TEXT_FOOTER_HINT.test(lines[footerIndex] ?? '');
+  const options = block.options.map((option) => ({
+    ...option,
+    freeText: option.label === FREE_TEXT_PLACEHOLDER || (cursorOnFreeText && option.selected),
+  }));
+
   const body = readBody(lines, block.topIndex);
   const question = [...body].reverse().find((line) => line.endsWith('?')) ?? body.join(' ');
-  return { question, body, options: block.options };
+  return { question, body, options };
+}
+
+/** tmux key names that move the menu cursor from the selected option to `targetIndex`, without confirming. */
+export function keysToReachOption(prompt: TuiPrompt, targetIndex: number): string[] {
+  const selectedIndex = Math.max(0, prompt.options.findIndex((option) => option.selected));
+  const distance = targetIndex - selectedIndex;
+  return Array.from({ length: Math.abs(distance) }, () => (distance > 0 ? 'Down' : 'Up'));
 }
 
 /** tmux key names that move the menu cursor from the selected option to `targetIndex` and confirm. */
 export function keysForOption(prompt: TuiPrompt, targetIndex: number): string[] {
-  const selectedIndex = Math.max(0, prompt.options.findIndex((option) => option.selected));
-  const distance = targetIndex - selectedIndex;
-  const moves = Array.from({ length: Math.abs(distance) }, () => (distance > 0 ? 'Down' : 'Up'));
-  return [...moves, 'Enter'];
+  return [...keysToReachOption(prompt, targetIndex), 'Enter'];
 }
 
 const INPUT_PROMPT = /^[>❯]\s?/;
@@ -191,7 +230,7 @@ export type InputBox = {
 
 /** The prompt input box (`> ` between two horizontal rules) when it is on screen and no menu covers it. */
 export function readInputBox(lines: string[]): InputBox | null {
-  if (findFooter(lines) >= 0) {
+  if (findMenuEnd(lines) >= 0) {
     return null;
   }
   for (let index = lines.length - 1; index >= 1; index -= 1) {

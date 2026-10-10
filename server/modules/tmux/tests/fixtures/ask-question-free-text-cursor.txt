@@ -1,0 +1,31 @@
+ ▐▛███▛█   Claude Code v2.1.296
+▝▜██████▀  Opus 5.5 with high effort · Claude Max
+ ▝▝   ▝▝   D:\Develop\TerminalShare
+
+
+> Test only, do nothing else: call AskUserQuestion once with 4 questions in one call (headers Q1,Q2,Q3,Q4), each with
+  options A and B. After I answer, just repeat my answers verbatim.
+
+● User declined to answer questions
+  ⎿  · Question 1: pick A or B? (A / B)
+     · Question 2: pick A or B? (A / B)
+     · Question 3: pick A or B? (A / B)
+     · Question 4: pick A or B? (A / B)
+
+✻ Worked for 3s · done 11:18
+
+> Again the same 4-question AskUserQuestion, nothing else.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  [×] Q1  [ ] Q2  [ ] Q3  [ ] Q4  √ Submit  →
+
+Question 2: pick A or B?
+
+  1. A
+     Option A
+  2. B
+     Option B
+> 3. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · ctrl+g to edit in Notepad · Esc to cancel

@@ -5,7 +5,7 @@ import { test } from 'vitest';
 import { applyTuiEvent, type TuiSessionState } from '@/modules/chat/hooks/useTuiSessionState';
 
 const empty: TuiSessionState = { prompt: null, screen: [] };
-const prompt = { question: 'Do you want to proceed?', body: [], options: [{ label: 'Yes', detail: null, selected: true }] };
+const prompt = { question: 'Do you want to proceed?', body: [], options: [{ label: 'Yes', detail: null, selected: true, freeText: false }] };
 
 test('a prompt opens, survives screen updates, and clears', () => {
   const opened = applyTuiEvent(empty, { kind: 'tui_prompt', prompt });

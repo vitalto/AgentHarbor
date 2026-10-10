@@ -39,6 +39,8 @@ async function harness() {
     screen: fixture('idle-input'),
     clock: 1_000_000,
     sentKeys: [] as string[][],
+    pasted: [] as string[],
+    onPaste: (_text: string) => {},
     running: false,
     written: [] as unknown[],
     completed: [] as number[],
@@ -51,6 +53,7 @@ async function harness() {
   const tmux = {
     capturePane: async () => state.screen,
     sendKeys: async (_pane: string, keys: string[]) => void state.sentKeys.push(keys),
+    pasteText: async (_pane: string, text: string) => state.onPaste(text),
   } as unknown as TmuxService;
   const registry = {
     refresh: async () => (state.paneAlive ? [paneSession()] : []),
@@ -186,6 +189,37 @@ test('a waiting menu is broadcast as a prompt, answered by key, and cleared', as
   state.screen = fixture('after-deny');
   await monitor.tick();
   assert.equal(socket.frames.at(-1)?.kind, 'tui_prompt_cleared');
+});
+
+test('a free-text answer is typed into the "Type something." slot before Enter; an empty one is refused', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  state.activity = 'waiting';
+  state.screen = fixture('ask-question');
+
+  // An empty Enter on that slot makes Claude decline the whole question set.
+  assert.equal(await monitor.chooseOption('app1', 3), false);
+  assert.equal(await monitor.chooseOption('app1', 3, '   '), false);
+  assert.deepEqual(state.sentKeys, []);
+
+  state.onPaste = (text) => {
+    state.pasted.push(text);
+    state.screen = fixture('ask-question-free-text-typed');
+  };
+  assert.equal(await monitor.chooseOption('app1', 3, 'typed so far'), true);
+  assert.deepEqual(state.sentKeys, [['Down', 'Down', 'Down'], ['Enter']]);
+  assert.deepEqual(state.pasted, ['typed so far']);
+});
+
+test('a free-text answer whose paste never shows up is not submitted', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  state.activity = 'waiting';
+  state.screen = fixture('ask-question');
+  state.onPaste = (text) => void state.pasted.push(text);
+
+  assert.equal(await monitor.chooseOption('app1', 3, 'lost'), false);
+  assert.deepEqual(state.sentKeys, [['Down', 'Down', 'Down']]);
 });
 
 test('a window still starting up has its menus surfaced and answered before it registers', async (t) => {

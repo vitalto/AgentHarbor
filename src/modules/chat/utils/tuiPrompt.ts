@@ -3,6 +3,8 @@ export type TuiPromptOption = {
   label: string;
   detail: string | null;
   selected: boolean;
+  /** AskUserQuestion's "Type something." slot: answered with typed text, not by picking it. */
+  freeText: boolean;
 };
 
 export type TuiPrompt = {

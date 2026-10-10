@@ -84,7 +84,8 @@ export type ProviderRuntimeGateway = {
 export type TerminalGateway = {
   watch(sessionId: string, socket: WebSocket): void;
   unwatchSocket(socket: WebSocket): void;
-  chooseOption(sessionId: string, optionIndex: number): Promise<boolean>;
+  /** `freeText` answers a free-text option (AskUserQuestion's "Type something."). */
+  chooseOption(sessionId: string, optionIndex: number, freeText?: string): Promise<boolean>;
   sendKeys(sessionId: string, keys: string[]): Promise<boolean>;
   /** Types into the session's window while Claude is busy (the TUI queues it); false when there is no window. */
   typeWhileBusy(sessionId: string, text: string): Promise<boolean>;
@@ -343,7 +344,7 @@ async function handleTuiKeys(ws: WebSocket, data: AnyRecord, dependencies: ChatW
     return;
   }
   const delivered = typeof data.optionIndex === 'number'
-    ? await terminal.chooseOption(sessionId, data.optionIndex)
+    ? await terminal.chooseOption(sessionId, data.optionIndex, typeof data.freeText === 'string' ? data.freeText : undefined)
     : await terminal.sendKeys(
       sessionId,
       (Array.isArray(data.keys) ? data.keys : []).filter((key: unknown): key is string => typeof key === 'string' && TUI_KEYS.has(key)),

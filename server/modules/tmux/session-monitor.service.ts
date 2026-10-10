@@ -6,7 +6,7 @@ import { readClaudeStatuses, type ClaudeStatus } from '@/modules/tmux/claude-sta
 import { paneRegistry, type PaneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { tmuxService, type TmuxService } from '@/modules/tmux/tmux.service.js';
 import { createTranscriptTail, type TranscriptTail } from '@/modules/tmux/transcript-tail.js';
-import { isInputReady, keysForOption, parseTuiPrompt, type TuiPrompt } from '@/modules/tmux/tui-prompt.js';
+import { isInputReady, keysForOption, keysToReachOption, parseTuiPrompt, type TuiPrompt } from '@/modules/tmux/tui-prompt.js';
 
 /** A websocket (or anything with the same surface) watching a session. */
 export type MonitorSocket = { readyState: number; send(data: string): void };
@@ -64,6 +64,21 @@ const SUBAGENTS_CHECK_MS = 3000;
 const SCREEN_TAIL_LINES = 14;
 /** A turn the web just sent that never turned busy (e.g. a slash command) is over after this long. */
 const TURN_START_GRACE_MS = 20_000;
+/** The TUI absorbs a paste at its own pace ("Pasting…"); this many polls bound the wait (~3 s). */
+const FREE_TEXT_LANDING_POLLS = 30;
+const FREE_TEXT_POLL_MS = 100;
+
+const withoutWhitespace = (text: string) => text.replace(/\s+/g, '');
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** The cursor sits on a free-text slot that now shows the start of `text` (long answers wrap into the detail lines). */
+function showsFreeText(prompt: TuiPrompt | null, text: string): boolean {
+  const slot = prompt?.options.find((option) => option.selected);
+  if (!slot?.freeText) {
+    return false;
+  }
+  return withoutWhitespace(`${slot.label}${slot.detail ?? ''}`).includes(withoutWhitespace(text).slice(0, 20));
+}
 
 /** Latest mtime of the .jsonl files in a directory tree (workflows nest one level deeper), or null if it does not exist. */
 async function newestWriteUnder(directory: string, depth = 0): Promise<number | null> {
@@ -116,6 +131,16 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
   const startingPanes = new Map<string, string>();
   let timer: NodeJS.Timeout | null = null;
   let ticking = false;
+
+  async function waitForFreeTextToLand(paneId: string, text: string): Promise<boolean> {
+    for (let poll = 0; poll < FREE_TEXT_LANDING_POLLS; poll += 1) {
+      if (showsFreeText(parseTuiPrompt(await deps.tmux.capturePane(paneId)), text)) {
+        return true;
+      }
+      await delay(FREE_TEXT_POLL_MS);
+    }
+    return false;
+  }
 
   function watchFor(appSessionId: string): Watch {
     let watch = watches.get(appSessionId);
@@ -376,7 +401,8 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
       return true;
     },
 
-    async chooseOption(appSessionId: string, optionIndex: number): Promise<boolean> {
+    /** Answers the open menu; a free-text option needs `freeText`, which is typed into it before Enter. */
+    async chooseOption(appSessionId: string, optionIndex: number, freeText?: string): Promise<boolean> {
       const paneId = await monitor.resolvePaneId(appSessionId);
       if (!paneId) {
         return false;
@@ -386,7 +412,20 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
       if (!prompt || optionIndex < 0 || optionIndex >= prompt.options.length) {
         return false;
       }
-      await deps.tmux.sendKeys(paneId, keysForOption(prompt, optionIndex));
+      if (!prompt.options[optionIndex].freeText) {
+        await deps.tmux.sendKeys(paneId, keysForOption(prompt, optionIndex));
+        return true;
+      }
+      // Enter on an empty free-text slot makes Claude decline the whole AskUserQuestion.
+      if (!freeText?.trim()) {
+        return false;
+      }
+      await deps.tmux.sendKeys(paneId, keysToReachOption(prompt, optionIndex));
+      await deps.tmux.pasteText(paneId, freeText);
+      if (!(await waitForFreeTextToLand(paneId, freeText))) {
+        return false;
+      }
+      await deps.tmux.sendKeys(paneId, ['Enter']);
       return true;
     },
 

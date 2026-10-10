@@ -39,7 +39,7 @@ type MentionableFile = {
 type ChatComposerProps = {
   /** A menu the session's Claude TUI is showing right now, if any. */
   tuiPrompt: TuiPrompt | null;
-  onTuiChoose: (optionIndex: number) => void;
+  onTuiChoose: (optionIndex: number, freeText?: string) => void;
   onTuiKey: (key: TuiKey) => void;
   /** The session has a live Claude window; its TUI also takes messages while Claude works. */
   hasLiveWindow: boolean;

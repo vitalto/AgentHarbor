@@ -47,6 +47,38 @@ test('AskUserQuestion: descriptions become details, options after a rule are kep
   assert.equal(prompt.options[0].selected, true);
 });
 
+test('AskUserQuestion: the "Type something." slot is a free-text option, also once text is typed into it', () => {
+  const placeholder = parseTuiPrompt(screen('ask-question'));
+  assert.deepEqual(placeholder?.options.map((option) => option.freeText), [false, false, false, true, false]);
+
+  const cursorOnIt = parseTuiPrompt(screen('ask-question-free-text-cursor'));
+  assert.equal(cursorOnIt?.question, 'Question 2: pick A or B?');
+  assert.deepEqual(cursorOnIt?.options.map((option) => option.freeText), [false, false, true, false]);
+
+  const typed = parseTuiPrompt(screen('ask-question-free-text-typed'));
+  assert.equal(typed?.options[2].label, 'typed so far');
+  assert.equal(typed?.options[2].freeText, true);
+});
+
+test('AskUserQuestion review step: a menu without the key-hint footer, recognised by the question tabs', () => {
+  const lines = screen('ask-question-review');
+  const prompt = parseTuiPrompt(lines);
+  assert.ok(prompt);
+  assert.equal(prompt.question, 'Ready to submit your answers?');
+  assert.ok(prompt.body.includes('→ мой собственный ответ, с запятой'));
+  assert.deepEqual(prompt.options.map((option) => [option.label, option.selected, option.freeText]), [
+    ['Submit answers', true, false],
+    ['Cancel', false, false],
+  ]);
+  assert.equal(isInputReady(lines), false);
+});
+
+test('permission prompts have no free-text option', () => {
+  for (const name of ['bash-permission', 'write-permission', 'trust-folder']) {
+    assert.ok(parseTuiPrompt(screen(name))?.options.every((option) => !option.freeText), name);
+  }
+});
+
 test('trust dialog: unnumbered options follow the cursor', () => {
   const prompt = parseTuiPrompt(screen('trust-folder'));
   assert.ok(prompt);

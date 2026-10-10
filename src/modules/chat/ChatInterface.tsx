@@ -306,9 +306,9 @@ function ChatInterface({
   useEffect(() => {
     setHasMessageAwaitingMove(false);
   }, [viewedSessionId]);
-  const chooseTuiOption = useCallback((optionIndex: number) => {
+  const chooseTuiOption = useCallback((optionIndex: number, freeText?: string) => {
     if (viewedSessionId) {
-      sendMessage({ type: 'chat.tui-keys', sessionId: viewedSessionId, optionIndex });
+      sendMessage({ type: 'chat.tui-keys', sessionId: viewedSessionId, optionIndex, freeText });
     }
   }, [sendMessage, viewedSessionId]);
   const pressTuiKey = useCallback((key: TuiKey) => {
