@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client'
 import { scan } from 'react-scan'
 
 import App from '@/App'
+import { alignSteppedAnimations } from '@/shared/alignSteppedAnimations'
+import { declineAnimationIterationListeners } from '@/shared/declineAnimationIterationListeners'
 import '@/index.css'
 import 'katex/dist/katex.min.css'
 
@@ -27,6 +29,9 @@ const rootElement = document.getElementById('root')
 if (!rootElement) {
   throw new Error('Unable to mount the app: #root is missing from the document')
 }
+
+declineAnimationIterationListeners()
+alignSteppedAnimations()
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>

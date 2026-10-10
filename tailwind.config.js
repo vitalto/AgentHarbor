@@ -86,11 +86,12 @@ export default {
       },
       // Endless indicators are stepped on purpose: Chrome draws no frame while a stepped value
       // holds, so a busy session's spinners, pulses and shimmer cost ~4x less CPU+GPU than smooth 60 fps ones.
+      // Every step lasts 125 ms (pulse steps per 1 s half) — the grid src/shared/alignSteppedAnimations.ts snaps them to.
       animation: {
         spin: 'spin 1s steps(8, end) infinite',
-        pulse: 'pulse 2s steps(5, end) infinite',
-        'shimmer-window': 'shimmer-window 2s steps(24, end) infinite',
-        'shimmer-window-text': 'shimmer-window-text 2s steps(24, end) infinite',
+        pulse: 'pulse 2s steps(8, end) infinite',
+        'shimmer-window': 'shimmer-window 2s steps(16, end) infinite',
+        'shimmer-window-text': 'shimmer-window-text 2s steps(16, end) infinite',
         'dialog-overlay-show': 'dialog-overlay-show 150ms ease-out',
         'dialog-content-show': 'dialog-content-show 150ms ease-out',
         'bottom-sheet-content-show': 'bottom-sheet-content-show 220ms cubic-bezier(0.22, 1, 0.36, 1)',
