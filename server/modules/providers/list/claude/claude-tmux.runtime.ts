@@ -22,6 +22,18 @@ function stageForClaude(attachments: unknown): Promise<ChatAttachmentDescriptor[
   })));
 }
 
+/** Types a message with its uploads into a Claude window: images as `[Image #N]` attachments, other files named in a <files_input> block. */
+export async function typePromptWithAttachments(
+  paneId: string,
+  command: string,
+  attachments: { images?: unknown; files?: unknown },
+): Promise<void> {
+  const images = await stageForClaude(attachments.images);
+  // The <files_input> block names each file; chat history turns it back into file chips.
+  const prompt = appendFilesInputTag(command, await stageForClaude(attachments.files));
+  await typeIntoAgent(paneId, prompt, images.map((image) => image.path));
+}
+
 /**
  * Drives the session's interactive Claude Code TUI in tmux instead of
  * spawning an SDK run: the prompt is typed into the window, and the session
@@ -38,11 +50,8 @@ export const claudeTmuxRuntime: IProviderRuntime = {
     try {
       const pane = await ensureAgentWindow(appSessionId);
       await waitForInputReady(appSessionId, pane.pane.paneId);
-      const images = await stageForClaude(options.images);
-      // The <files_input> block names each file; chat history turns it back into file chips.
-      const prompt = appendFilesInputTag(command, await stageForClaude(options.files));
       const turnEnded = getSessionMonitor().beginTurn(appSessionId);
-      await typeIntoAgent(pane.pane.paneId, prompt, images.map((image) => image.path));
+      await typePromptWithAttachments(pane.pane.paneId, command, options);
       return await turnEnded;
     } catch (error) {
       writer.send(createNormalizedMessage({

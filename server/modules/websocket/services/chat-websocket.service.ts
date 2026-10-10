@@ -63,6 +63,28 @@ export function filterImagesToUploadStore(
   return filterAttachmentsToUploadStore(images, assetsRootOverride);
 }
 
+export type BusySendAttachments = {
+  images: ChatAttachmentDescriptor[];
+  files: ChatAttachmentDescriptor[];
+};
+
+/** A send's attachments from every field the client may use, deduplicated and limited to the upload store. */
+function readVerifiedAttachments(clientOptions: AnyRecord): BusySendAttachments & { all: ChatAttachmentDescriptor[] } {
+  const candidates = [
+    ...normalizeAttachmentDescriptors(clientOptions.images),
+    ...normalizeAttachmentDescriptors(clientOptions.files),
+    ...normalizeAttachmentDescriptors(clientOptions.attachments),
+  ];
+  const unique = filterAttachmentsToUploadStore(candidates).filter(
+    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
+  );
+  return {
+    all: unique,
+    images: unique.filter(isImageAttachmentDescriptor),
+    files: unique.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+  };
+}
+
 /** Application boundary for dispatching provider runs and approvals. */
 export type ProviderRuntimeGateway = {
   hasRuntime(provider: string): boolean;
@@ -88,7 +110,7 @@ export type TerminalGateway = {
   chooseOption(sessionId: string, optionIndex: number, freeText?: string): Promise<boolean>;
   sendKeys(sessionId: string, keys: string[]): Promise<boolean>;
   /** Types into the session's window while Claude is busy (the TUI queues it); false when there is no window. */
-  typeWhileBusy(sessionId: string, text: string): Promise<boolean>;
+  typeWhileBusy(sessionId: string, text: string, attachments: BusySendAttachments): Promise<boolean>;
 };
 
 type ChatWebSocketDependencies = {
@@ -172,7 +194,8 @@ async function handleChatSend(
   if (chatRunRegistry.isProcessing(resolved.sessionId)) {
     // Claude's TUI queues input typed while it works, so a busy session takes the message too.
     const content = typeof data.content === 'string' ? data.content : '';
-    if (await dependencies.terminal?.typeWhileBusy(resolved.sessionId, content)) {
+    const { images, files } = readVerifiedAttachments((data.options ?? {}) as AnyRecord);
+    if (await dependencies.terminal?.typeWhileBusy(resolved.sessionId, content, { images, files })) {
       return;
     }
   }
@@ -273,15 +296,7 @@ async function dispatchRun(
     providerModelsService.setSessionEffort(provider, sessionId, clientOptions.effort);
   }
 
-  const attachmentCandidates = [
-    ...normalizeAttachmentDescriptors(clientOptions.images),
-    ...normalizeAttachmentDescriptors(clientOptions.files),
-    ...normalizeAttachmentDescriptors(clientOptions.attachments),
-  ];
-  const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
-  const uniqueAttachments = verifiedAttachments.filter(
-    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
-  );
+  const verifiedAttachments = readVerifiedAttachments(clientOptions);
 
   // The provider runtimes receive the stable app session id. When their
   // CLI/SDK needs the provider-native id for resume, they resolve it from the
@@ -294,9 +309,9 @@ async function dispatchRun(
     ...extraRuntimeOptions,
     // Attachments are re-validated server-side: only direct children of the
     // global upload store may reach provider runtimes or their file tools.
-    attachments: uniqueAttachments,
-    images: uniqueAttachments.filter(isImageAttachmentDescriptor),
-    files: uniqueAttachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+    attachments: verifiedAttachments.all,
+    images: verifiedAttachments.images,
+    files: verifiedAttachments.files,
     sessionId,
     cwd: clientOptions.cwd ?? session.project_path ?? undefined,
     projectPath: session.project_path ?? clientOptions.projectPath,

@@ -15,13 +15,13 @@ import {
     initializeSessionsWatcher,
     providerRuntimeService,
     sessionsService,
+    typePromptWithAttachments,
 } from '@/modules/providers/index.js';
 import {
     configureSessionMonitor,
     findAgentWindow,
     getAgentConfig,
     startIdleReaper,
-    typeIntoAgent,
     writeHookSettings,
 } from '@/modules/tmux/index.js';
 import { chatRunRegistry, createWebSocketServer } from '@/modules/websocket/index.js';
@@ -130,12 +130,12 @@ createWebSocketServer(server, {
             unwatchSocket: (socket) => sessionMonitor.unwatchSocket(socket),
             chooseOption: (sessionId, optionIndex, freeText) => sessionMonitor.chooseOption(sessionId, optionIndex, freeText),
             sendKeys: (sessionId, keys) => sessionMonitor.sendKeys(sessionId, keys),
-            typeWhileBusy: async (sessionId, text) => {
+            typeWhileBusy: async (sessionId, text, attachments) => {
                 const pane = await findAgentWindow(sessionId);
                 if (!pane) {
                     return false;
                 }
-                await typeIntoAgent(pane.pane.paneId, text);
+                await typePromptWithAttachments(pane.pane.paneId, text, attachments);
                 return true;
             },
         },

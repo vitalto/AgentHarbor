@@ -368,6 +368,10 @@ async function pasteIntoInputBox(paneId: string, text: string): Promise<string> 
  * image file path becomes an `[Image #N]` attachment.
  */
 export async function typeIntoAgent(paneId: string, text: string, imagePaths: string[] = []): Promise<void> {
+  // An Enter on an empty box changes nothing yet would read as sent.
+  if (!text.trim() && imagePaths.length === 0) {
+    throw new AgentWindowError('The message is empty: no text and no images reached the server.');
+  }
   let boxText = '';
   for (const imagePath of imagePaths) {
     boxText = await pasteIntoInputBox(paneId, imagePath);
