@@ -20,6 +20,7 @@ const INPUT_POLL_MS = 100;
 const PASTE_LANDING_TIMEOUT_MS = 10_000;
 const SUBMIT_CONFIRM_TIMEOUT_MS = 3_000;
 const SUBMIT_ATTEMPTS = 4;
+const CLEANUP_CONFIRM_PAUSE_MS = 500;
 const PROCESS_EXIT_TIMEOUT_MS = 10_000;
 /** A pane's interop process and its claude.exe start within a few seconds of each other. */
 const PANE_PROCESS_MATCH_MS = 60_000;
@@ -333,13 +334,14 @@ const PASTE_PLACEHOLDER = /\[(?:Pasted text|Image) #\d+/;
  * Claude took the message once the pasted text left the box: it may be empty
  * then, or show the "edit queued messages" hint while Claude is busy. A box
  * that still holds the paste, or only lost its invisible characters to Enter,
- * still has the message unsent.
+ * still has the message unsent. The cleanup notice outlives the send, so it
+ * says nothing about whether the message went.
  */
 export function hasTakenMessage(box: InputBox | null, pastedBoxText: string): boolean {
   if (box === null) {
     return true;
   }
-  if (box.pasting || box.confirmingSend || PASTE_PLACEHOLDER.test(box.text)) {
+  if (box.pasting || PASTE_PLACEHOLDER.test(box.text)) {
     return false;
   }
   return visibleText(box.text) !== visibleText(pastedBoxText);
@@ -374,17 +376,23 @@ export async function typeIntoAgent(paneId: string, text: string, imagePaths: st
   if (text.trim()) {
     boxText = await pasteIntoInputBox(paneId, imagePaths.length > 0 ? ` ${text}` : text);
   }
+  // Claude Code strips invisible characters (Telegram wraps quoted names in
+  // LRM/FSI/PDI) on the first Enter and waits for a second one, which it drops
+  // when it follows the cleanup too closely.
+  let cleanupNoticed = false;
   for (let attempt = 0; attempt < SUBMIT_ATTEMPTS; attempt += 1) {
     await tmuxService.sendKeys(paneId, ['Enter']);
-    // Claude Code strips invisible characters (Telegram wraps quoted names in
-    // LRM/FSI/PDI) on the first Enter and waits for a second one.
     const settled = await waitForInputBox(
       paneId,
-      (box) => box?.confirmingSend === true || hasTakenMessage(box, boxText),
+      (box) => hasTakenMessage(box, boxText) || (!cleanupNoticed && box?.confirmingSend === true),
       SUBMIT_CONFIRM_TIMEOUT_MS,
     );
     if (settled && hasTakenMessage(settled.box, boxText)) {
       return;
+    }
+    if (settled?.box?.confirmingSend) {
+      cleanupNoticed = true;
+      await delay(CLEANUP_CONFIRM_PAUSE_MS);
     }
   }
   throw new AgentWindowError('Claude kept the message in its input box instead of sending it.');

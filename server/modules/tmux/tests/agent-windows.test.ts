@@ -67,3 +67,7 @@ test('a message that left the box was taken', () => {
   assert.equal(hasTakenMessage(box('Press up to edit queued messages'), 'hello'), true);
   assert.equal(hasTakenMessage(box('', { pasting: true }), 'hello'), false);
 });
+
+test('the invisible-characters notice outlives the send: an emptied box under it was taken', () => {
+  assert.equal(hasTakenMessage(box('', { confirmingSend: true }), 'скажи ок \uFFFDДобрый день\uFFFD'), true);
+});
