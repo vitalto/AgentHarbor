@@ -221,6 +221,13 @@ export function keysForOption(prompt: TuiPrompt, targetIndex: number): string[] 
 
 const INPUT_PROMPT = /^[>❯]\s?/;
 const PASTING = /^\s*Pasting…/;
+/** A named session's name is drawn into the box's top rule: `──── Fix the login ─`. */
+const INPUT_BOX_TOP_RULE = /^\s*─{10,}(?: .+ ─+)?\s*$/;
+
+/** True when `lines[index]` is the input box's prompt line, right under its top rule. */
+export function isInputPromptLine(lines: string[], index: number): boolean {
+  return index >= 1 && INPUT_PROMPT.test(lines[index]) && INPUT_BOX_TOP_RULE.test(lines[index - 1]);
+}
 
 export type InputBox = {
   text: string;
@@ -234,7 +241,7 @@ export function readInputBox(lines: string[]): InputBox | null {
     return null;
   }
   for (let index = lines.length - 1; index >= 1; index -= 1) {
-    if (!INPUT_PROMPT.test(lines[index]) || !DIALOG_BORDER.test(lines[index - 1])) {
+    if (!isInputPromptLine(lines, index)) {
       continue;
     }
     const closingRule = lines.findIndex((line, lineIndex) => lineIndex > index && DIALOG_BORDER.test(line));

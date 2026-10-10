@@ -6,7 +6,7 @@ import { readClaudeStatuses, type ClaudeStatus } from '@/modules/tmux/claude-sta
 import { paneRegistry, type PaneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { tmuxService, type TmuxService } from '@/modules/tmux/tmux.service.js';
 import { createTranscriptTail, type TranscriptTail } from '@/modules/tmux/transcript-tail.js';
-import { isInputReady, keysForOption, keysToReachOption, parseTuiPrompt, type TuiPrompt } from '@/modules/tmux/tui-prompt.js';
+import { isInputPromptLine, isInputReady, keysForOption, keysToReachOption, parseTuiPrompt, type TuiPrompt } from '@/modules/tmux/tui-prompt.js';
 
 /** A websocket (or anything with the same surface) watching a session. */
 export type MonitorSocket = { readyState: number; send(data: string): void };
@@ -114,7 +114,7 @@ function sendJson(socket: MonitorSocket, payload: unknown): void {
 export function screenTail(lines: string[]): string[] {
   let end = lines.length;
   for (let index = lines.length - 1; index > 0; index -= 1) {
-    if (/^[>❯]\s?/.test(lines[index]) && /^\s*─{10,}\s*$/.test(lines[index - 1])) {
+    if (isInputPromptLine(lines, index)) {
       end = index - 1;
       break;
     }

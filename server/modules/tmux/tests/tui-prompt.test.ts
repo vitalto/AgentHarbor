@@ -116,3 +116,7 @@ test('readInputBox: an unsent message stays readable, a paste in progress is fla
   assert.match(unsent?.text ?? '', /^What is on this screenshot\?\n\n\\wsl\.localhost\\Ubuntu\\[\s\S]*screenshot\.png$/);
   assert.equal(readInputBox(screen('bash-permission')), null);
 });
+
+test('readInputBox: a named session draws its name into the top rule, the box is still there', () => {
+  assert.deepEqual(readInputBox(screen('named-session-input')), { text: '', pasting: false });
+});
