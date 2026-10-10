@@ -7,20 +7,15 @@ import {
 } from '@/modules/tmux/index.js';
 import type { IProviderRuntime } from '@/shared/interfaces.js';
 import type { AnyRecord, ProviderRuntimeWriter } from '@/shared/types.js';
+import { appendFilesInputTag, normalizeAttachmentDescriptors, type ChatAttachmentDescriptor } from '@/shared/image-attachments.js';
 import { createNormalizedMessage } from '@/shared/utils.js';
 
-function readAttachmentPaths(attachments: unknown): string[] {
-  return (Array.isArray(attachments) ? attachments : [])
-    .map((attachment) => (attachment && typeof attachment.path === 'string' ? attachment.path : null))
-    .filter((attachmentPath): attachmentPath is string => Boolean(attachmentPath));
-}
-
-/** Claude's TUI reads a file whose path is part of the prompt. */
-export function composePrompt(command: string, claudeFilePaths: string[]): string {
-  if (claudeFilePaths.length === 0) {
-    return command;
-  }
-  return `${command}\n\n${claudeFilePaths.join(' ')}`;
+/** The uploads as Claude should be given them: copied where a Windows Claude can reach them, original names kept. */
+function stageForClaude(attachments: unknown): Promise<ChatAttachmentDescriptor[]> {
+  return Promise.all(normalizeAttachmentDescriptors(attachments).map(async (descriptor) => ({
+    ...descriptor,
+    path: await stageAttachmentForClaude(descriptor.path),
+  })));
 }
 
 /**
@@ -39,11 +34,11 @@ export const claudeTmuxRuntime: IProviderRuntime = {
     try {
       const pane = await ensureAgentWindow(appSessionId);
       await waitForInputReady(appSessionId, pane.pane.paneId);
-      const stage = (localPaths: string[]) => Promise.all(localPaths.map((localPath) => stageAttachmentForClaude(localPath)));
-      const imagePaths = await stage(readAttachmentPaths(options.images));
-      const filePaths = await stage(readAttachmentPaths(options.files));
+      const images = await stageForClaude(options.images);
+      // The <files_input> block names each file; chat history turns it back into file chips.
+      const prompt = appendFilesInputTag(command, await stageForClaude(options.files));
       const turnEnded = getSessionMonitor().beginTurn(appSessionId);
-      await typeIntoAgent(pane.pane.paneId, composePrompt(command, filePaths), imagePaths);
+      await typeIntoAgent(pane.pane.paneId, prompt, images.map((image) => image.path));
       return await turnEnded;
     } catch (error) {
       writer.send(createNormalizedMessage({
