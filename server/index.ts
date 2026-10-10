@@ -49,6 +49,7 @@ import {
 } from './modules/plugins/index.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
+import { downloadsRoutes } from './modules/downloads/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
@@ -179,6 +180,9 @@ app.use('/api/projects', authenticateToken, projectModuleRoutes);
 
 // Chat attachment upload/serving (global ~/.agentharbor/assets store, protected)
 app.use('/api/assets', authenticateToken, assetsRoutes);
+
+// One-time download links (issuing is protected; the ticket itself is the credential for the GET)
+app.use('/api/downloads', downloadsRoutes);
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);

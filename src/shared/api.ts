@@ -482,9 +482,13 @@ export const api = {
         headers: {}, // Let browser set Content-Type for FormData
         body: formData,
       }),
-    file: (storedName: string) => get(`/api/assets/files/${encodeURIComponent(storedName)}`),
     image: (filename: string, options: ApiRequestOptions = {}) =>
       get(`/api/assets/images/${encodeURIComponent(filename)}`, options),
+  },
+
+  // One-time download link for any file by absolute path (see downloadFile)
+  downloads: {
+    issue: (filePath: string) => post('/api/downloads', { path: filePath }),
   },
 
   // User endpoints

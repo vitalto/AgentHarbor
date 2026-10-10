@@ -385,5 +385,9 @@
     "effortLevels": "Reasoning levels",
     "effortLevelsHint": "Select the reasoning-effort levels this model accepts. If none are selected, no effort level can be chosen for this model in the composer.",
     "effortSummary": "Reasoning: {{levels}}"
+  },
+  "downloadPath": {
+    "download": "Download {{path}}",
+    "failed": "Download failed: {{message}}"
   }
 }

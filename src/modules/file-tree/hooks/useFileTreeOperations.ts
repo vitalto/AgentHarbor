@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import JSZip from 'jszip';
 
 import { api } from '@/shared/api';
+import { downloadFile } from '@/shared/downloadFile';
 import type { FileTreeNode,Project } from '@/shared/types';
 
 // Invalid filename characters
@@ -261,21 +262,6 @@ export function useFileTreeOperations({
     URL.revokeObjectURL(url);
   }, []);
 
-  // Download a single file
-  const downloadSingleFile = useCallback(async (item: FileTreeNode) => {
-    if (!selectedProject) return;
-
-    // Use the binary streaming endpoint so downloads preserve raw bytes.
-    const response = await api.readFileBlob(selectedProject.projectId, item.path);
-
-    if (!response.ok) {
-      throw new Error('Failed to download file');
-    }
-
-    const blob = await response.blob();
-    triggerBrowserDownload(blob, item.name);
-  }, [selectedProject, triggerBrowserDownload]);
-
   // Download folder as ZIP
   const downloadFolderAsZip = useCallback(async (folder: FileTreeNode) => {
     if (!selectedProject) return;
@@ -317,10 +303,7 @@ export function useFileTreeOperations({
     showToast(t('fileTree.toast.folderDownloaded', 'Folder downloaded as ZIP'), 'success');
   }, [selectedProject, showToast, t, triggerBrowserDownload]);
 
-  // Download file or folder. Declared after the two helpers it dispatches to so
-  // it does not read them before initialization; both are memoized on
-  // `selectedProject` plus stable values, so the dependency list is unchanged
-  // in practice.
+  // Declared after downloadFolderAsZip so it does not read it before initialization.
   const handleDownload = useCallback(async (item: FileTreeNode) => {
     if (!selectedProject) return;
 
@@ -330,15 +313,14 @@ export function useFileTreeOperations({
         // Download folder as ZIP
         await downloadFolderAsZip(item);
       } else {
-        // Download single file
-        await downloadSingleFile(item);
+        await downloadFile(item.path);
       }
     } catch (err) {
       showToast((err as Error).message, 'error');
     } finally {
       setOperationLoading(false);
     }
-  }, [downloadFolderAsZip, downloadSingleFile, selectedProject, showToast]);
+  }, [downloadFolderAsZip, selectedProject, showToast]);
 
   return {
     // Rename operations

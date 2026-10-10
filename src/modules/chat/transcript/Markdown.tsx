@@ -1,5 +1,5 @@
-import React, { memo, useMemo, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import React, { createContext, memo, useContext, useMemo, useState } from 'react';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -8,7 +8,10 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 import { useTranslation } from 'react-i18next';
 
 import { MermaidDiagram } from '@/modules/code-editor';
+import { DownloadPathButton } from '@/modules/chat/transcript/DownloadPathButton';
 import { MarkdownImage } from '@/modules/chat/transcript/MarkdownImage';
+import { remarkDownloadablePaths } from '@/modules/chat/transcript/remarkDownloadablePaths';
+import { asDownloadablePath, isWindowsDrivePath } from '@/modules/chat/utils/downloadablePaths';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
 import { normalizeLatexDelimiters } from '@/modules/chat/utils/latexDelimiters';
 import { copyTextToClipboard } from '@/shared/utils';
@@ -82,6 +85,23 @@ const MATH_DELIMITER = /\$\$/;
 
 const EMPTY_PLUGINS: never[] = [];
 
+// The parser percent-encodes link destinations (`D:\out` arrives as `D:%5Cout`).
+const decodeLinkTarget = (url: string): string => {
+  try {
+    return decodeURI(url);
+  } catch {
+    return url;
+  }
+};
+
+// The default sanitizer blanks `D:/out/report.pdf` as an unknown `d:` scheme;
+// a drive path never navigates anywhere, so it is kept for the file handlers.
+const keepWindowsDrivePaths = (url: string): string =>
+  isWindowsDrivePath(decodeLinkTarget(url)) ? url : defaultUrlTransform(url);
+
+// A file link draws the download button itself; a code span inside it must not add a second one.
+const InsideFileLinkContext = createContext(false);
+
 type CodeBlockProps = {
   node?: any;
   className?: string;
@@ -94,6 +114,7 @@ type CodeBlockProps = {
 const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: CodeBlockProps) => {
   const { t } = useTranslation('chat');
   const [copied, setCopied] = useState(false);
+  const isInsideFileLink = useContext(InsideFileLinkContext);
   // Fenced blocks carry a trailing newline in the tree; trim it so the
   // highlighter doesn't render an empty final line.
   const raw = (Array.isArray(children) ? children.join('') : String(children ?? '')).replace(/\n$/, '');
@@ -102,7 +123,8 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
   const shouldInline = !forceBlock && !/[\r\n]/.test(raw);
 
   if (shouldInline) {
-    return (
+    const downloadablePath = isInsideFileLink ? null : asDownloadablePath(raw);
+    const inlineCode = (
       <code
         className={`whitespace-pre-wrap break-words rounded-md border border-border/70 bg-muted px-1.5 py-0.5 font-mono text-[0.875em] text-foreground ${className || ''
           }`}
@@ -111,6 +133,7 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
         {children}
       </code>
     );
+    return downloadablePath ? <>{inlineCode}<DownloadPathButton path={downloadablePath} /></> : inlineCode;
   }
 
   const match = /language-(\w+)/.exec(className || '');
@@ -279,7 +302,7 @@ function MarkdownBodyRenderer({ children, breaks = false, literalBackslashes = f
   const hasMath = useMemo(() => MATH_DELIMITER.test(content), [content]);
   const remarkPlugins = useMemo(
     () => {
-      const plugins: unknown[] = [remarkGfm];
+      const plugins: unknown[] = [remarkGfm, remarkDownloadablePaths];
       if (hasMath) {
         plugins.push([remarkMath, { singleDollarTextMath: false }]);
       }
@@ -303,10 +326,12 @@ function MarkdownBodyRenderer({ children, breaks = false, literalBackslashes = f
         // Prefer the href when it is a real path; otherwise fall back to the
         // link text, since models often emit `[src/foo.ts]()` with an empty href.
         const linkText = childrenToText(linkChildren);
-        const fileRef = looksLikeFilePath(href) ? href : looksLikeFilePath(linkText) ? linkText : undefined;
+        const linkTarget = href ? decodeLinkTarget(href) : href;
+        const fileRef = looksLikeFilePath(linkTarget) ? linkTarget : looksLikeFilePath(linkText) ? linkText : undefined;
 
         if (fileRef && !isExternalHref(href)) {
-          return (
+          const downloadablePath = asDownloadablePath(fileRef);
+          const fileLink = (
             <a
               href={href || fileRef}
               className="cursor-pointer text-blue-600 hover:underline dark:text-blue-400"
@@ -324,9 +349,10 @@ function MarkdownBodyRenderer({ children, breaks = false, literalBackslashes = f
                 openFileInEditor(stripLineSuffix(reference), lineFromRef(reference));
               }}
             >
-              {linkChildren}
+              <InsideFileLinkContext.Provider value>{linkChildren}</InsideFileLinkContext.Provider>
             </a>
           );
+          return downloadablePath ? <>{fileLink}<DownloadPathButton path={downloadablePath} /></> : fileLink;
         }
 
         return (
@@ -345,7 +371,12 @@ function MarkdownBodyRenderer({ children, breaks = false, literalBackslashes = f
   );
 
   return (
-    <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components as any}>
+    <ReactMarkdown
+      remarkPlugins={remarkPlugins}
+      rehypePlugins={rehypePlugins}
+      components={components as any}
+      urlTransform={keepWindowsDrivePaths}
+    >
       {content}
     </ReactMarkdown>
   );

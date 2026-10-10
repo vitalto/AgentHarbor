@@ -1,7 +1,7 @@
 import { DownloadIcon, FileArchiveIcon, FileCodeIcon, FileIcon, FileTextIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import { api } from '@/shared/api';
+import { downloadFile } from '@/shared/downloadFile';
 import type { ChatAttachment } from '@/shared/types';
 
 type ChatMessageFilesProps = {
@@ -32,19 +32,10 @@ function ChatMessageFile({ file }: { file: ChatAttachment }) {
 
   const download = async () => {
     if (!file.path || isDownloading) return;
-    const storedName = file.path.split(/[\\/]/).pop();
-    if (!storedName) return;
 
     setIsDownloading(true);
     try {
-      const response = await api.assets.file(storedName);
-      if (!response.ok) return;
-      const blobUrl = URL.createObjectURL(await response.blob());
-      const anchor = document.createElement('a');
-      anchor.href = blobUrl;
-      anchor.download = name;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
+      await downloadFile(file.path);
     } catch (error) {
       console.error(`Failed to download attachment "${name}":`, error);
     } finally {

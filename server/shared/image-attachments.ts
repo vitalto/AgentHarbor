@@ -12,8 +12,8 @@ import path from 'node:path';
  *   which every provider history adapter strips back out for display.
  * - Images handed to a CLI as text: paths use the equivalent `<images_input>` tag.
  *
- * The chat UI loads them through dedicated `/api/assets/images/:filename` and
- * `/api/assets/files/:filename` routes, which serve only from this folder.
+ * The chat UI shows images through `/api/assets/images/:filename`, which serves
+ * only from this folder; other attachments download through `/api/downloads`.
  */
 
 /** Global storage folder for uploaded chat image attachments. */
