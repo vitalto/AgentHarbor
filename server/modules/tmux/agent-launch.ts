@@ -14,6 +14,29 @@ export const PANES_DIRECTORY = 'panes';
 const HOOK_COMMAND =
   'if [ -n "$AH_PANE" ]; then mkdir -p "$AH_STATE_DIR/panes" && cat > "$AH_STATE_DIR/panes/$AH_PANE.json"; else cat > /dev/null; fi';
 
+const ELEVATION_HINT =
+  'UAC prompts cannot be answered here: the user is remote and nobody can click a prompt on this PC. '
+  + 'Run the part that needs admin rights with  elevate "<PowerShell command>"  (Git Bash) or  elevate.ps1 -Command "<PowerShell command>"  (PowerShell). '
+  + 'It waits until the user approves that exact command in AgentHarbor, runs it elevated in the current directory and prints its output and exit code '
+  + '(126 = denied: do not retry, ask the user). Approval can take minutes: give the call a 600000 ms timeout or run it in the background. '
+  + 'A script that elevates itself must be run through elevate without its own RunAs step.';
+
+/**
+ * Blocks the ways agents usually trigger UAC (Start-Process -Verb RunAs, runas /user, Windows
+ * sudo) and points them to `elevate` (TerminalShare/windows/elevation). Only while the elevation
+ * broker is alive, so without it everything behaves as before. The `case` filter spawns nothing
+ * for ordinary commands, since this runs before every shell call.
+ */
+const ELEVATION_HOOK_COMMAND = String.raw`input=$(cat)
+case "$input" in *[Rr][Uu][Nn][Aa][Ss]*|*[Ss][Uu][Dd][Oo]*) ;; *) exit 0 ;; esac
+[ -n "$(find "$AH_STATE_DIR/elevation/broker.alive" -mmin -1 2>/dev/null)" ] || exit 0
+command=$(printf '%s' "$input" | sed -n 's/.*"command":"\(\([^"\\]\|\\.\)*\)".*/\1/p')
+if printf '%s' "$command" | grep -qiE -- '-verb[^a-z]{1,6}runas|(^|[^a-z0-9_-])runas(\.exe)?[[:space:]]+/' \
+  || { printf '%s' "$command" | grep -qiE -- '(^|[^a-z0-9_.-])sudo(\.exe)?[[:space:]]' && ! printf '%s' "$command" | grep -qiE -- 'wsl|ssh'; }; then
+  echo ${quoteForShell(ELEVATION_HINT)} >&2
+  exit 2
+fi`;
+
 export function quoteForShell(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
@@ -27,6 +50,7 @@ export function writeHookSettings(config: AgentConfig): string {
   const settings = {
     hooks: {
       SessionStart: [{ hooks: [{ type: 'command', command: HOOK_COMMAND }] }],
+      PreToolUse: [{ matcher: 'Bash|PowerShell', hooks: [{ type: 'command', command: ELEVATION_HOOK_COMMAND }] }],
     },
   };
   fs.mkdirSync(path.join(config.stateDir, PANES_DIRECTORY), { recursive: true });

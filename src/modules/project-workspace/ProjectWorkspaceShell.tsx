@@ -1,5 +1,6 @@
 import { memo } from 'react';
 
+import { ElevationRequests } from '@/modules/elevation';
 import ProjectEffects from '@/modules/project-workspace/controllers/ProjectEffects';
 import type { ProjectWorkspaceShellProps } from '@/shared/types';
 import ProjectCommandPalette from '@/modules/project-workspace/ProjectCommandPalette';
@@ -32,6 +33,7 @@ function ProjectWorkspaceShell({
       </div>
 
       <ProjectCommandPalette />
+      <ElevationRequests />
       {/* Last flex child on purpose: when pinned it docks to the right of the main region. */}
       <ProjectQuickSettingsRegion />
     </div>

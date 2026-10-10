@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -91,4 +92,42 @@ test('launch command registers the pane through the hook', async (t) => {
   const fresh = buildAgentLaunch({ ...config, windowsClaude: false, claudeCommand: 'claude' }, { newSessionId: 'n1' });
   assert.match(fresh.command, /exec 'claude' --settings '.+' --session-id 'n1'$/);
   assert.equal(fresh.env.WSLENV, undefined);
+});
+
+test('the PreToolUse hook sends UAC attempts to elevate, only while the broker runs', async (t) => {
+  const { config, cleanup } = await setup([]);
+  t.after(cleanup);
+  writeHookSettings(config);
+  const settings = JSON.parse(await readFile(path.join(config.stateDir, 'hook-settings.json'), 'utf8'));
+  const hook = settings.hooks.PreToolUse[0];
+  assert.equal(hook.matcher, 'Bash|PowerShell');
+
+  const runHook = (command: string) => spawnSync('bash', ['-c', hook.hooks[0].command], {
+    input: JSON.stringify({ tool_name: 'Bash', tool_input: { command, description: 'sudo-free description' } }),
+    env: { ...process.env, AH_STATE_DIR: config.stateDir },
+    encoding: 'utf8',
+  });
+  const blocked = [
+    `Start-Process powershell -Verb RunAs -ArgumentList '-File x.ps1'`,
+    `powershell -Command "Start-Process cmd -Verb \\"runAs\\""`,
+    'Start-Process pwsh -Verb:RunAs',
+    'runas /user:Administrator cmd',
+    'sudo netsh advfirewall show allprofiles',
+  ];
+  const allowed = ['ls -la', 'wsl.exe -e sudo apt install jq', 'ssh pc sudo systemctl restart ttyd', 'echo runaway', 'grep -r sudoers .'];
+
+  for (const command of blocked) {
+    assert.equal(runHook(command).status, 0, `no broker, so no block: ${command}`);
+  }
+
+  await mkdir(path.join(config.stateDir, 'elevation'), { recursive: true });
+  await writeFile(path.join(config.stateDir, 'elevation', 'broker.alive'), new Date().toISOString());
+  for (const command of blocked) {
+    const result = runHook(command);
+    assert.equal(result.status, 2, command);
+    assert.match(result.stderr, /elevate "<PowerShell command>"/);
+  }
+  for (const command of allowed) {
+    assert.equal(runHook(command).status, 0, command);
+  }
 });

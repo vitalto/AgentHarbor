@@ -491,6 +491,13 @@ export const api = {
     issue: (filePath: string) => post('/api/downloads', { path: filePath }),
   },
 
+  // Commands agents asked to run elevated, waiting for the user's approval
+  elevation: {
+    list: () => get('/api/elevation'),
+    decide: (requestId: string, approved: boolean) =>
+      post(`/api/elevation/${encodeURIComponent(requestId)}/decision`, { approved }),
+  },
+
   // User endpoints
   user: {
     gitConfig: () => get('/api/user/git-config'),
