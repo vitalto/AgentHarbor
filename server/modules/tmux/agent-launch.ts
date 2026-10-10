@@ -48,6 +48,11 @@ export function hookSettingsPath(config: AgentConfig): string {
 /** Returns the settings path as Claude must see it on its command line. */
 export function writeHookSettings(config: AgentConfig): string {
   const settings = {
+    // Agent view (← in the TUI, /background) parks the conversation in Claude's daemon under a NEW
+    // session id: the window turns into a mere viewer, the conversation runs outside tmux, its
+    // in-flight background commands end with exit code -1, and the daemon's spare process inherits
+    // AH_PANE and overwrites this window's registration. The app is already the agent view here.
+    disableAgentView: true,
     hooks: {
       SessionStart: [{ hooks: [{ type: 'command', command: HOOK_COMMAND }] }],
       PreToolUse: [{ matcher: 'Bash|PowerShell', hooks: [{ type: 'command', command: ELEVATION_HOOK_COMMAND }] }],

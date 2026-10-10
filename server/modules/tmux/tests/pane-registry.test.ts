@@ -84,6 +84,8 @@ test('launch command registers the pane through the hook', async (t) => {
   t.after(cleanup);
   const settingsPath = writeHookSettings(config);
   assert.ok(settingsPath.startsWith('\\\\wsl.localhost\\Ubuntu\\') || /^[A-Z]:\\/.test(settingsPath));
+  const settings = JSON.parse(await readFile(path.join(config.stateDir, 'hook-settings.json'), 'utf8'));
+  assert.equal(settings.disableAgentView, true, 'agent view would move the conversation out of its window');
 
   const resume = buildAgentLaunch(config, { resumeSessionId: 'abc' });
   assert.match(resume.command, /^export AH_PANE="\$\{TMUX_PANE#%\}-\$\$"; exec '\/mnt\/c\/claude\.exe' --settings '.+hook-settings\.json' --resume 'abc'$/);
