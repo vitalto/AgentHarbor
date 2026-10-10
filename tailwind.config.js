@@ -84,14 +84,15 @@ export default {
           to: { opacity: '1', transform: 'translateY(0)' },
         },
       },
-      // Endless indicators are stepped on purpose: Chrome draws no frame while a stepped value
-      // holds, so a busy session's spinners, pulses and shimmer cost ~4x less CPU+GPU than smooth 60 fps ones.
-      // Every step lasts 125 ms (pulse steps per 1 s half) — the grid src/shared/alignSteppedAnimations.ts snaps them to.
+      // Endless indicators step 60 times a second on purpose: a smooth animation redraws the tab at the
+      // display rate (240 frames/s on a 240 Hz monitor, ~2.3x the CPU+GPU of 60 — measured) for no visible
+      // gain on a 12 px icon. Pulse steps per 1 s half. src/shared/alignSteppedAnimations.ts snaps every
+      // start to a whole second, so all indicators step on the same 60 Hz ticks.
       animation: {
-        spin: 'spin 1s steps(8, end) infinite',
-        pulse: 'pulse 2s steps(8, end) infinite',
-        'shimmer-window': 'shimmer-window 2s steps(16, end) infinite',
-        'shimmer-window-text': 'shimmer-window-text 2s steps(16, end) infinite',
+        spin: 'spin 1s steps(60, end) infinite',
+        pulse: 'pulse 2s steps(60, end) infinite',
+        'shimmer-window': 'shimmer-window 2s steps(120, end) infinite',
+        'shimmer-window-text': 'shimmer-window-text 2s steps(120, end) infinite',
         'dialog-overlay-show': 'dialog-overlay-show 150ms ease-out',
         'dialog-content-show': 'dialog-content-show 150ms ease-out',
         'bottom-sheet-content-show': 'bottom-sheet-content-show 220ms cubic-bezier(0.22, 1, 0.36, 1)',

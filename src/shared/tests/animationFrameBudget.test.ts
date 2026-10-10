@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 import { afterEach, test } from 'vitest';
 
-import { alignSteppedAnimations, STEPPED_ANIMATION_GRID_MS } from '@/shared/alignSteppedAnimations';
+import { alignSteppedAnimations, STEP_SYNC_PERIOD_MS } from '@/shared/alignSteppedAnimations';
 import { declineAnimationIterationListeners } from '@/shared/declineAnimationIterationListeners';
 
 /**
@@ -27,9 +27,9 @@ test('elements decline animationiteration listeners and keep every other one', (
   assert.deepEqual(received, ['animationstart', 'click']);
 });
 
-test('an endless animation is snapped onto the shared step grid when it starts; a one-shot is left alone', () => {
+test('an endless animation is snapped onto a whole second when it starts; a one-shot is left alone', () => {
   alignSteppedAnimations();
-  const endless = { startTime: 1_337.5 as number | null, effect: { getTiming: () => ({ iterations: Infinity }) } };
+  const endless = { startTime: 4_337.5 as number | null, effect: { getTiming: () => ({ iterations: Infinity }) } };
   const oneShot = { startTime: 1_337.5 as number | null, effect: { getTiming: () => ({ iterations: 1 }) } };
   const target = document.createElement('span');
   document.body.appendChild(target);
@@ -37,8 +37,8 @@ test('an endless animation is snapped onto the shared step grid when it starts; 
 
   target.dispatchEvent(new Event('animationstart', { bubbles: true }));
 
-  assert.equal(endless.startTime, 1_250);
-  assert.equal((endless.startTime ?? 0) % STEPPED_ANIMATION_GRID_MS, 0);
+  assert.equal(endless.startTime, 4_000);
+  assert.equal((endless.startTime ?? 0) % STEP_SYNC_PERIOD_MS, 0);
   assert.equal(oneShot.startTime, 1_337.5);
   target.remove();
 });
