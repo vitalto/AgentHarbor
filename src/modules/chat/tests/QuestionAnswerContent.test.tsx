@@ -18,6 +18,7 @@ test('renders without throwing when questions is a non-array value', () => {
         // Malformed: object instead of an array
         questions: { 0: { question: 'q?', options: [{ label: 'a' }] } } as never,
         answers: {},
+        isSettled: true,
       }),
     );
   });
@@ -29,6 +30,7 @@ test('renders without throwing when a question is missing options[]', () => {
       React.createElement(QuestionAnswerContent, {
         questions: [{ question: 'Pick one?', header: 'H' } as never],
         answers: { 'Pick one?': 'X' },
+        isSettled: true,
       }),
     );
   });
@@ -40,6 +42,7 @@ test('renders without throwing when options[] contains malformed entries', () =>
       React.createElement(QuestionAnswerContent, {
         questions: [{ question: 'Pick one?', options: [null, 'oops', { label: 'A' }] } as never],
         answers: { 'Pick one?': 'A, Custom' },
+        isSettled: true,
       }),
     );
   });
@@ -51,6 +54,7 @@ test('renders without throwing when a questions entry is null/non-object', () =>
       React.createElement(QuestionAnswerContent, {
         questions: [null, 'oops', { question: 'Ok?', options: [{ label: 'A' }] }] as never,
         answers: {},
+        isSettled: true,
       }),
     );
   });
@@ -63,6 +67,7 @@ test('renders without throwing when an answer is a non-string value', () => {
         questions: [{ question: 'Pick one?', options: [{ label: 'A' }] }],
         // Malformed: answer is an object instead of the expected string
         answers: { 'Pick one?': { unexpected: true } } as never,
+        isSettled: true,
       }),
     );
   });
@@ -73,6 +78,7 @@ test('still renders a well-formed question + answer', () => {
     React.createElement(QuestionAnswerContent, {
       questions: [{ question: 'Pick one?', header: 'H', options: [{ label: 'A' }, { label: 'B' }] }],
       answers: { 'Pick one?': 'A' },
+      isSettled: true,
     }),
   );
   assert.ok(html.includes('Pick one?'));
@@ -83,6 +89,7 @@ test('an option label containing ", " is kept as one answer', () => {
     React.createElement(QuestionAnswerContent, {
       questions: [{ question: 'Pick one?', options: [{ label: 'Yes, always' }, { label: 'No' }] }],
       answers: { 'Pick one?': 'Yes, always' },
+      isSettled: true,
     }),
   );
   // Split on ", " would render "Yes" and "always" as two chips, both unmatched
@@ -96,6 +103,7 @@ test('a multi-select answer with no exact option still splits on ", "', () => {
     React.createElement(QuestionAnswerContent, {
       questions: [{ question: 'Pick some?', multiSelect: true, options: [{ label: 'A' }, { label: 'B' }] }],
       answers: { 'Pick some?': 'A, B' },
+      isSettled: true,
     }),
   );
   // Both halves must match an option, so neither is labelled custom and the
@@ -104,4 +112,12 @@ test('a multi-select answer with no exact option still splits on ", "', () => {
   assert.ok(html.includes('>B</span>'));
   assert.ok(!html.includes('A, B'));
   assert.ok(!html.includes('(custom)'));
+});
+
+test('a question still awaiting its answer is not shown as skipped', () => {
+  const props = { questions: [{ question: 'Pick one?', options: [{ label: 'A' }, { label: 'B' }] }], answers: {} };
+  const pending = renderToStaticMarkup(React.createElement(QuestionAnswerContent, { ...props, isSettled: false }));
+  const declined = renderToStaticMarkup(React.createElement(QuestionAnswerContent, { ...props, isSettled: true }));
+  assert.ok(!pending.includes('Skipped'));
+  assert.ok(declined.includes('Skipped'));
 });

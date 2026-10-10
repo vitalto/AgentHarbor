@@ -272,6 +272,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
           <QuestionAnswerContent
             questions={contentProps.questions || []}
             answers={contentProps.answers || {}}
+            isSettled={Boolean(toolResult)}
           />
         );
         break;

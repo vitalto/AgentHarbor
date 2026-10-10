@@ -5,6 +5,8 @@ import type { Question } from '@/shared/types';
 type QuestionAnswerContentProps = {
   questions: Question[];
   answers: Record<string, string>;
+  /** Claude has the tool result; before that, no answer means "not yet", not "skipped". */
+  isSettled: boolean;
   className?: string;
 };
 
@@ -16,6 +18,7 @@ type QuestionAnswerContentProps = {
 export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
   questions,
   answers,
+  isSettled,
   className = '',
 }) => {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
@@ -203,7 +206,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
         );
       })}
 
-      {!hasAnyAnswer && total === 1 && (
+      {isSettled && !hasAnyAnswer && total === 1 && (
         <div className="text-[11px] italic text-gray-400 dark:text-gray-500">
           Skipped
         </div>

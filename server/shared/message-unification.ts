@@ -1,6 +1,8 @@
 import type { AnyRecord, NormalizedMessage } from '@/shared/types.js';
 import { readObjectRecord } from '@/shared/utils.js';
 
+import { readAskUserQuestionAnswers } from '../../shared/askUserQuestionAnswers.js';
+
 /**
  * Unification of the two interaction surfaces that come in more than one
  * spelling: the running checklist and the ask-the-user round trip.
@@ -63,100 +65,6 @@ function readNonEmptyString(value: unknown): string {
 //----------------- ASK-THE-USER ANSWERS ------------
 
 /**
- * Flattens one answer value into the comma-joined label list the question view
- * renders. Claude stores the labels already joined; a `{ answers: [...] }`
- * record and a multi-select array are accepted as well.
- */
-function readAnswerLabels(value: unknown): string {
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value.filter((entry): entry is string => typeof entry === 'string').join(', ');
-  }
-
-  const record = readObjectRecord(value);
-  return record ? readAnswerLabels(record.answers) : '';
-}
-
-/**
- * Recovers the answers from Claude's acknowledgement sentence.
- *
- * A live turn only carries the prose result — `Your questions have been
- * answered: "<question>"="<answer>".` — because the structured `toolUseResult`
- * is written when the transcript is persisted, not when the tool returns. The
- * selection would otherwise be invisible for the whole run.
- */
-function readAnswersFromAcknowledgement(content: string): Record<string, string> {
-  if (!content.includes('questions have been answered')) {
-    return {};
-  }
-
-  const answers: Record<string, string> = {};
-  const pattern = /"([^"]+)"\s*=\s*"([^"]*)"/g;
-  let match = pattern.exec(content);
-  while (match) {
-    answers[match[1]] = match[2];
-    match = pattern.exec(content);
-  }
-
-  return answers;
-}
-
-/**
- * Rewrites answers onto the question text they belong to.
- *
- * Answers may be keyed by the question's `id`; Claude keys them by the
- * question text. Settling on the text means the renderer needs no provider
- * knowledge to pair a question with its answer.
- */
-function keyAnswersByQuestion(questions: unknown, rawAnswers: AnyRecord): Record<string, string> {
-  const questionById = new Map<string, string>();
-  if (Array.isArray(questions)) {
-    for (const entry of questions) {
-      const question = readObjectRecord(entry);
-      const id = readNonEmptyString(question?.id);
-      const text = readNonEmptyString(question?.question);
-      if (id && text) {
-        questionById.set(id, text);
-      }
-    }
-  }
-
-  const answers: Record<string, string> = {};
-  for (const [key, value] of Object.entries(rawAnswers)) {
-    const labels = readAnswerLabels(value);
-    if (labels) {
-      answers[questionById.get(key) ?? key] = labels;
-    }
-  }
-
-  return answers;
-}
-
-/** Pulls the answer map out of whichever result shape the provider produced. */
-function readAskAnswers(message: NormalizedMessage): AnyRecord | null {
-  const structured = readObjectRecord(readObjectRecord(message.toolResult?.toolUseResult)?.answers);
-  if (structured) {
-    return structured;
-  }
-
-  const content = readNonEmptyString(message.toolResult?.content);
-  if (!content) {
-    return null;
-  }
-
-  const fromPayload = readObjectRecord(readToolPayload(content)?.answers);
-  if (fromPayload) {
-    return fromPayload;
-  }
-
-  const fromSentence = readAnswersFromAcknowledgement(content);
-  return Object.keys(fromSentence).length > 0 ? fromSentence : null;
-}
-
-/**
  * Normalizes one ask-the-user call: canonical name, and the answers folded into
  * the input so the question and what was picked render as one card instead of a
  * question card followed by an unreadable result blob.
@@ -169,10 +77,8 @@ function unifyAskCall(message: NormalizedMessage): void {
     return;
   }
 
-  const rawAnswers = readAskAnswers(message);
-  message.toolInput = rawAnswers
-    ? { ...input, answers: keyAnswersByQuestion(input.questions, rawAnswers) }
-    : input;
+  const answers = readAskUserQuestionAnswers(input.questions, message.toolResult);
+  message.toolInput = answers ? { ...input, answers } : input;
 }
 
 //----------------- RUNNING CHECKLIST ------------

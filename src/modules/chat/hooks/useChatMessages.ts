@@ -5,6 +5,20 @@
 
 import type { ChatMessage, LiveTaskStatus, NormalizedMessage, SubagentActivity } from '@/shared/types';
 import { formatUsageLimitText } from '@/modules/chat/utils/chatFormatting';
+import { readAskUserQuestionAnswers } from '@common/askUserQuestionAnswers';
+
+/**
+ * A history load arrives with the answers already folded into the input; a live
+ * result streams in as its own row, so the fold happens here once it attaches.
+ */
+function withAskUserQuestionAnswers(toolInput: unknown, toolResult: ToolResultSource): unknown {
+  const input = toolInput && typeof toolInput === 'object' ? toolInput as Record<string, unknown> : null;
+  if (!input || input.answers || !toolResult) {
+    return toolInput;
+  }
+  const answers = readAskUserQuestionAnswers(input.questions, toolResult);
+  return answers ? { ...input, answers } : toolInput;
+}
 
 function formatToolResultContent(content: unknown): string {
   const text = typeof content === 'string' ? content : JSON.stringify(content);
@@ -475,13 +489,17 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           ? liveActivity
           : serverActivity;
 
+        const toolInput = msg.toolName === 'AskUserQuestion'
+          ? withAskUserQuestionAnswers(msg.toolInput, tr)
+          : msg.toolInput;
+
         converted.push({
           type: 'assistant',
           content: '',
           timestamp: msg.timestamp,
           isToolUse: true,
           toolName: msg.toolName,
-          toolInput: typeof msg.toolInput === 'string' ? msg.toolInput : JSON.stringify(msg.toolInput ?? '', null, 2),
+          toolInput: typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput ?? '', null, 2),
           toolId: msg.toolId,
           toolResult,
           toolStatus: typeof msg.status === 'string' ? msg.status : undefined,

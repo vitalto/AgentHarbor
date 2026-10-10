@@ -32,6 +32,7 @@ export default defineConfig(({ mode, command }) => {
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
+        '@common': fileURLToPath(new URL('./shared', import.meta.url)),
         ...(command === 'build' && {
           'react-scan': fileURLToPath(new URL('./src/shared/reactScanProductionStub.ts', import.meta.url))
         })

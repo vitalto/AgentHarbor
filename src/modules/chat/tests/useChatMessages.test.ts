@@ -92,6 +92,25 @@ test('rebuilds a tool-use UI message when its separately received result changes
   assert.equal(afterResultChange[0]?.toolResult?.content, 'updated file contents');
 });
 
+test('a live AskUserQuestion result folds its answers into the question card', () => {
+  const question = 'Which way?';
+  const toolUse = message('ask', {
+    kind: 'tool_use',
+    toolId: 'ask-1',
+    toolName: 'AskUserQuestion',
+    toolInput: { questions: [{ question, header: 'Way', options: [{ label: 'Left' }, { label: 'Right' }] }] },
+  });
+  const toolResult = message('ask-result', {
+    kind: 'tool_result',
+    toolId: 'ask-1',
+    content: 'The user answered: "Which way?"="Left".',
+    toolUseResult: { questions: [{ question }], answers: { [question]: 'Left' } },
+  });
+
+  const [card] = normalizedToChatMessages([toolUse, toolResult]);
+  assert.deepEqual(JSON.parse(String(card?.toolInput)).answers, { [question]: 'Left' });
+});
+
 test('preserves existing UI objects when an older message is prepended', () => {
   const first = message('first', { content: 'First loaded message' });
   const second = message('second', { content: 'Second loaded message' });
