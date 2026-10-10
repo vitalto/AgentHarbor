@@ -5,7 +5,7 @@ import { api } from '@/shared/api';
 
 /** Claude Code permission modes, in the order Shift+Tab cycles them. */
 const MODES = [
-  { value: 'bypassPermissions', label: 'Bypass permissions' },
+  { value: 'bypassPermissions', label: 'Bypass' },
   { value: 'auto', label: 'Auto' },
   { value: 'default', label: 'Ask (manual)' },
   { value: 'acceptEdits', label: 'Accept edits' },
