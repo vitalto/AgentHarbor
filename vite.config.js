@@ -9,7 +9,7 @@ import { getConnectableHost, normalizeLoopbackHost } from './shared/networkHosts
 // injecting it keeps the frontend free of imports that reach outside src/.
 const pkg = createRequire(import.meta.url)('./package.json')
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   // Load env file based on `mode` in the current working directory.
   const env = loadEnv(mode, process.cwd(), '')
 
@@ -31,7 +31,10 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        '@': fileURLToPath(new URL('./src', import.meta.url))
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+        ...(command === 'build' && {
+          'react-scan': fileURLToPath(new URL('./src/shared/reactScanProductionStub.ts', import.meta.url))
+        })
       }
     },
     server: {
