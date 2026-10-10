@@ -150,26 +150,55 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test('the idle list offers Select and opens an empty selection with it', () => {
+type RecordedOptions = { sessionId: string; onStartSelection?: () => void };
+
+const optionsOf = (sessionId: string) =>
+  recordedOptionsProps.find((props) => props.sessionId === sessionId) as RecordedOptions | undefined;
+
+test('the idle list starts selecting from a row menu, with that row ticked', () => {
   const onSetSessionSelection = vi.fn();
   const { container } = renderSessions({ onSetSessionSelection });
 
   assert.equal(checkboxes(container).length, 0, 'no row acts as a checkbox before selecting');
   assert.equal(recordedOptionsProps.length, SESSIONS.length, 'every row still has its options menu');
+  assert.equal(buttonWithText(container, 'sessions.select'), null, 'Select lives in the row menu, not above the list');
 
-  const selectButton = buttonWithText(container, 'sessions.select');
-  assert.ok(selectButton, 'the idle list offers to start selecting');
+  const startSelection = optionsOf('s2')?.onStartSelection;
+  assert.ok(startSelection, 'the row menu offers to start selecting');
+  act(() => startSelection());
 
-  fireEvent.click(selectButton);
   const selection = onSetSessionSelection.mock.calls[0][0] as SidebarSessionSelection;
   assert.equal(selection.projectId, PROJECT.projectId);
-  assert.deepEqual([...selection.sessionIds], [], 'selection mode opens with nothing ticked');
+  assert.deepEqual([...selection.sessionIds], ['s2'], 'the row the menu belongs to is ticked first');
+});
+
+test('a running row starts an empty selection, since it can never be ticked', () => {
+  const onSetSessionSelection = vi.fn();
+  renderSessions({ activeSessions: new Set(['s1']), onSetSessionSelection });
+
+  act(() => optionsOf('s1')?.onStartSelection?.());
+
+  assert.deepEqual([...(onSetSessionSelection.mock.calls[0][0] as SidebarSessionSelection).sessionIds], []);
 });
 
 test('a list whose every session is running has nothing to offer Select for', () => {
-  const { container } = renderSessions({ activeSessions: new Set(['s1', 's2', 's3']) });
+  renderSessions({ activeSessions: new Set(['s1', 's2', 's3']) });
 
-  assert.equal(buttonWithText(container, 'sessions.select'), null);
+  assert.equal(recordedOptionsProps.length, SESSIONS.length);
+  assert.ok(recordedOptionsProps.every((props) => props.onStartSelection === undefined));
+});
+
+test('the compact options sheet offers Select too', () => {
+  isCompactLayout = true;
+  const onSetSessionSelection = vi.fn();
+  const { container } = renderSessions({ onSetSessionSelection });
+
+  fireEvent.click(container.querySelector('[aria-label="Session options for session s3"]') as HTMLElement);
+  const selectButton = buttonWithText(document.body, 'sessions.select');
+  assert.ok(selectButton, 'the bottom sheet lists Select');
+  fireEvent.click(selectButton);
+
+  assert.deepEqual([...(onSetSessionSelection.mock.calls[0][0] as SidebarSessionSelection).sessionIds], ['s3']);
 });
 
 test('selection mode replaces the row options with a checkbox on every row', () => {

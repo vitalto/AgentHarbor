@@ -5,7 +5,7 @@ import type { TFunction } from 'i18next';
 
 import { Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, buttonVariants } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import type { LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
+import type { LLMProvider, Project, ProjectSession, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
 import { PROVIDER_LABELS, createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
@@ -40,6 +40,9 @@ type SidebarSessionItemProps = {
   isChecked: boolean;
   /** Takes the owning projectId so this memoized row binds itself without the list making a closure per row. */
   onToggleSessionSelected: (projectId: string, sessionId: string) => void;
+  /** False when every session of the list is running, leaving nothing to select. */
+  canStartSelection: boolean;
+  onSetSessionSelection: (selection: SidebarSessionSelection) => void;
   t: TFunction;
 };
 
@@ -65,6 +68,8 @@ function SidebarSessionItem({
   isSelecting,
   isChecked,
   onToggleSessionSelected,
+  canStartSelection,
+  onSetSessionSelection,
   t,
 }: SidebarSessionItemProps) {
   const isCompact = useCompactSidebar();
@@ -123,6 +128,14 @@ function SidebarSessionItem({
     }
     event.preventDefault();
     toggleSelected();
+  };
+  // Started from a row's menu, so that row is the first one ticked — unless it
+  // is running, which can never be ticked.
+  const startSelectionFromRow = () => {
+    onSetSessionSelection({
+      projectId: project.projectId,
+      sessionIds: new Set(isProcessing ? [] : [session.id]),
+    });
   };
   const SelectionIcon = isChecked ? CheckSquare : Square;
   const selectionIcon = isSelecting ? (
@@ -357,6 +370,20 @@ function SidebarSessionItem({
                   <span className="text-sm font-medium">{agentWindow ? 'Close Claude window' : 'Open in tmux'}</span>
                 </button>}
 
+                {canStartSelection && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileOptionsOpen(false);
+                      startSelectionFromRow();
+                    }}
+                    className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border bg-muted/35 px-4 py-3 text-left text-foreground transition-colors active:bg-muted"
+                  >
+                    <CheckSquare className="h-5 w-5 flex-shrink-0" />
+                    <span className="text-sm font-medium">{t('sessions.select')}</span>
+                  </button>
+                )}
+
                 {!isProcessing && (
                   <button
                     type="button"
@@ -484,6 +511,7 @@ function SidebarSessionItem({
             onSaveEditingSession={onSaveEditingSession}
             onDeleteSession={onDeleteSession}
             onFork={onForkSession ? () => onForkSession(session) : undefined}
+            onStartSelection={canStartSelection ? startSelectionFromRow : undefined}
             t={t}
           />
         )}
