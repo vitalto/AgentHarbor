@@ -10,6 +10,7 @@ import {
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
+  readLastTranscriptEntryTime,
   getClaudeConfigDir,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
@@ -66,7 +67,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
-      const timestamps = await readFileTimestamps(filePath);
+      const timestamps = await this.readSessionTimestamps(filePath);
       sessionsDb.createSession(
         parsed.sessionId,
         this.provider,
@@ -80,6 +81,15 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     return processed;
+  }
+
+  /** Last activity is the newest timed entry; the file's mtime moves every hour while Claude merely runs. */
+  private async readSessionTimestamps(filePath: string): Promise<{ createdAt?: string; updatedAt?: string }> {
+    const [fileTimestamps, lastEntryTime] = await Promise.all([
+      readFileTimestamps(filePath),
+      readLastTranscriptEntryTime(filePath),
+    ]);
+    return { ...fileTimestamps, updatedAt: lastEntryTime?.toISOString() ?? fileTimestamps.updatedAt };
   }
 
   /**
@@ -99,7 +109,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
-    const timestamps = await readFileTimestamps(filePath);
+    const timestamps = await this.readSessionTimestamps(filePath);
     return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,

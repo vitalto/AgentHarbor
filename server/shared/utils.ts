@@ -4,6 +4,7 @@ import {
   access,
   lstat,
   mkdir,
+  open,
   readFile,
   readdir,
   readlink,
@@ -1092,6 +1093,42 @@ export async function readFileTimestamps(
     };
   } catch {
     return {};
+  }
+}
+
+const ENTRY_TIMESTAMP = /"timestamp":"(\d{4}-\d\d-\d\dT[\d:.]+Z)"/g;
+const FIRST_TAIL_BYTES = 16 * 1024;
+const MAX_TAIL_BYTES = 1024 * 1024;
+
+/**
+ * When a Claude transcript last got a real entry (message, tool result, turn
+ * end). Not its mtime: a live Claude rewrites the untimestamped metadata block
+ * (title, mode, permission mode) every hour, so an idle session's file looks
+ * written within the last hour forever. Null when no entry carries a time.
+ */
+export async function readLastTranscriptEntryTime(filePath: string): Promise<Date | null> {
+  let handle;
+  try {
+    handle = await open(filePath, 'r');
+    const { size } = await handle.stat();
+    for (let tailBytes = FIRST_TAIL_BYTES; ; tailBytes *= 4) {
+      const length = Math.min(size, tailBytes);
+      const buffer = Buffer.alloc(length);
+      await handle.read(buffer, 0, length, size - length);
+      const times = [...buffer.toString('utf8').matchAll(ENTRY_TIMESTAMP)]
+        .map((match) => Date.parse(match[1]))
+        .filter((time) => Number.isFinite(time));
+      if (times.length > 0) {
+        return new Date(Math.max(...times));
+      }
+      if (length === size || tailBytes >= MAX_TAIL_BYTES) {
+        return null;
+      }
+    }
+  } catch {
+    return null;
+  } finally {
+    await handle?.close();
   }
 }
 

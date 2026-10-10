@@ -5,13 +5,14 @@ import { getAgentConfig } from '@/modules/tmux/agent-config.js';
 import { readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
+import { readLastTranscriptEntryTime } from '@/shared/utils.js';
 
 const SWEEP_INTERVAL_MS = 5 * 60_000;
 
 export type IdleAgentFacts = {
   /** Claude's own status for the window's session, if it wrote one. */
   status: Pick<ClaudeProcess, 'activity' | 'status' | 'statusSince'> | null;
-  /** Newest write to the transcript or a subagent transcript (epoch ms). */
+  /** Newest timed transcript entry or subagent transcript write (epoch ms). */
   lastWriteAt: number | null;
   /** Attached clients showing this window (browser terminals, the phone on main). */
   viewers: number;
@@ -62,7 +63,9 @@ async function lastWriteOf(pane: PaneSession): Promise<number | null> {
     return null;
   }
   const subagentsDirectory = path.join(path.dirname(pane.transcriptPath), pane.providerSessionId, 'subagents');
-  const writes = await Promise.all([newestWrite(pane.transcriptPath), newestWrite(subagentsDirectory)]);
+  // Not the transcript's mtime: Claude rewrites its metadata block hourly, which would keep every window alive.
+  const lastEntryTime = readLastTranscriptEntryTime(pane.transcriptPath).then((time) => time?.getTime() ?? null);
+  const writes = await Promise.all([lastEntryTime, newestWrite(subagentsDirectory)]);
   const known = writes.filter((write): write is number => write !== null);
   return known.length > 0 ? Math.max(...known) : null;
 }
