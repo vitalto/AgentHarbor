@@ -23,11 +23,15 @@ vi.mock('@/shared/api', () => ({
           resolved: Object.fromEntries(paths.map((reference) => [reference, existingFiles.get(reference) ?? null])),
         }));
       },
-      content: async () => new Response('bytes'),
+      content: async (localPath: string) => new Response(localPath.endsWith('.md') ? '---\ntitle: Plan\n---\n# Heading' : 'bytes'),
     },
   },
   readApiJson: async (response: Response) => response.json(),
 }));
+
+// jsdom has no object URLs.
+URL.createObjectURL = vi.fn(() => 'blob:preview');
+URL.revokeObjectURL = vi.fn();
 
 const { Markdown } = await import('@/modules/chat/transcript/Markdown');
 
@@ -94,6 +98,17 @@ test('a previewable file gets a preview button that opens a dialog', async () =>
 
   fireEvent.click(await screen.findByRole('button', { name: /^Preview / }));
   assert.ok(await screen.findByRole('dialog'));
+});
+
+test('a markdown preview shows the frontmatter as code, not as a heading', async () => {
+  existingFiles.set('docs/plan.md', '/local/plan.md');
+  render(<Markdown>{'See `docs/plan.md`.'}</Markdown>);
+
+  fireEvent.click(await screen.findByRole('button', { name: /^Preview / }));
+  const dialog = await screen.findByRole('dialog');
+  await waitFor(() => assert.ok(dialog.querySelector('h1')?.textContent === 'Heading'));
+  assert.equal(dialog.querySelectorAll('h1, h2').length, 1);
+  assert.match(dialog.textContent ?? '', /title: Plan/);
 });
 
 test('a markdown link to a drive path opens that path, not its percent-encoded form', () => {

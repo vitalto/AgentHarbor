@@ -14,6 +14,11 @@ const BINARY_SNIFF_BYTES = 8192;
 
 type TextPreview = { text: string; truncated: boolean } | { binary: true };
 
+// Markdown reads a frontmatter block's closing `---` as a heading underline.
+const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
+const showFrontmatterAsCode = (markdown: string): string =>
+  markdown.replace(FRONTMATTER, (_block, yaml: string) => `\`\`\`yaml\n${yaml}\n\`\`\`\n`);
+
 async function readTextPreview(blob: Blob): Promise<TextPreview> {
   const head = new Uint8Array(await blob.slice(0, BINARY_SNIFF_BYTES).arrayBuffer());
   if (head.includes(0)) {
@@ -50,7 +55,7 @@ function TextPreviewBody({ blob, kind }: { blob: Blob; kind: 'markdown' | 'text'
     <div className="h-full w-full overflow-auto p-4">
       {kind === 'markdown' ? (
         <Suspense fallback={null}>
-          <Markdown className="prose prose-sm max-w-none dark:prose-invert">{preview.text}</Markdown>
+          <Markdown className="prose prose-sm max-w-none dark:prose-invert">{showFrontmatterAsCode(preview.text)}</Markdown>
         </Suspense>
       ) : (
         <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">{preview.text}</pre>
