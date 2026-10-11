@@ -494,6 +494,9 @@ export const api = {
   // One-time download link for any file by absolute path (see downloadFile)
   downloads: {
     issue: (filePath: string) => post('/api/downloads', { path: filePath }),
+    resolve: (sessionId: string | null, paths: string[]) => post('/api/downloads/resolve', { sessionId, paths }),
+    content: (filePath: string, options: ApiRequestOptions = {}) =>
+      get(`/api/downloads/content${query({ path: filePath })}`, options),
   },
 
   // Commands agents asked to run elevated, waiting for the user's approval

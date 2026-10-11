@@ -1,4 +1,4 @@
-import { findDownloadablePathsInProse } from '@/modules/chat/utils/downloadablePaths';
+import { findFileReferencesInProse } from '@/modules/chat/utils/downloadablePaths';
 
 type MarkdownNode = {
   type: string;
@@ -11,7 +11,7 @@ type MarkdownNode = {
 const LINK_NODE_TYPES = new Set(['link', 'linkReference']);
 
 function splitTextAroundPaths(text: string): MarkdownNode[] | null {
-  const matches = findDownloadablePathsInProse(text);
+  const matches = findFileReferencesInProse(text);
   if (matches.length === 0) {
     return null;
   }
@@ -44,7 +44,7 @@ function linkPathsInChildren(node: MarkdownNode) {
   });
 }
 
-/** Turns absolute file paths written as plain prose into links, which the `a` renderer gives a download button. */
+/** Turns file paths written as plain prose into links, which the `a` renderer gives the file actions. */
 export function remarkDownloadablePaths() {
   return (tree: MarkdownNode) => linkPathsInChildren(tree);
 }

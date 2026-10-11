@@ -388,5 +388,13 @@
   "downloadPath": {
     "download": "Download {{path}}",
     "failed": "Download failed: {{message}}"
+  },
+  "filePreview": {
+    "open": "Preview {{name}}",
+    "close": "Close preview",
+    "loading": "Loading…",
+    "failed": "Could not open the preview.",
+    "binary": "This file is binary and has no preview.",
+    "truncated": "Only the first megabyte is shown."
   }
 }

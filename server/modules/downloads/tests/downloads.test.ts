@@ -27,6 +27,9 @@ async function withDownloadsServer(run: (baseUrl: string, fixtureDir: string) =>
     authenticate: rejectWithoutBearer,
     tickets: createDownloadTicketStore(),
     toLocalPath: (claudePath) => claudePath.replace(/^X:/, fixtureDir),
+    findSessionRoots: (sessionId) => (sessionId === 's1'
+      ? [path.join(fixtureDir, 'project'), path.join(fixtureDir, 'temp', 'claude', 'slug', 'sid')]
+      : []),
   }));
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -73,6 +76,71 @@ test('issuing a ticket requires authentication, an existing file and not a direc
     assert.equal((await issueTicket(baseUrl, 'X:/missing.txt')).status, 404);
     assert.equal((await issueTicket(baseUrl, 'X:/')).status, 400);
     assert.equal((await issueTicket(baseUrl, 'relative/a.txt')).status, 400);
+  });
+});
+
+const resolvePaths = async (baseUrl: string, paths: string[], sessionId?: string) => {
+  const response = await fetch(`${baseUrl}/api/downloads/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', authorization: 'Bearer valid' },
+    body: JSON.stringify({ sessionId, paths }),
+  });
+  assert.equal(response.status, 200);
+  return ((await response.json()) as { resolved: Record<string, string | null> }).resolved;
+};
+
+test('relative and ellipsis-shortened paths resolve under the project, then the session temp folder', async () => {
+  await withDownloadsServer(async (baseUrl, fixtureDir) => {
+    const project = path.join(fixtureDir, 'project');
+    const scratchpad = path.join(fixtureDir, 'temp', 'claude', 'slug', 'sid', 'scratchpad');
+    await mkdir(path.join(project, 'docs', 'guides'), { recursive: true });
+    await mkdir(path.join(scratchpad, 'icon'), { recursive: true });
+    await writeFile(path.join(project, 'docs', 'guides', 'playtest.md'), '# x');
+    await writeFile(path.join(scratchpad, 'exe_icon.png'), 'png');
+    await writeFile(path.join(scratchpad, 'icon', 'sheet.png'), 'png');
+
+    const resolved = await resolvePaths(baseUrl, [
+      'docs/guides/playtest.md',
+      'docs\\guides\\playtest.md',
+      './docs/guides/playtest.md',
+      '…\\scratchpad\\exe_icon.png',
+      '.../scratchpad/icon/sheet.png',
+      'X:/project/docs/guides/playtest.md',
+      'docs/guides',
+      'missing.md',
+    ], 's1');
+
+    const playtest = path.join(project, 'docs', 'guides', 'playtest.md');
+    assert.deepEqual(resolved, {
+      'docs/guides/playtest.md': playtest,
+      'docs\\guides\\playtest.md': playtest,
+      './docs/guides/playtest.md': playtest,
+      '…\\scratchpad\\exe_icon.png': path.join(scratchpad, 'exe_icon.png'),
+      '.../scratchpad/icon/sheet.png': path.join(scratchpad, 'icon', 'sheet.png'),
+      'X:/project/docs/guides/playtest.md': playtest,
+      'docs/guides': null,
+      'missing.md': null,
+    });
+
+    assert.deepEqual(await resolvePaths(baseUrl, ['docs/guides/playtest.md']), { 'docs/guides/playtest.md': null });
+  });
+});
+
+test('preview content is served inline to an authenticated request only', async () => {
+  await withDownloadsServer(async (baseUrl, fixtureDir) => {
+    await writeFile(path.join(fixtureDir, 'shot.png'), 'PNG BYTES');
+    const contentUrl = `${baseUrl}/api/downloads/content?path=${encodeURIComponent('X:/shot.png')}`;
+
+    assert.equal((await fetch(contentUrl)).status, 401);
+    const content = await fetch(contentUrl, { headers: { authorization: 'Bearer valid' } });
+    assert.equal(content.status, 200);
+    assert.equal(await content.text(), 'PNG BYTES');
+    assert.equal(content.headers.get('content-type'), 'image/png');
+    assert.equal(content.headers.get('content-disposition'), null);
+    assert.equal(content.headers.get('content-security-policy'), 'sandbox');
+
+    const missing = await fetch(`${baseUrl}/api/downloads/content?path=X:/nope.png`, { headers: { authorization: 'Bearer valid' } });
+    assert.equal(missing.status, 404);
   });
 });
 

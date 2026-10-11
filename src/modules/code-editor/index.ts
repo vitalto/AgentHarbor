@@ -2,3 +2,5 @@ export { default as EditorSidebar } from '@/modules/code-editor/EditorSidebar';
 export { useEditorSidebar } from '@/modules/code-editor/hooks/useEditorSidebar';
 export { default as MarkdownPreview } from '@/modules/code-editor/markdown/MarkdownPreview';
 export { default as MermaidDiagram } from '@/modules/code-editor/markdown/MermaidDiagram';
+export { isBinaryFile } from '@/modules/code-editor/utils/binaryFile';
+export { getPreviewKind, getPreviewMimeType } from '@/modules/code-editor/utils/previewableFile';

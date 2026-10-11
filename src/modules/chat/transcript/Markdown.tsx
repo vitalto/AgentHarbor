@@ -8,10 +8,10 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 import { useTranslation } from 'react-i18next';
 
 import { MermaidDiagram } from '@/modules/code-editor';
-import { DownloadPathButton } from '@/modules/chat/transcript/DownloadPathButton';
+import { FileReferenceActions } from '@/modules/chat/transcript/FileReferenceActions';
 import { MarkdownImage } from '@/modules/chat/transcript/MarkdownImage';
 import { remarkDownloadablePaths } from '@/modules/chat/transcript/remarkDownloadablePaths';
-import { asDownloadablePath, isWindowsDrivePath } from '@/modules/chat/utils/downloadablePaths';
+import { asFileReference, isWindowsDrivePath } from '@/modules/chat/utils/downloadablePaths';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
 import { normalizeLatexDelimiters } from '@/modules/chat/utils/latexDelimiters';
 import { copyTextToClipboard } from '@/shared/utils';
@@ -99,7 +99,7 @@ const decodeLinkTarget = (url: string): string => {
 const keepWindowsDrivePaths = (url: string): string =>
   isWindowsDrivePath(decodeLinkTarget(url)) ? url : defaultUrlTransform(url);
 
-// A file link draws the download button itself; a code span inside it must not add a second one.
+// A file link draws the file actions itself; a code span inside it must not add a second set.
 const InsideFileLinkContext = createContext(false);
 
 type CodeBlockProps = {
@@ -123,7 +123,7 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
   const shouldInline = !forceBlock && !/[\r\n]/.test(raw);
 
   if (shouldInline) {
-    const downloadablePath = isInsideFileLink ? null : asDownloadablePath(raw);
+    const fileReference = isInsideFileLink ? null : asFileReference(raw);
     const inlineCode = (
       <code
         className={`whitespace-pre-wrap break-words rounded-md border border-border/70 bg-muted px-1.5 py-0.5 font-mono text-[0.875em] text-foreground ${className || ''
@@ -133,7 +133,7 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
         {children}
       </code>
     );
-    return downloadablePath ? <>{inlineCode}<DownloadPathButton path={downloadablePath} /></> : inlineCode;
+    return fileReference ? <>{inlineCode}<FileReferenceActions reference={fileReference} /></> : inlineCode;
   }
 
   const match = /language-(\w+)/.exec(className || '');
@@ -330,7 +330,7 @@ function MarkdownBodyRenderer({ children, breaks = false, literalBackslashes = f
         const fileRef = looksLikeFilePath(linkTarget) ? linkTarget : looksLikeFilePath(linkText) ? linkText : undefined;
 
         if (fileRef && !isExternalHref(href)) {
-          const downloadablePath = asDownloadablePath(fileRef);
+          const fileReference = asFileReference(fileRef);
           const fileLink = (
             <a
               href={href || fileRef}
@@ -352,7 +352,7 @@ function MarkdownBodyRenderer({ children, breaks = false, literalBackslashes = f
               <InsideFileLinkContext.Provider value>{linkChildren}</InsideFileLinkContext.Provider>
             </a>
           );
-          return downloadablePath ? <>{fileLink}<DownloadPathButton path={downloadablePath} /></> : fileLink;
+          return fileReference ? <>{fileLink}<FileReferenceActions reference={fileReference} /></> : fileLink;
         }
 
         return (
