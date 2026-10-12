@@ -16,7 +16,7 @@
  Do you want to proceed?
  > 1. Yes
    2. Yes, and always allow access to
-      C:\Users\vital\AppData\Local\Temp\claude\D--Develop-TerminalShare\6bc5f522
+      C:\Users\alice\AppData\Local\Temp\claude\D--Develop-SampleProject\6bc5f522
       -f89f-41b2-8a4b-c2a6571f20bc\scratchpad\fixture-proj from this project
    3. Yes, and switch to auto mode · auto mode handles these prompts for you
    4. No

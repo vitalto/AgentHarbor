@@ -153,8 +153,8 @@ Attach: `pty.spawn('tmux', ['new-session','-t',session,'-s',`ah-v-${rand}`,';','
 
 ### Task 10: End-to-end on this machine + deployment
 
-- [ ] Build in WSL; run with `AH_CLAUDE_CMD=/mnt/c/Users/vital/.local/bin/claude.exe CLAUDE_CONFIG_DIR=/mnt/c/Users/vital/.claude AH_STATE_DIR=/mnt/c/Users/vital/.agentharbor PORT=7690`.
-- [ ] E2E script (`scripts/e2e/tmux-e2e.mjs`): login → create session in `D:\Develop\TerminalShare` → `chat.send` "Reply with exactly PONG" → receive assistant text `PONG` and `complete`; send "run `ls` with Bash" in default permission mode → receive `tui_prompt` → send key `1` → tool_result arrives; type into the tmux pane directly → web receives frames without send.
+- [ ] Build in WSL; run with `AH_CLAUDE_CMD=/mnt/c/Users/<you>/.local/bin/claude.exe CLAUDE_CONFIG_DIR=/mnt/c/Users/<you>/.claude AH_STATE_DIR=/mnt/c/Users/<you>/.agentharbor PORT=7690`.
+- [ ] E2E script (`scripts/e2e/tmux-e2e.mjs`): login → create session in a Windows project folder → `chat.send` "Reply with exactly PONG" → receive assistant text `PONG` and `complete`; send "run `ls` with Bash" in default permission mode → receive `tui_prompt` → send key `1` → tool_result arrives; type into the tmux pane directly → web receives frames without send.
 - [ ] Playwright screenshots desktop + 400 px; fix visual breakage.
-- [ ] systemd unit `agentharbor.service` (copy in TerminalShare `wsl/`), firewall rule `WSL AgentHarbor 7690`, `cc` updated to the hook launch, TerminalShare README section. Commit both repos.
+- [ ] systemd unit `agentharbor.service`, a firewall rule for port 7690, deployment notes.
 - [ ] Create GitHub repo `AgentHarbor` (public) and push — after the user confirms publishing.

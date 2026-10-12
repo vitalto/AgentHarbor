@@ -8,8 +8,8 @@ import OutsideTmuxNotice from '@/modules/chat/composer/OutsideTmuxNotice';
 import { AgentMoveError, type AgentWindow } from '@/shared/hooks/useAgentWindows';
 
 const duplicate: AgentWindow = {
-  sessionId: 'app-1', providerSessionId: 'p-1', title: 'Chat', projectPath: '/mnt/d/Develop/TerminalShare',
-  location: 'tmux', windowName: 'TerminalShare', pid: null, activity: 'busy', duplicateProcesses: true,
+  sessionId: 'app-1', providerSessionId: 'p-1', title: 'Chat', projectPath: '/mnt/d/Develop/SampleProject',
+  location: 'tmux', windowName: 'SampleProject', pid: null, activity: 'busy', duplicateProcesses: true,
 };
 
 test('a move refused because the other Claude is busy can be forced by the user', async () => {

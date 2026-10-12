@@ -7,15 +7,15 @@ import { Markdown } from '@/modules/chat/transcript/Markdown';
 
 /**
  * A user's own message is plain text that happens to go through markdown:
- * `C:\Users\vital\.agentharbor` must not lose the backslash before the dot to
+ * `C:\Users\alice\.agentharbor` must not lose the backslash before the dot to
  * a markdown character escape. Model replies keep standard escapes.
  */
 
 test('a user-typed Windows path keeps every backslash', () => {
   const { container } = render(
-    <Markdown breaks literalBackslashes>{'see C:\\Users\\vital\\.agentharbor\\attachments and `C:\\x\\.y`'}</Markdown>,
+    <Markdown breaks literalBackslashes>{'see C:\\Users\\alice\\.agentharbor\\attachments and `C:\\x\\.y`'}</Markdown>,
   );
-  assert.match(container.textContent ?? '', /see C:\\Users\\vital\\\.agentharbor\\attachments and C:\\x\\\.y/);
+  assert.match(container.textContent ?? '', /see C:\\Users\\alice\\\.agentharbor\\attachments and C:\\x\\\.y/);
 });
 
 test('user-typed markdown still formats', () => {

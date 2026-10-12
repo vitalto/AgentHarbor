@@ -158,5 +158,5 @@ modification notice. Published as a public GitHub repo (with the user's go-ahead
 
 ## Deployment (author's machine)
 
-systemd service `agentharbor` in WSL (user vital), port 7690, Windows firewall rule
-`WSL AgentHarbor 7690`, reachable on ZeroTier/LAN like ttyd; documented in TerminalShare README.
+systemd service `agentharbor` in WSL, port 7690, a Windows firewall rule for that port,
+reachable over LAN/VPN only.

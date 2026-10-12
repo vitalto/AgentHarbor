@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 /**
- * A command an agent queued with `elevate` (TerminalShare/windows/elevation): it runs elevated
+ * A command an agent queued with `elevate` (an optional external Windows broker): it runs elevated
  * only after the user approves it here. The Windows broker that executes it is a separate,
  * elevated process watching the same folder.
  */

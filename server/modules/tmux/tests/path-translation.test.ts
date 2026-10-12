@@ -20,14 +20,14 @@ test('toLocalPath maps Windows paths to WSL mounts', () => {
   assert.equal(toLocalPath('D:\\Develop\\My Proj', windowsClaude), '/mnt/d/Develop/My Proj');
   assert.equal(toLocalPath('C:\\', windowsClaude), '/mnt/c');
   assert.equal(toLocalPath('c:/Users/u/.claude/x.jsonl', windowsClaude), '/mnt/c/Users/u/.claude/x.jsonl');
-  assert.equal(toLocalPath('\\\\wsl.localhost\\Ubuntu\\home\\vital', windowsClaude), '/home/vital');
-  assert.equal(toLocalPath('/home/vital', windowsClaude), '/home/vital');
+  assert.equal(toLocalPath('\\\\wsl.localhost\\Ubuntu\\home\\alice', windowsClaude), '/home/alice');
+  assert.equal(toLocalPath('/home/alice', windowsClaude), '/home/alice');
 });
 
 test('toClaudePath maps WSL paths back to Windows', () => {
   assert.equal(toClaudePath('/mnt/d/Develop/My Proj', windowsClaude), 'D:\\Develop\\My Proj');
   assert.equal(toClaudePath('/mnt/c', windowsClaude), 'C:\\');
-  assert.equal(toClaudePath('/home/vital/x', windowsClaude), '\\\\wsl.localhost\\Ubuntu\\home\\vital\\x');
+  assert.equal(toClaudePath('/home/alice/x', windowsClaude), '\\\\wsl.localhost\\Ubuntu\\home\\alice\\x');
   assert.equal(toClaudePath('D:\\already', windowsClaude), 'D:\\already');
 });
 

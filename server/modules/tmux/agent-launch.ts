@@ -23,7 +23,7 @@ const ELEVATION_HINT =
 
 /**
  * Blocks the ways agents usually trigger UAC (Start-Process -Verb RunAs, runas /user, Windows
- * sudo) and points them to `elevate` (TerminalShare/windows/elevation). Only once the elevation
+ * sudo) and points them to `elevate` (an optional external Windows broker). Only once the elevation
  * broker is installed (it starts on demand), so without it everything behaves as before. The `case` filter spawns nothing
  * for ordinary commands, since this runs before every shell call.
  */

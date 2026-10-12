@@ -37,7 +37,7 @@ const { Markdown } = await import('@/modules/chat/transcript/Markdown');
 
 test('a whole code span or link names a file when it has an extension', () => {
   assert.equal(asFileReference('D:\\Develop\\My Proj\\отчёт.pdf'), 'D:\\Develop\\My Proj\\отчёт.pdf');
-  assert.equal(asFileReference('C:/Users/vital/.agentharbor/out.zip:12'), 'C:/Users/vital/.agentharbor/out.zip');
+  assert.equal(asFileReference('C:/Users/alice/.agentharbor/out.zip:12'), 'C:/Users/alice/.agentharbor/out.zip');
   assert.equal(asFileReference('/mnt/d/out/build.tar.gz'), '/mnt/d/out/build.tar.gz');
   assert.equal(asFileReference('docs/guides/blind-playtest.md'), 'docs/guides/blind-playtest.md');
   assert.equal(asFileReference('…\\scratchpad\\exe_icon.png'), '…\\scratchpad\\exe_icon.png');

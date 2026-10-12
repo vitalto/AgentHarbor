@@ -7,7 +7,7 @@ import test from 'node:test';
 import { listBackgroundCommands, listRunningBackgroundCommands, settleBackgroundCommands } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import type { AnyRecord } from '@/shared/types.js';
 
-const OUTPUT_FILE = 'C:\\Users\\vital\\AppData\\Local\\Temp\\claude\\D--x\\s1\\tasks\\bjob1.output';
+const OUTPUT_FILE = 'C:\\Users\\alice\\AppData\\Local\\Temp\\claude\\D--x\\s1\\tasks\\bjob1.output';
 
 function launch(toolUseId: string, taskId: string, timestamp: string, input: AnyRecord): AnyRecord[] {
   return [

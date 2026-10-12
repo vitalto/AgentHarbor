@@ -11,7 +11,7 @@ const windowsConsoleStatus: ClaudeProcess = {
   statusSince: null,
   pid: 1248,
   windowsPid: true,
-  cwd: 'D:\\Develop\\TerminalShare',
+  cwd: 'D:\\Develop\\SampleProject',
   updatedAt: 0,
   startedAt: null,
 };
@@ -19,7 +19,7 @@ const windowsConsoleStatus: ClaudeProcess = {
 test('resuming a session that Claude already runs elsewhere is refused instead of starting a second process', () => {
   assert.throws(
     () => assertNotOpenElsewhere([windowsConsoleStatus]),
-    (error: unknown) => error instanceof AgentWindowError && /Windows terminal \(claude pid 1248, D:\\Develop\\TerminalShare\)/.test(error.message),
+    (error: unknown) => error instanceof AgentWindowError && /Windows terminal \(claude pid 1248, D:\\Develop\\SampleProject\)/.test(error.message),
   );
 });
 
