@@ -33,15 +33,24 @@ chat UI on top of it:
   dialog show up as buttons in the chat.
 - **Terminal tab** - attaches to the very same tmux window, for anything the chat does not cover.
 - **Many agents at once** - every session is its own tmux window; the sidebar shows which agents are
-  busy, waiting for input or idle.
+  busy, waiting for input or idle, and the Running tab lists every live Claude.
+- **Subagents and background commands** - panels above the composer show which subagents work right
+  now (with their own steps) and which shell commands run in the background; both can be stopped.
+- **Images and files** - paste or attach images (they reach the TUI as `[Image #N]`); every file path
+  an agent writes in the chat gets a download button, images preview inline and PDF, video, audio,
+  markdown and text open in a viewer.
+- **Sessions from other terminals** - a Claude session already running in another terminal is shown
+  read-only and can be moved into tmux from the chat; a session is never resumed twice.
+- **Idle agents close themselves** after `AH_IDLE_CLOSE_MINUTES` (the conversation stays and resumes
+  on the next message).
 - **File tree and editor**, **git panel** (stage, commit, branches, worktrees), MCP server and skills
   management, plugins.
 - **Responsive / PWA** - usable from a phone; the chat composer, menus and terminal all work on a
   small touch screen.
 - **Login required** - single-user account stored in a local SQLite database.
 
-Model, effort and permission mode are not separate pickers: use the TUI itself (`/model`,
-Shift+Tab), from the chat composer or the terminal tab.
+The permission mode picker cycles the TUI's own modes (Shift+Tab under the hood). Model and effort
+have no pickers: type `/model` in the chat composer or the terminal tab.
 
 ## How it works
 
@@ -92,6 +101,7 @@ Set variables in the environment or in a `.env` file in the repository root (see
 | `AH_CLAUDE_ARGS` | *(empty)* | Extra flags for every launch, e.g. `--permission-mode default` |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code's config directory (projects, sessions) |
 | `AH_STATE_DIR` | `~/.agentharbor` | AgentHarbor state (hook settings, pane registry). Must be writable by the Claude process |
+| `AH_IDLE_CLOSE_MINUTES` | `60` | Close Claude windows idle this long, unless a menu, running work or an open viewer keeps them (`0` = never) |
 | `SERVER_PORT` | `3001` | HTTP / WebSocket port |
 | `HOST` | `0.0.0.0` | Address to bind to |
 | `DATABASE_PATH` | `~/.agentharbor/auth.db` | SQLite database with the login account and app settings |
@@ -120,6 +130,8 @@ AH_STATE_DIR=/mnt/c/Users/<you>/.agentharbor
   with TLS); do not expose the port to the internet.
 - A login is required for the UI, the API and the WebSocket. Anyone who logs in controls your agents
   and, through them and the terminal tab, your shell account.
+
+See [SECURITY.md](SECURITY.md) for the threat model and how to report a vulnerability.
 
 ## What is different from CloudCLI UI
 
