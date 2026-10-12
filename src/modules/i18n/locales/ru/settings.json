@@ -302,33 +302,9 @@
       "confirmDelete": "Вы уверены, что хотите удалить этот GitHub токен?"
     },
     "apiDocsLink": "Документация API",
-    "documentation": {
-      "title": "Документация внешнего API",
-      "description": "Узнайте, как использовать внешний API для запуска сеансов Claude/Cursor из ваших приложений.",
-      "viewLink": "Просмотр документации API →"
-    },
     "loading": "Загрузка...",
     "version": {
       "updateAvailable": "Доступно обновление: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "Проверка установки TaskMaster...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI не установлен",
-      "description": "TaskMaster CLI требуется для использования функций управления задачами. Установите его для начала работы:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "Посмотреть на GitHub",
-      "afterInstallation": "После установки:",
-      "steps": {
-        "restart": "Перезапустите это приложение",
-        "autoAvailable": "Функции TaskMaster станут автоматически доступны",
-        "initCommand": "Используйте task-master init в каталоге вашего проекта"
-      }
-    },
-    "settings": {
-      "enableLabel": "Включить интеграцию TaskMaster",
-      "enableDescription": "Показывать задачи TaskMaster, баннеры и индикаторы боковой панели в интерфейсе"
     }
   },
   "agents": {
@@ -344,12 +320,6 @@
     "account": {
       "claude": {
         "description": "AI-ассистент Anthropic Claude"
-      },
-      "cursor": {
-        "description": "Редактор кода с AI Cursor"
-      },
-      "codex": {
-        "description": "AI-ассистент OpenAI Codex"
       }
     },
     "connectionStatus": "Статус подключения",
@@ -367,8 +337,7 @@
     "title": "Настройки разрешений",
     "skipPermissions": {
       "label": "Пропускать запросы разрешений (используйте с осторожностью)",
-      "claudeDescription": "Эквивалентно флагу --dangerously-skip-permissions",
-      "cursorDescription": "Эквивалентно флагу -f в Cursor CLI"
+      "claudeDescription": "Эквивалентно флагу --dangerously-skip-permissions"
     },
     "allowedTools": {
       "title": "Разрешенные инструменты",
@@ -429,31 +398,6 @@
       "npmInstall": "- Разрешить npm install",
       "rmRf": "- Заблокировать рекурсивное удаление"
     },
-    "codex": {
-      "permissionMode": "Режим разрешений",
-      "description": "Управляет тем, как Codex обрабатывает изменения файлов и выполнение команд",
-      "modes": {
-        "default": {
-          "title": "По умолчанию",
-          "description": "Выполняет команды в песочнице рабочего пространства. Codex решает, когда требуется одобрение; запросы нельзя одобрить в этой неинтерактивной интеграции."
-        },
-        "acceptEdits": {
-          "title": "Принимать правки",
-          "description": "Все команды выполняются автоматически в рабочем пространстве. Полный автоматический режим с изолированным выполнением."
-        },
-        "bypassPermissions": {
-          "title": "Обход разрешений",
-          "description": "Полный системный доступ без ограничений. Все команды выполняются автоматически с полным доступом к диску и сети. Используйте с осторожностью."
-        }
-      },
-      "technicalDetails": "Технические детали",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Выполняет команды в песочнице рабочего пространства. Codex решает, когда требуется одобрение; запросы нельзя одобрить в этой неинтерактивной интеграции.",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Все команды автоматически выполняются в каталоге проекта.",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Полный системный доступ, используйте только в доверенных средах.",
-        "overrideNote": "Вы можете переопределить это для каждого сеанса, используя кнопку режима в интерфейсе чата."
-      }
-    },
     "actions": {
       "add": "Добавить"
     }
@@ -461,9 +405,7 @@
   "mcpServers": {
     "title": "MCP серверы",
     "description": {
-      "claude": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Claude",
-      "cursor": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Cursor",
-      "codex": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Codex"
+      "claude": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Claude"
     },
     "addButton": "Добавить MCP сервер",
     "empty": "MCP серверы не настроены",
@@ -486,10 +428,6 @@
     "actions": {
       "edit": "Редактировать сервер",
       "delete": "Удалить сервер"
-    },
-    "help": {
-      "title": "О Codex MCP",
-      "description": "Codex поддерживает MCP серверы на основе stdio. Вы можете добавлять серверы, которые расширяют возможности Codex дополнительными инструментами и ресурсами."
     }
   },
   "pluginSettings": {

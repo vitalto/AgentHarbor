@@ -50,21 +50,6 @@
     "resetToDefaults": "Reset ke Default",
     "cancelChanges": "Batalkan Perubahan"
   },
-  "voiceSettings": {
-    "title": "Suara",
-    "description": "Input speech-to-text dan fitur bacakan melalui backend audio yang kompatibel dengan OpenAI.",
-    "enable": "Aktifkan suara",
-    "enableDescription": "Tampilkan tombol mikrofon dan tombol bacakan pada pesan.",
-    "backendTitle": "Backend",
-    "backendDescription": "Arahkan ke OpenAI, Groq, atau server lokal (LocalAI, Speaches, Kokoro-FastAPI). Kosongkan untuk menggunakan default server.",
-    "baseUrl": "URL Dasar",
-    "apiKey": "Kunci API",
-    "sttModel": "Model speech-to-text",
-    "ttsModel": "Model text-to-speech",
-    "voice": "Suara",
-    "format": "Format audio",
-    "note": "URL dasar kustom dipanggil langsung oleh browser dan harus mengizinkan permintaan CORS browser. Kosongkan untuk menggunakan backend yang dikonfigurasi di server."
-  },
   "quickSettings": {
     "title": "Pengaturan Cepat",
     "sections": {
@@ -76,7 +61,6 @@
     "showRawParameters": "Tampilkan parameter mentah",
     "showThinking": "Tampilkan proses berpikir",
     "sendByCtrlEnter": "Kirim dengan Ctrl+Enter",
-    "voiceEnabled": "Suara (mikrofon + bacakan)",
     "sendByCtrlEnterDescription": "Jika diaktifkan, Ctrl+Enter akan mengirim pesan, bukan Enter saja. Berguna bagi pengguna IME untuk mencegah pengiriman tidak disengaja.",
     "dragHandle": {
       "dragging": "Menyeret handle",
@@ -128,7 +112,6 @@
     "appearance": "Tampilan",
     "git": "Git",
     "apiTokens": "API & Token",
-    "voice": "Suara",
     "tasks": "Tugas",
     "browser": "Browser",
     "notifications": "Notifikasi",
@@ -345,33 +328,9 @@
       "confirmDelete": "Yakin ingin menghapus token GitHub ini?"
     },
     "apiDocsLink": "Dokumentasi API",
-    "documentation": {
-      "title": "Dokumentasi API Eksternal",
-      "description": "Pelajari cara menggunakan API eksternal untuk memicu sesi Claude/Cursor dari aplikasi.",
-      "viewLink": "Lihat Dokumentasi API →"
-    },
     "loading": "Memuat...",
     "version": {
       "updateAvailable": "Pembaruan tersedia: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "Memeriksa instalasi TaskMaster...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI Belum Terpasang",
-      "description": "TaskMaster CLI diperlukan untuk menggunakan fitur manajemen tugas. Instal untuk memulai:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "Lihat di GitHub",
-      "afterInstallation": "Setelah instalasi:",
-      "steps": {
-        "restart": "Mulai ulang aplikasi ini",
-        "autoAvailable": "Fitur TaskMaster akan otomatis tersedia",
-        "initCommand": "Gunakan task-master init di direktori proyek"
-      }
-    },
-    "settings": {
-      "enableLabel": "Aktifkan Integrasi TaskMaster",
-      "enableDescription": "Tampilkan tugas, banner, dan indikator sidebar TaskMaster di seluruh antarmuka"
     }
   },
   "agents": {
@@ -387,15 +346,6 @@
     "account": {
       "claude": {
         "description": "Asisten AI Anthropic Claude"
-      },
-      "cursor": {
-        "description": "Editor kode bertenaga AI Cursor"
-      },
-      "codex": {
-        "description": "Asisten AI OpenAI Codex"
-      },
-      "opencode": {
-        "description": "Asisten CLI OpenCode"
       }
     },
     "connectionStatus": "Status Koneksi",
@@ -413,8 +363,7 @@
     "title": "Pengaturan Izin",
     "skipPermissions": {
       "label": "Lewati prompt izin (gunakan dengan hati-hati)",
-      "claudeDescription": "Setara dengan flag --dangerously-skip-permissions",
-      "cursorDescription": "Setara dengan flag -f di Cursor CLI"
+      "claudeDescription": "Setara dengan flag --dangerously-skip-permissions"
     },
     "allowedTools": {
       "title": "Tool yang Diizinkan",
@@ -475,31 +424,6 @@
       "npmInstall": "- Izinkan npm install",
       "rmRf": "- Blokir penghapusan rekursif"
     },
-    "codex": {
-      "permissionMode": "Mode Izin",
-      "description": "Mengatur cara Codex menangani modifikasi file dan eksekusi perintah",
-      "modes": {
-        "default": {
-          "title": "Default",
-          "description": "Menjalankan perintah di dalam sandbox workspace. Codex menentukan kapan persetujuan diperlukan; permintaan tidak dapat disetujui dalam integrasi non-interaktif ini."
-        },
-        "acceptEdits": {
-          "title": "Terima Edit",
-          "description": "Semua perintah berjalan otomatis di dalam workspace. Mode otomatis penuh dengan eksekusi dalam sandbox."
-        },
-        "bypassPermissions": {
-          "title": "Lewati Izin",
-          "description": "Akses penuh ke sistem tanpa pembatasan. Semua perintah berjalan otomatis dengan akses penuh ke disk dan jaringan. Gunakan dengan hati-hati."
-        }
-      },
-      "technicalDetails": "Detail teknis",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Menjalankan perintah di dalam sandbox workspace. Codex menentukan kapan persetujuan diperlukan; permintaan tidak dapat disetujui dalam integrasi non-interaktif ini.",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Semua perintah dieksekusi otomatis di dalam direktori proyek.",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Akses penuh ke sistem, gunakan hanya di environment tepercaya.",
-        "overrideNote": "Pengaturan ini dapat ditimpa per sesi menggunakan tombol mode di antarmuka chat."
-      }
-    },
     "actions": {
       "add": "Tambah"
     }
@@ -507,10 +431,7 @@
   "mcpServers": {
     "title": "Server MCP",
     "description": {
-      "claude": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk Claude",
-      "cursor": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk Cursor",
-      "codex": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk Codex",
-      "opencode": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk OpenCode"
+      "claude": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk Claude"
     },
     "addButton": "Tambah Server MCP",
     "empty": "Belum ada server MCP yang dikonfigurasi",
@@ -533,10 +454,6 @@
     "actions": {
       "edit": "Edit server",
       "delete": "Hapus server"
-    },
-    "help": {
-      "title": "Tentang MCP Codex",
-      "description": "Codex mendukung server MCP berbasis stdio. Tambahkan server untuk memperluas kemampuan Codex dengan tool dan resource tambahan."
     }
   },
   "pluginSettings": {
@@ -710,9 +627,9 @@
     "menuLabel": "Tambah Server MCP",
     "globalButtonLabel": "Tambah Server MCP Global",
     "providerButtonLabel": "Tambah Server MCP {{provider}}",
-    "globalAddDescription": "Tambah Server MCP Global menulis satu server stdio atau HTTP yang sama ke Claude, Cursor, Codex, dan OpenCode.",
+    "globalAddDescription": "Tambah Server MCP Global menulis satu server stdio atau HTTP yang sama ke Claude.",
     "providerAddDescription": "{{button}} hanya mengubah {{provider}}.",
-    "globalModalDescription": "Menambahkan server MCP ini ke setiap provider: Claude, Cursor, Codex, dan OpenCode. Hanya transport stdio dan HTTP yang didukung karena konfigurasi yang sama harus berfungsi pada semua provider.",
+    "globalModalDescription": "Menambahkan server MCP ini ke setiap provider: Claude. Hanya transport stdio dan HTTP yang didukung karena konfigurasi yang sama harus berfungsi pada semua provider.",
     "refreshingScopes": "Menyegarkan cakupan proyek...",
     "loadingServers": "Memuat server MCP...",
     "configCwd": "Cwd",

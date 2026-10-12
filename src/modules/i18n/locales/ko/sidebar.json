@@ -12,7 +12,6 @@
     "all": "전체",
     "untitledSession": "제목 없는 세션",
     "newSession": "새 세션",
-    "codexSession": "Codex 세션",
     "fetchingProjects": "Claude 프로젝트와 세션을 가져오는 중",
     "projects": "프로젝트",
     "noMatchingProjects": "일치하는 프로젝트 없음",

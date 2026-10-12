@@ -50,21 +50,6 @@
     "resetToDefaults": "重置为默认值",
     "cancelChanges": "取消更改"
   },
-  "voiceSettings": {
-    "title": "语音",
-    "description": "通过兼容 OpenAI 的音频后端实现语音转文字输入和朗读功能。",
-    "enable": "启用语音",
-    "enableDescription": "在消息上显示麦克风按钮和朗读按钮。",
-    "backendTitle": "后端",
-    "backendDescription": "指向 OpenAI、Groq 或本地服务器（LocalAI、Speaches、Kokoro-FastAPI）。留空以使用服务器默认值。",
-    "baseUrl": "基础 URL",
-    "apiKey": "API 密钥",
-    "sttModel": "语音转文字模型",
-    "ttsModel": "文字转语音模型",
-    "voice": "语音",
-    "format": "音频格式",
-    "note": "自定义基础 URL 由您的浏览器直接调用，必须允许浏览器 CORS 请求。留空以使用服务器配置的后端。"
-  },
   "quickSettings": {
     "title": "快速设置",
     "sections": {
@@ -76,7 +61,6 @@
     "showRawParameters": "显示原始参数",
     "showThinking": "显示思考过程",
     "sendByCtrlEnter": "使用 Ctrl+Enter 发送",
-    "voiceEnabled": "语音（麦克风 + 朗读）",
     "sendByCtrlEnterDescription": "启用后，按 Ctrl+Enter 发送消息，而不是仅按 Enter。这对于使用输入法的用户可以避免意外发送。",
     "dragHandle": {
       "dragging": "正在拖拽手柄",
@@ -128,7 +112,6 @@
     "appearance": "外观",
     "git": "Git",
     "apiTokens": "API 和令牌",
-    "voice": "语音",
     "tasks": "任务",
     "browser": "浏览器",
     "notifications": "通知",
@@ -328,33 +311,9 @@
       "confirmDelete": "确定要删除此 GitHub 令牌吗？"
     },
     "apiDocsLink": "API 文档",
-    "documentation": {
-      "title": "外部 API 文档",
-      "description": "了解如何使用外部 API 从您的应用程序触发 Claude/Cursor 会话。",
-      "viewLink": "查看 API 文档 →"
-    },
     "loading": "加载中...",
     "version": {
       "updateAvailable": "有可用更新：v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "正在检查 TaskMaster 安装...",
-    "notInstalled": {
-      "title": "未安装 TaskMaster AI CLI",
-      "description": "需要 TaskMaster CLI 才能使用任务管理功能。安装它以开始使用：",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "在 GitHub 上查看",
-      "afterInstallation": "安装后：",
-      "steps": {
-        "restart": "重启此应用程序",
-        "autoAvailable": "TaskMaster 功能将自动可用",
-        "initCommand": "在项目目录中使用 task-master init"
-      }
-    },
-    "settings": {
-      "enableLabel": "启用 TaskMaster 集成",
-      "enableDescription": "在整个界面中显示 TaskMaster 任务、横幅和侧边栏指示器"
     }
   },
   "agents": {
@@ -370,15 +329,6 @@
     "account": {
       "claude": {
         "description": "Anthropic Claude AI 助手"
-      },
-      "cursor": {
-        "description": "Cursor AI 驱动的代码编辑器"
-      },
-      "codex": {
-        "description": "OpenAI Codex AI 助手"
-      },
-      "opencode": {
-        "description": "OpenCode CLI 助手"
       }
     },
     "connectionStatus": "连接状态",
@@ -396,8 +346,7 @@
     "title": "权限设置",
     "skipPermissions": {
       "label": "跳过权限提示（请谨慎使用）",
-      "claudeDescription": "等同于 --dangerously-skip-permissions 标志",
-      "cursorDescription": "等同于 Cursor CLI 中的 -f 标志"
+      "claudeDescription": "等同于 --dangerously-skip-permissions 标志"
     },
     "allowedTools": {
       "title": "允许的工具",
@@ -458,31 +407,6 @@
       "npmInstall": "- 允许 npm install",
       "rmRf": "- 阻止递归删除"
     },
-    "codex": {
-      "permissionMode": "权限模式",
-      "description": "控制 Codex 如何处理文件修改和命令执行",
-      "modes": {
-        "default": {
-          "title": "默认",
-          "description": "在工作区沙箱内运行命令。Codex 决定何时需要批准；此非交互式集成无法批准请求。"
-        },
-        "acceptEdits": {
-          "title": "接受编辑",
-          "description": "所有命令在工作区内自动运行。具有沙箱执行的全自动模式。"
-        },
-        "bypassPermissions": {
-          "title": "绕过权限",
-          "description": "完全系统访问，无任何限制。所有命令自动运行，具有完整的磁盘和网络访问权限。请谨慎使用。"
-        }
-      },
-      "technicalDetails": "技术详情",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. 在工作区沙箱内运行命令。Codex 决定何时需要批准；此非交互式集成无法批准请求。",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never。所有命令在项目目录内自动执行。",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never。完全系统访问权限，仅在可信环境中使用。",
-        "overrideNote": "您可以使用聊天界面中的模式按钮按会话覆盖此设置。"
-      }
-    },
     "actions": {
       "add": "添加"
     }
@@ -490,10 +414,7 @@
   "mcpServers": {
     "title": "MCP 服务器",
     "description": {
-      "claude": "Model Context Protocol 服务器为 Claude 提供额外的工具和数据源",
-      "cursor": "Model Context Protocol 服务器为 Cursor 提供额外的工具和数据源",
-      "codex": "Model Context Protocol 服务器为 Codex 提供额外的工具和数据源",
-      "opencode": "Model Context Protocol 服务器为 OpenCode 提供额外的工具和数据源"
+      "claude": "Model Context Protocol 服务器为 Claude 提供额外的工具和数据源"
     },
     "addButton": "添加 MCP 服务器",
     "empty": "未配置 MCP 服务器",
@@ -516,10 +437,6 @@
     "actions": {
       "edit": "编辑服务器",
       "delete": "删除服务器"
-    },
-    "help": {
-      "title": "关于 Codex MCP",
-      "description": "Codex 支持基于 stdio 的 MCP 服务器。您可以添加服务器，通过额外的工具和资源来扩展 Codex 的功能。"
     }
   },
   "pluginSettings": {

@@ -15,10 +15,7 @@
     "user": "U",
     "error": "Error",
     "tool": "Tool",
-    "claude": "Claude",
-    "cursor": "Cursor",
-    "codex": "Codex",
-    "opencode": "OpenCode"
+    "claude": "Claude"
   },
   "tools": {
     "settings": "Tool Settings",
@@ -125,14 +122,6 @@
     },
     "technicalDetails": "Technical details"
   },
-  "voice": {
-    "input": "Voice input",
-    "stopRecording": "Stop recording",
-    "transcribing": "Transcribing…",
-    "speak": "Read aloud",
-    "stopSpeaking": "Stop",
-    "loading": "Loading…"
-  },
   "input": {
     "placeholder": "Type / for commands, @ for files, or ask {{provider}} anything...",
     "placeholderDefault": "Type your message...",
@@ -177,17 +166,8 @@
     "title": "Choose Your AI Assistant",
     "description": "Select a provider to start a new conversation",
     "selectModel": "Select Model",
-    "providerInfo": {
-      "anthropic": "by Anthropic",
-      "openai": "by OpenAI",
-      "cursorEditor": "AI Code Editor",
-      "google": "by Google"
-    },
     "readyPrompt": {
       "claude": "Ready to use Claude with {{model}}. Start typing your message below.",
-      "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
-      "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
-      "opencode": "Ready to use OpenCode with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     },
     "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits",

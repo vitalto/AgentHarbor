@@ -12,7 +12,6 @@
     "all": "全部",
     "untitledSession": "未命名会话",
     "newSession": "新会话",
-    "codexSession": "Codex 会话",
     "fetchingProjects": "正在获取您的 Claude 项目和会话",
     "projects": "项目",
     "noMatchingProjects": "未找到匹配的项目",

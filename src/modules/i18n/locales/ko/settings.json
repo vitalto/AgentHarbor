@@ -50,21 +50,6 @@
     "resetToDefaults": "기본값으로 초기화",
     "cancelChanges": "변경 취소"
   },
-  "voiceSettings": {
-    "title": "음성",
-    "description": "OpenAI 호환 오디오 백엔드를 통한 음성-텍스트 입력 및 소리 내어 읽기 기능입니다.",
-    "enable": "음성 활성화",
-    "enableDescription": "메시지에 마이크 버튼과 소리 내어 읽기 버튼을 표시합니다.",
-    "backendTitle": "백엔드",
-    "backendDescription": "OpenAI, Groq 또는 로컬 서버(LocalAI, Speaches, Kokoro-FastAPI)를 지정하세요. 비워두면 서버 기본값을 사용합니다.",
-    "baseUrl": "기본 URL",
-    "apiKey": "API 키",
-    "sttModel": "음성-텍스트 변환 모델",
-    "ttsModel": "텍스트-음성 변환 모델",
-    "voice": "음성",
-    "format": "오디오 형식",
-    "note": "사용자 지정 기본 URL은 브라우저에서 직접 호출되므로 브라우저 CORS 요청을 허용해야 합니다. 비워두면 서버에 설정된 백엔드를 사용합니다."
-  },
   "quickSettings": {
     "title": "빠른 설정",
     "sections": {
@@ -76,7 +61,6 @@
     "showRawParameters": "Raw 파라미터 표시",
     "showThinking": "생각 과정 표시",
     "sendByCtrlEnter": "Ctrl+Enter로 전송",
-    "voiceEnabled": "음성 (마이크 + 소리 내어 읽기)",
     "sendByCtrlEnterDescription": "활성화하면 Enter 대신 Ctrl+Enter로 메시지를 전송합니다. IME 사용자가 실수로 전송하는 것을 방지하는 데 유용합니다.",
     "dragHandle": {
       "dragging": "드래그 핸들",
@@ -128,7 +112,6 @@
     "appearance": "외관",
     "git": "Git",
     "apiTokens": "API & 토큰",
-    "voice": "음성",
     "tasks": "작업",
     "browser": "브라우저",
     "notifications": "알림",
@@ -328,33 +311,9 @@
       "confirmDelete": "이 GitHub 토큰을 삭제하시겠습니까?"
     },
     "apiDocsLink": "API 문서",
-    "documentation": {
-      "title": "외부 API 문서",
-      "description": "외부 API를 사용하여 애플리케이션에서 Claude/Cursor 세션을 트리거하는 방법을 알아보세요.",
-      "viewLink": "API 문서 보기 →"
-    },
     "loading": "로딩 중...",
     "version": {
       "updateAvailable": "업데이트 가능: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "TaskMaster 설치 확인 중...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI가 설치되지 않았습니다",
-      "description": "작업 관리 기능을 사용하려면 TaskMaster CLI가 필요합니다. 시작하려면 설치하세요:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "GitHub에서 보기",
-      "afterInstallation": "설치 후:",
-      "steps": {
-        "restart": "이 애플리케이션을 재시작하세요",
-        "autoAvailable": "TaskMaster 기능이 자동으로 활성화됩니다",
-        "initCommand": "프로젝트 디렉토리에서 task-master init을 사용하세요"
-      }
-    },
-    "settings": {
-      "enableLabel": "TaskMaster 통합 활성화",
-      "enableDescription": "인터페이스 전체에 TaskMaster 작업, 배너 및 사이드바 표시"
     }
   },
   "agents": {
@@ -370,15 +329,6 @@
     "account": {
       "claude": {
         "description": "Anthropic Claude AI 어시스턴트"
-      },
-      "cursor": {
-        "description": "Cursor AI 기반 코드 에디터"
-      },
-      "codex": {
-        "description": "OpenAI Codex AI 어시스턴트"
-      },
-      "opencode": {
-        "description": "OpenCode CLI 어시스턴트"
       }
     },
     "connectionStatus": "연결 상태",
@@ -396,8 +346,7 @@
     "title": "권한 설정",
     "skipPermissions": {
       "label": "권한 확인 건너뛰기 (주의해서 사용)",
-      "claudeDescription": "--dangerously-skip-permissions 플래그와 동일",
-      "cursorDescription": "Cursor CLI의 -f 플래그와 동일"
+      "claudeDescription": "--dangerously-skip-permissions 플래그와 동일"
     },
     "allowedTools": {
       "title": "허용된 도구",
@@ -458,31 +407,6 @@
       "npmInstall": "- npm install 허용",
       "rmRf": "- 재귀 삭제 차단"
     },
-    "codex": {
-      "permissionMode": "권한 모드",
-      "description": "Codex가 파일 수정 및 명령어 실행을 처리하는 방식을 제어합니다",
-      "modes": {
-        "default": {
-          "title": "기본",
-          "description": "작업 공간 샌드박스에서 명령을 실행합니다. Codex가 승인 필요 여부를 결정하며, 이 비대화형 통합에서는 요청을 승인할 수 없습니다."
-        },
-        "acceptEdits": {
-          "title": "편집 허용",
-          "description": "워크스페이스 내에서 모든 명령어가 자동 실행됩니다. 샌드박스 내 완전 자동 모드."
-        },
-        "bypassPermissions": {
-          "title": "권한 우회",
-          "description": "제한 없는 전체 시스템 접근. 모든 명령어가 전체 디스크 및 네트워크 접근 권한으로 자동 실행됩니다. 주의해서 사용하세요."
-        }
-      },
-      "technicalDetails": "기술 상세",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. 작업 공간 샌드박스에서 명령을 실행합니다. Codex가 승인 필요 여부를 결정하며, 이 비대화형 통합에서는 요청을 승인할 수 없습니다.",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. 프로젝트 디렉토리 내에서 모든 명령어 자동 실행.",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. 전체 시스템 접근, 신뢰할 수 있는 환경에서만 사용하세요.",
-        "overrideNote": "채팅 인터페이스의 모드 버튼을 사용하여 세션별로 재정의할 수 있습니다."
-      }
-    },
     "actions": {
       "add": "추가"
     }
@@ -490,10 +414,7 @@
   "mcpServers": {
     "title": "MCP 서버",
     "description": {
-      "claude": "Model Context Protocol 서버는 Claude에 추가 도구와 데이터 소스를 제공합니다",
-      "cursor": "Model Context Protocol 서버는 Cursor에 추가 도구와 데이터 소스를 제공합니다",
-      "codex": "Model Context Protocol 서버는 Codex에 추가 도구와 데이터 소스를 제공합니다",
-      "opencode": "Model Context Protocol 서버는 OpenCode에 추가 도구와 데이터 소스를 제공합니다"
+      "claude": "Model Context Protocol 서버는 Claude에 추가 도구와 데이터 소스를 제공합니다"
     },
     "addButton": "MCP 서버 추가",
     "empty": "설정된 MCP 서버 없음",
@@ -516,10 +437,6 @@
     "actions": {
       "edit": "서버 편집",
       "delete": "서버 삭제"
-    },
-    "help": {
-      "title": "Codex MCP 정보",
-      "description": "Codex는 stdio 기반 MCP 서버를 지원합니다. 추가 도구와 리소스로 Codex의 기능을 확장하는 서버를 추가할 수 있습니다."
     }
   },
   "pluginSettings": {

@@ -12,7 +12,6 @@
     "all": "全部",
     "untitledSession": "未命名工作階段",
     "newSession": "新工作階段",
-    "codexSession": "Codex 工作階段",
     "fetchingProjects": "正在取得您的 Claude 專案和工作階段",
     "projects": "專案",
     "noMatchingProjects": "找不到符合的專案",

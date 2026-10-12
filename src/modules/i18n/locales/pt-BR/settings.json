@@ -50,21 +50,6 @@
     "resetToDefaults": "Restaurar padrões",
     "cancelChanges": "Cancelar alterações"
   },
-  "voiceSettings": {
-    "title": "Voz",
-    "description": "Entrada de fala-para-texto e leitura em voz alta, via backend de áudio compatível com OpenAI.",
-    "enable": "Ativar voz",
-    "enableDescription": "Mostrar o botão do microfone e o botão de leitura em voz alta nas mensagens.",
-    "backendTitle": "Backend",
-    "backendDescription": "Aponte para OpenAI, Groq ou um servidor local (LocalAI, Speaches, Kokoro-FastAPI). Deixe em branco para usar o backend padrão do servidor.",
-    "baseUrl": "URL base",
-    "apiKey": "Chave da API",
-    "sttModel": "Modelo de fala-para-texto",
-    "ttsModel": "Modelo de texto-para-fala",
-    "voice": "Voz",
-    "format": "Formato de áudio",
-    "note": "Uma URL base personalizada é chamada diretamente pelo seu navegador e deve permitir requisições CORS do navegador. Deixe em branco para usar o backend configurado no servidor."
-  },
   "quickSettings": {
     "title": "Configurações rápidas",
     "sections": {
@@ -76,7 +61,6 @@
     "showRawParameters": "Mostrar parâmetros brutos",
     "showThinking": "Mostrar raciocínio",
     "sendByCtrlEnter": "Enviar com Ctrl+Enter",
-    "voiceEnabled": "Voz (microfone + leitura em voz alta)",
     "sendByCtrlEnterDescription": "Quando ativado, pressionar Ctrl+Enter envia a mensagem em vez de apenas Enter. Isso é útil para usuários de IME evitarem envios acidentais.",
     "dragHandle": {
       "dragging": "Arrastando alça",
@@ -128,7 +112,6 @@
     "appearance": "Aparência",
     "git": "Git",
     "apiTokens": "API & Tokens",
-    "voice": "Voz",
     "tasks": "Tarefas",
     "browser": "Navegador",
     "notifications": "Notificações",
@@ -345,33 +328,9 @@
       "confirmDelete": "Tem certeza de que quer excluir este token do GitHub?"
     },
     "apiDocsLink": "Documentação da API",
-    "documentation": {
-      "title": "Documentação da API externa",
-      "description": "Aprenda como usar a API externa para disparar sessões do Claude/Cursor a partir dos seus aplicativos.",
-      "viewLink": "Ver documentação da API →"
-    },
     "loading": "Carregando...",
     "version": {
       "updateAvailable": "Atualização disponível: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "Verificando instalação do TaskMaster...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI não instalado",
-      "description": "O CLI do TaskMaster é necessário para usar recursos de gerenciamento de tarefas. Instale-o para começar:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "Ver no GitHub",
-      "afterInstallation": "Após a instalação:",
-      "steps": {
-        "restart": "Reinicie este aplicativo",
-        "autoAvailable": "Os recursos do TaskMaster ficarão disponíveis automaticamente",
-        "initCommand": "Use task-master init no diretório do seu projeto"
-      }
-    },
-    "settings": {
-      "enableLabel": "Ativar integração com TaskMaster",
-      "enableDescription": "Mostrar tarefas, banners e indicadores da barra lateral do TaskMaster em toda a interface"
     }
   },
   "agents": {
@@ -387,15 +346,6 @@
     "account": {
       "claude": {
         "description": "Assistente de IA Anthropic Claude"
-      },
-      "cursor": {
-        "description": "Editor de código com IA Cursor"
-      },
-      "codex": {
-        "description": "Assistente de IA OpenAI Codex"
-      },
-      "opencode": {
-        "description": "Assistente CLI OpenCode"
       }
     },
     "connectionStatus": "Status da conexão",
@@ -426,8 +376,7 @@
     "title": "Configurações de permissão",
     "skipPermissions": {
       "label": "Pular solicitações de permissão (use com cautela)",
-      "claudeDescription": "Equivale à flag --dangerously-skip-permissions",
-      "cursorDescription": "Equivale à flag -f no CLI do Cursor"
+      "claudeDescription": "Equivale à flag --dangerously-skip-permissions"
     },
     "allowedTools": {
       "title": "Ferramentas permitidas",
@@ -488,31 +437,6 @@
       "npmInstall": "- Permitir npm install",
       "rmRf": "- Bloquear exclusão recursiva"
     },
-    "codex": {
-      "permissionMode": "Modo de permissão",
-      "description": "Controla como o Codex lida com modificações de arquivos e execução de comandos",
-      "modes": {
-        "default": {
-          "title": "Padrão",
-          "description": "Executa comandos dentro do sandbox do espaço de trabalho. O Codex decide quando a aprovação é necessária; solicitações não podem ser aprovadas nesta integração não interativa."
-        },
-        "acceptEdits": {
-          "title": "Aceitar edições",
-          "description": "Todos os comandos executam automaticamente dentro do espaço de trabalho. Modo totalmente automático com execução em sandbox."
-        },
-        "bypassPermissions": {
-          "title": "Ignorar permissões",
-          "description": "Acesso total ao sistema sem restrições. Todos os comandos executam automaticamente com acesso total a disco e rede. Use com cautela."
-        }
-      },
-      "technicalDetails": "Detalhes técnicos",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Executa comandos dentro do sandbox do espaço de trabalho. O Codex decide quando a aprovação é necessária; solicitações não podem ser aprovadas nesta integração não interativa.",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Todos os comandos executam automaticamente dentro do diretório do projeto.",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Acesso total ao sistema, use apenas em ambientes confiáveis.",
-        "overrideNote": "Você pode sobrescrever isso por sessão usando o botão de modo na interface do chat."
-      }
-    },
     "actions": {
       "add": "Adicionar"
     }
@@ -520,10 +444,7 @@
   "mcpServers": {
     "title": "Servidores MCP",
     "description": {
-      "claude": "Servidores Model Context Protocol fornecem ferramentas e fontes de dados adicionais ao Claude",
-      "cursor": "Servidores Model Context Protocol fornecem ferramentas e fontes de dados adicionais ao Cursor",
-      "codex": "Servidores Model Context Protocol fornecem ferramentas e fontes de dados adicionais ao Codex",
-      "opencode": "Servidores Model Context Protocol fornecem ferramentas e fontes de dados adicionais ao OpenCode"
+      "claude": "Servidores Model Context Protocol fornecem ferramentas e fontes de dados adicionais ao Claude"
     },
     "addButton": "Adicionar servidor MCP",
     "empty": "Nenhum servidor MCP configurado",
@@ -546,10 +467,6 @@
     "actions": {
       "edit": "Editar servidor",
       "delete": "Excluir servidor"
-    },
-    "help": {
-      "title": "Sobre MCP do Codex",
-      "description": "O Codex suporta servidores MCP baseados em stdio. Você pode adicionar servidores que ampliam as capacidades do Codex com ferramentas e recursos adicionais."
     }
   },
   "pluginSettings": {
@@ -726,9 +643,9 @@
     "menuLabel": "Adicionar servidor MCP",
     "globalButtonLabel": "Adicionar servidor MCP global",
     "providerButtonLabel": "Adicionar servidor MCP do {{provider}}",
-    "globalAddDescription": "Adicionar servidor MCP global grava um servidor stdio ou HTTP comum no Claude, Cursor, Codex e OpenCode.",
+    "globalAddDescription": "Adicionar servidor MCP global grava um servidor stdio ou HTTP comum no Claude.",
     "providerAddDescription": "{{button}} altera apenas o {{provider}}.",
-    "globalModalDescription": "Adiciona este servidor MCP a todos os provedores: Claude, Cursor, Codex e OpenCode. Apenas transportes stdio e HTTP são suportados porque a mesma configuração deve funcionar em todos os provedores.",
+    "globalModalDescription": "Adiciona este servidor MCP a todos os provedores: Claude. Apenas transportes stdio e HTTP são suportados porque a mesma configuração deve funcionar em todos os provedores.",
     "refreshingScopes": "Atualizando escopos do projeto...",
     "loadingServers": "Carregando servidores MCP...",
     "configCwd": "Cwd",

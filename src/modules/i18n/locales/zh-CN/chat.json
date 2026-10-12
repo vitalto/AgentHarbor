@@ -15,10 +15,7 @@
     "user": "U",
     "error": "错误",
     "tool": "工具",
-    "claude": "Claude",
-    "cursor": "Cursor",
-    "codex": "Codex",
-    "opencode": "OpenCode"
+    "claude": "Claude"
   },
   "tools": {
     "settings": "工具设置",
@@ -112,14 +109,6 @@
     },
     "technicalDetails": "技术细节"
   },
-  "voice": {
-    "input": "语音输入",
-    "stopRecording": "停止录音",
-    "transcribing": "转写中…",
-    "speak": "朗读",
-    "stopSpeaking": "停止",
-    "loading": "加载中…"
-  },
   "input": {
     "placeholder": "输入 / 调用命令，@ 选择文件，或向 {{provider}} 提问...",
     "placeholderDefault": "输入您的消息...",
@@ -151,17 +140,8 @@
     "title": "选择您的 AI 助手",
     "description": "选择一个供应商以开始新对话",
     "selectModel": "选择模型",
-    "providerInfo": {
-      "anthropic": "由 Anthropic 提供",
-      "openai": "由 OpenAI 提供",
-      "cursorEditor": "AI 代码编辑器",
-      "google": "由 Google 提供"
-    },
     "readyPrompt": {
       "claude": "准备好使用带有 {{model}} 的 Claude。请在下方开始输入您的消息。",
-      "cursor": "准备好使用带有 {{model}} 的 Cursor。请在下方开始输入您的消息。",
-      "codex": "准备好使用带有 {{model}} 的 Codex。请在下方开始输入您的消息。",
-      "opencode": "准备好使用带有 {{model}} 的 OpenCode。请在下方开始输入您的消息。",
       "default": "请在上方选择一个提供者以开始"
     },
     "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜索会话、文件和提交"

@@ -302,33 +302,9 @@
       "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce token GitHub ?"
     },
     "apiDocsLink": "Documentation API",
-    "documentation": {
-      "title": "Documentation de l'API externe",
-      "description": "Apprenez à utiliser l'API externe pour déclencher des sessions Claude/Cursor depuis vos applications.",
-      "viewLink": "Voir la documentation API →"
-    },
     "loading": "Chargement...",
     "version": {
       "updateAvailable": "Mise à jour disponible : v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "Vérification de l'installation TaskMaster...",
-    "notInstalled": {
-      "title": "CLI TaskMaster AI non installé",
-      "description": "Le CLI TaskMaster est requis pour utiliser les fonctionnalités de gestion des tâches. Installez-le pour commencer :",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "Voir sur GitHub",
-      "afterInstallation": "Après l'installation :",
-      "steps": {
-        "restart": "Redémarrez cette application",
-        "autoAvailable": "Les fonctionnalités TaskMaster deviendront automatiquement disponibles",
-        "initCommand": "Utilisez task-master init dans votre répertoire de projet"
-      }
-    },
-    "settings": {
-      "enableLabel": "Activer l'intégration TaskMaster",
-      "enableDescription": "Afficher les tâches TaskMaster, les bannières et les indicateurs dans la barre latérale"
     }
   },
   "agents": {
@@ -344,15 +320,6 @@
     "account": {
       "claude": {
         "description": "Assistant IA Claude d'Anthropic"
-      },
-      "cursor": {
-        "description": "Éditeur de code IA Cursor"
-      },
-      "codex": {
-        "description": "Assistant IA Codex d'OpenAI"
-      },
-      "opencode": {
-        "description": "Assistant CLI OpenCode"
       }
     },
     "connectionStatus": "Statut de la connexion",
@@ -370,8 +337,7 @@
     "title": "Paramètres de permission",
     "skipPermissions": {
       "label": "Ignorer les invites de permission (à utiliser avec précaution)",
-      "claudeDescription": "Équivalent au flag --dangerously-skip-permissions",
-      "cursorDescription": "Équivalent au flag -f dans le CLI Cursor"
+      "claudeDescription": "Équivalent au flag --dangerously-skip-permissions"
     },
     "allowedTools": {
       "title": "Outils autorisés",
@@ -432,31 +398,6 @@
       "npmInstall": "- Autoriser npm install",
       "rmRf": "- Bloquer la suppression récursive"
     },
-    "codex": {
-      "permissionMode": "Mode de permission",
-      "description": "Contrôle comment Codex gère les modifications de fichiers et l'exécution des commandes",
-      "modes": {
-        "default": {
-          "title": "Par défaut",
-          "description": "Exécute les commandes dans le bac à sable de l’espace de travail. Codex décide quand une approbation est nécessaire ; les demandes ne peuvent pas être approuvées dans cette intégration non interactive."
-        },
-        "acceptEdits": {
-          "title": "Accepter les modifications",
-          "description": "Toutes les commandes s'exécutent automatiquement dans l'espace de travail. Mode entièrement automatique avec exécution sandboxée."
-        },
-        "bypassPermissions": {
-          "title": "Contourner les permissions",
-          "description": "Accès système complet sans restrictions. Toutes les commandes s'exécutent automatiquement avec accès disque et réseau complet. À utiliser avec précaution."
-        }
-      },
-      "technicalDetails": "Détails techniques",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Exécute les commandes dans le bac à sable de l’espace de travail. Codex décide quand une approbation est nécessaire ; les demandes ne peuvent pas être approuvées dans cette intégration non interactive.",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Toutes les commandes s'exécutent automatiquement dans le répertoire du projet.",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Accès système complet, à utiliser uniquement dans des environnements de confiance.",
-        "overrideNote": "Vous pouvez remplacer ce mode par session via le bouton de mode dans l'interface de chat."
-      }
-    },
     "actions": {
       "add": "Ajouter"
     }
@@ -464,10 +405,7 @@
   "mcpServers": {
     "title": "Serveurs MCP",
     "description": {
-      "claude": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à Claude",
-      "cursor": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à Cursor",
-      "codex": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à Codex",
-      "opencode": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à OpenCode"
+      "claude": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à Claude"
     },
     "addButton": "Ajouter un serveur MCP",
     "empty": "Aucun serveur MCP configuré",
@@ -490,10 +428,6 @@
     "actions": {
       "edit": "Modifier le serveur",
       "delete": "Supprimer le serveur"
-    },
-    "help": {
-      "title": "À propos de Codex MCP",
-      "description": "Codex prend en charge les serveurs MCP basés sur stdio. Vous pouvez ajouter des serveurs qui étendent les capacités de Codex avec des outils et ressources supplémentaires."
     }
   },
   "pluginSettings": {

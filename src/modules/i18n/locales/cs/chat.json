@@ -17,10 +17,7 @@
     "user": "U",
     "error": "Chyba",
     "tool": "Nástroj",
-    "claude": "Claude",
-    "cursor": "Cursor",
-    "codex": "Codex",
-    "opencode": "OpenCode"
+    "claude": "Claude"
   },
   "tools": {
     "settings": "Nastavení nástroje",
@@ -145,14 +142,6 @@
     },
     "technicalDetails": "Technické podrobnosti"
   },
-  "voice": {
-    "input": "Hlasový vstup",
-    "stopRecording": "Zastavit nahrávání",
-    "transcribing": "Přepisování…",
-    "speak": "Přečíst nahlas",
-    "stopSpeaking": "Zastavit",
-    "loading": "Načítání…"
-  },
   "input": {
     "placeholder": "Napište / pro příkazy, @ pro soubory nebo dotaz, na který odpoví {{provider}}...",
     "placeholderDefault": "Napište zprávu...",
@@ -197,17 +186,8 @@
     "title": "Vyberte AI asistenta",
     "description": "Vyberte provider a zahajte novou konverzaci",
     "selectModel": "Vyberte model",
-    "providerInfo": {
-      "anthropic": "od společnosti Anthropic",
-      "openai": "od společnosti OpenAI",
-      "cursorEditor": "AI editor kódu",
-      "google": "od společnosti Google"
-    },
     "readyPrompt": {
       "claude": "Claude s modelem {{model}} je připraven. Začněte psát zprávu níže.",
-      "cursor": "Cursor s modelem {{model}} je připraven. Začněte psát zprávu níže.",
-      "codex": "Codex s modelem {{model}} je připraven. Začněte psát zprávu níže.",
-      "opencode": "OpenCode s modelem {{model}} je připraven. Začněte psát zprávu níže.",
       "default": "Začněte výběrem provideru výše"
     },
     "pressToSearch": "Stiskněte <kbd>{{shortcut}}</kbd> pro hledání v relacích, souborech a commitech",

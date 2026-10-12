@@ -50,21 +50,6 @@
     "resetToDefaults": "Reset to Defaults",
     "cancelChanges": "Cancel Changes"
   },
-  "voiceSettings": {
-    "title": "Voice",
-    "description": "Speech-to-text input and read-aloud, via an OpenAI-compatible audio backend.",
-    "enable": "Enable voice",
-    "enableDescription": "Show the mic button and the read-aloud button on messages.",
-    "backendTitle": "Backend",
-    "backendDescription": "Point at OpenAI, Groq, or a local server (LocalAI, Speaches, Kokoro-FastAPI). Leave blank to use the server default.",
-    "baseUrl": "Base URL",
-    "apiKey": "API key",
-    "sttModel": "Speech-to-text model",
-    "ttsModel": "Text-to-speech model",
-    "voice": "Voice",
-    "format": "Audio format",
-    "note": "A custom base URL is called directly by your browser and must allow browser CORS requests. Leave it blank to use the server-configured backend."
-  },
   "quickSettings": {
     "title": "Quick Settings",
     "sections": {
@@ -76,7 +61,6 @@
     "showRawParameters": "Show raw parameters",
     "showThinking": "Show thinking",
     "sendByCtrlEnter": "Send by Ctrl+Enter",
-    "voiceEnabled": "Voice (mic + read aloud)",
     "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.",
     "dragHandle": {
       "dragging": "Dragging handle",
@@ -128,7 +112,6 @@
     "appearance": "Appearance",
     "git": "Git",
     "apiTokens": "API & Tokens",
-    "voice": "Voice",
     "tasks": "Tasks",
     "browser": "Browser",
     "notifications": "Notifications",
@@ -345,33 +328,9 @@
       "confirmDelete": "Are you sure you want to delete this GitHub token?"
     },
     "apiDocsLink": "API Documentation",
-    "documentation": {
-      "title": "External API Documentation",
-      "description": "Learn how to use the external API to trigger Claude/Cursor sessions from your applications.",
-      "viewLink": "View API Documentation →"
-    },
     "loading": "Loading...",
     "version": {
       "updateAvailable": "Update available: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "Checking TaskMaster installation...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI Not Installed",
-      "description": "TaskMaster CLI is required to use task management features. Install it to get started:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "View on GitHub",
-      "afterInstallation": "After installation:",
-      "steps": {
-        "restart": "Restart this application",
-        "autoAvailable": "TaskMaster features will automatically become available",
-        "initCommand": "Use task-master init in your project directory"
-      }
-    },
-    "settings": {
-      "enableLabel": "Enable TaskMaster Integration",
-      "enableDescription": "Show TaskMaster tasks, banners, and sidebar indicators across the interface"
     }
   },
   "agents": {
@@ -387,15 +346,6 @@
     "account": {
       "claude": {
         "description": "Anthropic Claude AI assistant"
-      },
-      "cursor": {
-        "description": "Cursor AI-powered code editor"
-      },
-      "codex": {
-        "description": "OpenAI Codex AI assistant"
-      },
-      "opencode": {
-        "description": "OpenCode CLI assistant"
       }
     },
     "connectionStatus": "Connection Status",
@@ -426,8 +376,7 @@
     "title": "Permission Settings",
     "skipPermissions": {
       "label": "Skip permission prompts (use with caution)",
-      "claudeDescription": "Equivalent to --dangerously-skip-permissions flag",
-      "cursorDescription": "Equivalent to -f flag in Cursor CLI"
+      "claudeDescription": "Equivalent to --dangerously-skip-permissions flag"
     },
     "allowedTools": {
       "title": "Allowed Tools",
@@ -488,31 +437,6 @@
       "npmInstall": "- Allow npm install",
       "rmRf": "- Block recursive delete"
     },
-    "codex": {
-      "permissionMode": "Permission Mode",
-      "description": "Controls how Codex handles file modifications and command execution",
-      "modes": {
-        "default": {
-          "title": "Default",
-          "description": "Runs commands within the workspace sandbox. Codex decides when approval is needed; requests cannot be approved in this non-interactive integration."
-        },
-        "acceptEdits": {
-          "title": "Accept Edits",
-          "description": "All commands run automatically within the workspace. Full auto mode with sandboxed execution."
-        },
-        "bypassPermissions": {
-          "title": "Bypass Permissions",
-          "description": "Full system access with no restrictions. All commands run automatically with full disk and network access. Use with caution."
-        }
-      },
-      "technicalDetails": "Technical details",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Runs commands within the workspace sandbox. Codex decides when approval is needed; requests cannot be approved in this non-interactive integration.",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. All commands auto-execute within project directory.",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Full system access, use only in trusted environments.",
-        "overrideNote": "You can override this per-session using the mode button in the chat interface."
-      }
-    },
     "actions": {
       "add": "Add"
     }
@@ -520,10 +444,7 @@
   "mcpServers": {
     "title": "MCP Servers",
     "description": {
-      "claude": "Model Context Protocol servers provide additional tools and data sources to Claude",
-      "cursor": "Model Context Protocol servers provide additional tools and data sources to Cursor",
-      "codex": "Model Context Protocol servers provide additional tools and data sources to Codex",
-      "opencode": "Model Context Protocol servers provide additional tools and data sources to OpenCode"
+      "claude": "Model Context Protocol servers provide additional tools and data sources to Claude"
     },
     "addButton": "Add MCP Server",
     "empty": "No MCP servers configured",
@@ -546,10 +467,6 @@
     "actions": {
       "edit": "Edit server",
       "delete": "Delete server"
-    },
-    "help": {
-      "title": "About Codex MCP",
-      "description": "Codex supports stdio-based MCP servers. You can add servers that extend Codex's capabilities with additional tools and resources."
     }
   },
   "pluginSettings": {
@@ -723,9 +640,9 @@
     "menuLabel": "Add MCP Server",
     "globalButtonLabel": "Add Global MCP Server",
     "providerButtonLabel": "Add {{provider}} MCP Server",
-    "globalAddDescription": "Add Global MCP Server writes one common stdio or HTTP server to Claude, Cursor, Codex, and OpenCode.",
+    "globalAddDescription": "Add Global MCP Server writes one common stdio or HTTP server to Claude.",
     "providerAddDescription": "{{button}} only changes {{provider}}.",
-    "globalModalDescription": "Adds this MCP server to every provider: Claude, Cursor, Codex, and OpenCode. Only stdio and HTTP transports are supported because the same config must work across all providers.",
+    "globalModalDescription": "Adds this MCP server to every provider: Claude. Only stdio and HTTP transports are supported because the same config must work across all providers.",
     "refreshingScopes": "Refreshing project scopes...",
     "loadingServers": "Loading MCP servers...",
     "configCwd": "Cwd",

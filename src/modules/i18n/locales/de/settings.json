@@ -302,33 +302,9 @@
       "confirmDelete": "Möchtest du diesen GitHub-Token wirklich löschen?"
     },
     "apiDocsLink": "API-Dokumentation",
-    "documentation": {
-      "title": "Externe API-Dokumentation",
-      "description": "Erfahre, wie du die externe API nutzen kannst, um Claude/Cursor-Sitzungen aus deinen Anwendungen heraus zu starten.",
-      "viewLink": "API-Dokumentation anzeigen →"
-    },
     "loading": "Lädt...",
     "version": {
       "updateAvailable": "Update verfügbar: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "TaskMaster-Installation wird überprüft...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI nicht installiert",
-      "description": "TaskMaster CLI ist erforderlich, um Aufgabenverwaltungsfunktionen zu nutzen. Installiere es, um loszulegen:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "Auf GitHub anzeigen",
-      "afterInstallation": "Nach der Installation:",
-      "steps": {
-        "restart": "Diese Anwendung neu starten",
-        "autoAvailable": "TaskMaster-Funktionen werden automatisch verfügbar",
-        "initCommand": "task-master init in deinem Projektverzeichnis verwenden"
-      }
-    },
-    "settings": {
-      "enableLabel": "TaskMaster-Integration aktivieren",
-      "enableDescription": "TaskMaster-Aufgaben, Banner und Seitenleisten-Indikatoren in der gesamten Oberfläche anzeigen"
     }
   },
   "agents": {
@@ -344,12 +320,6 @@
     "account": {
       "claude": {
         "description": "Anthropic Claude KI-Assistent"
-      },
-      "cursor": {
-        "description": "Cursor KI-gestützter Code-Editor"
-      },
-      "codex": {
-        "description": "OpenAI Codex KI-Assistent"
       }
     },
     "connectionStatus": "Verbindungsstatus",
@@ -367,8 +337,7 @@
     "title": "Berechtigungseinstellungen",
     "skipPermissions": {
       "label": "Berechtigungsaufforderungen überspringen (mit Vorsicht verwenden)",
-      "claudeDescription": "Entspricht dem Flag --dangerously-skip-permissions",
-      "cursorDescription": "Entspricht dem Flag -f in der Cursor CLI"
+      "claudeDescription": "Entspricht dem Flag --dangerously-skip-permissions"
     },
     "allowedTools": {
       "title": "Erlaubte Werkzeuge",
@@ -429,31 +398,6 @@
       "npmInstall": "- npm install erlauben",
       "rmRf": "- Rekursives Löschen sperren"
     },
-    "codex": {
-      "permissionMode": "Berechtigungsmodus",
-      "description": "Steuert, wie Codex Dateiänderungen und Befehlsausführung handhabt",
-      "modes": {
-        "default": {
-          "title": "Standard",
-          "description": "Führt Befehle in der Workspace-Sandbox aus. Codex entscheidet, wann eine Genehmigung nötig ist; Anfragen können in dieser nicht interaktiven Integration nicht genehmigt werden."
-        },
-        "acceptEdits": {
-          "title": "Bearbeitungen akzeptieren",
-          "description": "Alle Befehle werden automatisch innerhalb des Arbeitsbereichs ausgeführt. Vollautomatischer Modus mit isolierter Ausführung."
-        },
-        "bypassPermissions": {
-          "title": "Berechtigungen umgehen",
-          "description": "Vollständiger Systemzugriff ohne Einschränkungen. Alle Befehle werden automatisch mit vollem Festplatten- und Netzwerkzugriff ausgeführt. Mit Vorsicht verwenden."
-        }
-      },
-      "technicalDetails": "Technische Details",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Führt Befehle in der Workspace-Sandbox aus. Codex entscheidet, wann eine Genehmigung nötig ist; Anfragen können in dieser nicht interaktiven Integration nicht genehmigt werden.",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Alle Befehle werden automatisch innerhalb des Projektverzeichnisses ausgeführt.",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Vollständiger Systemzugriff, nur in vertrauenswürdigen Umgebungen verwenden.",
-        "overrideNote": "Du kannst dies pro Sitzung über die Modusschaltfläche in der Chat-Oberfläche überschreiben."
-      }
-    },
     "actions": {
       "add": "Hinzufügen"
     }
@@ -461,9 +405,7 @@
   "mcpServers": {
     "title": "MCP-Server",
     "description": {
-      "claude": "Model Context Protocol-Server stellen Claude zusätzliche Werkzeuge und Datenquellen zur Verfügung",
-      "cursor": "Model Context Protocol-Server stellen Cursor zusätzliche Werkzeuge und Datenquellen zur Verfügung",
-      "codex": "Model Context Protocol-Server stellen Codex zusätzliche Werkzeuge und Datenquellen zur Verfügung"
+      "claude": "Model Context Protocol-Server stellen Claude zusätzliche Werkzeuge und Datenquellen zur Verfügung"
     },
     "addButton": "MCP-Server hinzufügen",
     "empty": "Keine MCP-Server konfiguriert",
@@ -486,10 +428,6 @@
     "actions": {
       "edit": "Server bearbeiten",
       "delete": "Server löschen"
-    },
-    "help": {
-      "title": "Über Codex MCP",
-      "description": "Codex unterstützt stdio-basierte MCP-Server. Du kannst Server hinzufügen, die die Fähigkeiten von Codex mit zusätzlichen Werkzeugen und Ressourcen erweitern."
     }
   },
   "pluginSettings": {

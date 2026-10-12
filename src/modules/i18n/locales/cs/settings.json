@@ -50,21 +50,6 @@
     "resetToDefaults": "Obnovit výchozí",
     "cancelChanges": "Zrušit změny"
   },
-  "voiceSettings": {
-    "title": "Hlas",
-    "description": "Převod řeči na text a předčítání přes zvukový backend kompatibilní s OpenAI.",
-    "enable": "Zapnout hlas",
-    "enableDescription": "Zobrazí tlačítko mikrofonu a u zpráv tlačítko pro předčítání.",
-    "backendTitle": "Backend",
-    "backendDescription": "Nasměrujte na OpenAI, Groq nebo lokální server (LocalAI, Speaches, Kokoro-FastAPI). Ponechte prázdné, chcete-li použít výchozí nastavení serveru.",
-    "baseUrl": "Základní URL",
-    "apiKey": "API klíč",
-    "sttModel": "Model pro převod řeči na text",
-    "ttsModel": "Model pro převod textu na řeč",
-    "voice": "Hlas",
-    "format": "Formát zvuku",
-    "note": "Vlastní základní URL volá přímo váš prohlížeč, proto musí povolovat CORS požadavky z prohlížeče. Ponechte pole prázdné, chcete-li použít backend nakonfigurovaný na serveru."
-  },
   "quickSettings": {
     "title": "Rychlé nastavení",
     "sections": {
@@ -76,7 +61,6 @@
     "showRawParameters": "Zobrazit surové parametry",
     "showThinking": "Zobrazit přemýšlení",
     "sendByCtrlEnter": "Odesílat pomocí Ctrl+Enter",
-    "voiceEnabled": "Hlas (mikrofon + předčítání)",
     "sendByCtrlEnterDescription": "Po zapnutí se zpráva odesílá klávesami Ctrl+Enter místo samotného Enter. Hodí se uživatelům IME, aby zprávy neodesílali omylem.",
     "dragHandle": {
       "dragging": "Přetahování úchytu",
@@ -108,7 +92,6 @@
     "appearance": "Vzhled",
     "git": "Git",
     "apiTokens": "API a tokeny",
-    "voice": "Hlas",
     "tasks": "Úkoly",
     "browser": "Prohlížeč",
     "notifications": "Oznámení",
@@ -318,33 +301,9 @@
       "confirmDelete": "Opravdu chcete smazat tento token pro GitHub?"
     },
     "apiDocsLink": "Dokumentace API",
-    "documentation": {
-      "title": "Dokumentace externího API",
-      "description": "Zjistěte, jak pomocí externího API spouštět z vašich aplikací relace Claude/Cursor.",
-      "viewLink": "Zobrazit dokumentaci API →"
-    },
     "loading": "Načítání...",
     "version": {
       "updateAvailable": "K dispozici je aktualizace: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "Kontrola instalace TaskMaster...",
-    "notInstalled": {
-      "title": "Nástroj TaskMaster AI CLI není nainstalován",
-      "description": "Ke správě úkolů je potřeba nástroj TaskMaster CLI. Začněte jeho instalací:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "Zobrazit na GitHubu",
-      "afterInstallation": "Po instalaci:",
-      "steps": {
-        "restart": "Restartujte tuto aplikaci",
-        "autoAvailable": "Funkce TaskMaster budou automaticky k dispozici",
-        "initCommand": "V adresáři projektu spusťte task-master init"
-      }
-    },
-    "settings": {
-      "enableLabel": "Zapnout integraci TaskMaster",
-      "enableDescription": "Zobrazovat v celém rozhraní úkoly TaskMaster, bannery a indikátory v postranním panelu"
     }
   },
   "agents": {
@@ -360,15 +319,6 @@
     "account": {
       "claude": {
         "description": "AI asistent Claude od společnosti Anthropic"
-      },
-      "cursor": {
-        "description": "Editor kódu Cursor s podporou AI"
-      },
-      "codex": {
-        "description": "AI asistent Codex od společnosti OpenAI"
-      },
-      "opencode": {
-        "description": "CLI asistent OpenCode"
       }
     },
     "connectionStatus": "Stav připojení",
@@ -386,8 +336,7 @@
     "title": "Nastavení oprávnění",
     "skipPermissions": {
       "label": "Přeskočit dotazy na oprávnění (používejte opatrně)",
-      "claudeDescription": "Odpovídá přepínači --dangerously-skip-permissions",
-      "cursorDescription": "Odpovídá přepínači -f v Cursor CLI"
+      "claudeDescription": "Odpovídá přepínači --dangerously-skip-permissions"
     },
     "allowedTools": {
       "title": "Povolené nástroje",
@@ -448,31 +397,6 @@
       "npmInstall": "- Povolí npm install",
       "rmRf": "- Zablokuje rekurzivní mazání"
     },
-    "codex": {
-      "permissionMode": "Režim oprávnění",
-      "description": "Určuje, jak Codex zachází s úpravami souborů a spouštěním příkazů",
-      "modes": {
-        "default": {
-          "title": "Výchozí",
-          "description": "Spouští příkazy v sandboxu pracovního prostoru. Codex sám rozhoduje, kdy je potřeba schválení; v této neinteraktivní integraci však žádosti nelze schválit."
-        },
-        "acceptEdits": {
-          "title": "Přijímat úpravy",
-          "description": "Všechny příkazy se spouštějí automaticky v rámci pracovního prostoru. Plně automatický režim se spouštěním v sandboxu."
-        },
-        "bypassPermissions": {
-          "title": "Obejít oprávnění",
-          "description": "Plný přístup k systému bez omezení. Všechny příkazy se spouštějí automaticky s plným přístupem k disku a síti. Používejte opatrně."
-        }
-      },
-      "technicalDetails": "Technické podrobnosti",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Spouští příkazy v sandboxu pracovního prostoru. Codex sám rozhoduje, kdy je potřeba schválení; v této neinteraktivní integraci však žádosti nelze schválit.",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Všechny příkazy se spouštějí automaticky v adresáři projektu.",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Plný přístup k systému, používejte jen v důvěryhodných prostředích.",
-        "overrideNote": "Pro jednotlivé relace to můžete změnit tlačítkem režimu v rozhraní chatu."
-      }
-    },
     "actions": {
       "add": "Přidat"
     }
@@ -480,10 +404,7 @@
   "mcpServers": {
     "title": "MCP servery",
     "description": {
-      "claude": "Servery Model Context Protocol rozšiřují Claude o další nástroje a zdroje dat",
-      "cursor": "Servery Model Context Protocol rozšiřují Cursor o další nástroje a zdroje dat",
-      "codex": "Servery Model Context Protocol rozšiřují Codex o další nástroje a zdroje dat",
-      "opencode": "Servery Model Context Protocol rozšiřují OpenCode o další nástroje a zdroje dat"
+      "claude": "Servery Model Context Protocol rozšiřují Claude o další nástroje a zdroje dat"
     },
     "addButton": "Přidat MCP server",
     "empty": "Nejsou nastaveny žádné MCP servery",
@@ -512,10 +433,6 @@
     "actions": {
       "edit": "Upravit server",
       "delete": "Smazat server"
-    },
-    "help": {
-      "title": "O MCP pro Codex",
-      "description": "Codex podporuje MCP servery založené na stdio. Můžete přidat servery, které Codex rozšíří o další nástroje a zdroje."
     }
   },
   "pluginSettings": {
@@ -695,9 +612,9 @@
     "menuLabel": "Přidat MCP server",
     "globalButtonLabel": "Přidat globální MCP server",
     "providerButtonLabel": "Přidat MCP server pro {{provider}}",
-    "globalAddDescription": "„Přidat globální MCP server“ zapíše jeden společný stdio nebo HTTP server do konfigurace nástrojů Claude, Cursor, Codex a OpenCode.",
+    "globalAddDescription": "„Přidat globální MCP server“ zapíše jeden společný stdio nebo HTTP server do konfigurace nástrojů Claude.",
     "providerAddDescription": "„{{button}}“ mění pouze konfiguraci pro {{provider}}.",
-    "globalModalDescription": "Přidá tento MCP server ke všem providerům: Claude, Cursor, Codex a OpenCode. Podporovány jsou pouze transporty stdio a HTTP, protože stejná konfigurace musí fungovat u všech providerů.",
+    "globalModalDescription": "Přidá tento MCP server ke všem providerům: Claude. Podporovány jsou pouze transporty stdio a HTTP, protože stejná konfigurace musí fungovat u všech providerů.",
     "refreshingScopes": "Obnovování rozsahů projektů...",
     "loadingServers": "Načítání MCP serverů...",
     "configCwd": "Cwd",

@@ -17,10 +17,7 @@
     "user": "U",
     "error": "שגיאה",
     "tool": "כלי",
-    "claude": "Claude",
-    "cursor": "Cursor",
-    "codex": "Codex",
-    "opencode": "OpenCode"
+    "claude": "Claude"
   },
   "tools": {
     "settings": "הגדרות כלים",
@@ -109,14 +106,6 @@
     },
     "technicalDetails": "פרטים טכניים"
   },
-  "voice": {
-    "input": "קלט קולי",
-    "stopRecording": "עצירת הקלטה",
-    "transcribing": "מתמלל…",
-    "speak": "הקראה",
-    "stopSpeaking": "עצירה",
-    "loading": "טוען…"
-  },
   "input": {
     "placeholder": "/ לפקודות, @ לקבצים, או כל שאלה ל-{{provider}}…",
     "placeholderDefault": "הקלדת הודעה…",
@@ -161,17 +150,8 @@
     "title": "בחירת עוזר AI",
     "description": "יש לבחור ספק כדי להתחיל שיחה חדשה",
     "selectModel": "בחירת מודל",
-    "providerInfo": {
-      "anthropic": "מאת Anthropic",
-      "openai": "מאת OpenAI",
-      "cursorEditor": "עורך קוד AI",
-      "google": "מאת Google"
-    },
     "readyPrompt": {
       "claude": "Claude מוכן לשימוש עם {{model}}. אפשר להתחיל להקליד הודעה למטה.",
-      "cursor": "Cursor מוכן לשימוש עם {{model}}. אפשר להתחיל להקליד הודעה למטה.",
-      "codex": "Codex מוכן לשימוש עם {{model}}. אפשר להתחיל להקליד הודעה למטה.",
-      "opencode": "OpenCode מוכן לשימוש עם {{model}}. אפשר להתחיל להקליד הודעה למטה.",
       "default": "יש לבחור ספק למעלה כדי להתחיל"
     },
     "pressToSearch": "<kbd>{{shortcut}}</kbd> לחיפוש סשנים, קבצים ו-commits",

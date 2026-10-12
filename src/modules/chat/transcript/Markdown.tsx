@@ -25,7 +25,7 @@ type MarkdownProps = {
   className?: string;
   /** Render single newlines as hard line breaks (for user-typed messages). */
   breaks?: boolean;
-  /** Show every backslash as typed (for user-typed messages): `C:\Users\vital\.claude` keeps the one before the dot. */
+  /** Show every backslash as typed (for user-typed messages): `C:\Users\alice\.claude` keeps the one before the dot. */
   literalBackslashes?: boolean;
 };
 
@@ -333,7 +333,8 @@ function MarkdownBodyRenderer({ children, breaks = false, literalBackslashes = f
           const fileReference = asFileReference(fileRef);
           const fileLink = (
             <a
-              href={href || fileRef}
+              // Link text skipped urlTransform, so `[javascript:x/y]()` must not become a live href.
+              href={href || keepWindowsDrivePaths(fileRef)}
               className="cursor-pointer text-blue-600 hover:underline dark:text-blue-400"
               onClick={(event) => {
                 event.preventDefault();

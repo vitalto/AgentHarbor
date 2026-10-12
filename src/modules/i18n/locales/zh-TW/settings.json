@@ -303,33 +303,9 @@
       "confirmDelete": "確定要刪除此 GitHub 權杖嗎？"
     },
     "apiDocsLink": "API 文件",
-    "documentation": {
-      "title": "外部 API 文件",
-      "description": "了解如何使用外部 API 從您的應用程式觸發 Claude/Cursor 工作階段。",
-      "viewLink": "查看 API 文件 →"
-    },
     "loading": "載入中...",
     "version": {
       "updateAvailable": "有可用更新：v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "正在檢查 TaskMaster 安裝...",
-    "notInstalled": {
-      "title": "未安裝 TaskMaster AI CLI",
-      "description": "需要 TaskMaster CLI 才能使用任務管理功能。安裝它以開始使用：",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "在 GitHub 上查看",
-      "afterInstallation": "安裝後：",
-      "steps": {
-        "restart": "重新啟動此應用程式",
-        "autoAvailable": "TaskMaster 功能將自動啟用",
-        "initCommand": "在專案目錄中使用 task-master init"
-      }
-    },
-    "settings": {
-      "enableLabel": "啟用 TaskMaster 整合",
-      "enableDescription": "在整個介面中顯示 TaskMaster 任務、橫幅和側邊欄指示器"
     }
   },
   "agents": {
@@ -345,12 +321,6 @@
     "account": {
       "claude": {
         "description": "Anthropic Claude AI 助手"
-      },
-      "cursor": {
-        "description": "Cursor AI 驅動的程式碼編輯器"
-      },
-      "codex": {
-        "description": "OpenAI Codex AI 助手"
       }
     },
     "connectionStatus": "連線狀態",
@@ -368,8 +338,7 @@
     "title": "權限設定",
     "skipPermissions": {
       "label": "略過權限提示（請謹慎使用）",
-      "claudeDescription": "等同於 --dangerously-skip-permissions 旗標",
-      "cursorDescription": "等同於 Cursor CLI 中的 -f 旗標"
+      "claudeDescription": "等同於 --dangerously-skip-permissions 旗標"
     },
     "allowedTools": {
       "title": "允許的工具",
@@ -430,31 +399,6 @@
       "npmInstall": "- 允許 npm install",
       "rmRf": "- 封鎖遞迴刪除"
     },
-    "codex": {
-      "permissionMode": "權限模式",
-      "description": "控制 Codex 如何處理檔案修改和指令執行",
-      "modes": {
-        "default": {
-          "title": "預設",
-          "description": "在工作區沙箱內執行指令。Codex 決定何時需要核准；此非互動式整合無法核准請求。"
-        },
-        "acceptEdits": {
-          "title": "接受編輯",
-          "description": "所有指令在工作區內自動執行。具有沙箱執行的全自動模式。"
-        },
-        "bypassPermissions": {
-          "title": "略過權限",
-          "description": "完全系統存取，無任何限制。所有指令自動執行，具有完整的磁碟和網路存取權限。請謹慎使用。"
-        }
-      },
-      "technicalDetails": "技術詳情",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. 在工作區沙箱內執行指令。Codex 決定何時需要核准；此非互動式整合無法核准請求。",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never。所有指令在專案目錄內自動執行。",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never。完全系統存取權限，僅在可信環境中使用。",
-        "overrideNote": "您可以使用聊天介面中的模式按鈕按工作階段覆蓋此設定。"
-      }
-    },
     "actions": {
       "add": "新增"
     }
@@ -462,9 +406,7 @@
   "mcpServers": {
     "title": "MCP 伺服器",
     "description": {
-      "claude": "Model Context Protocol 伺服器為 Claude 提供額外的工具和資料來源",
-      "cursor": "Model Context Protocol 伺服器為 Cursor 提供額外的工具和資料來源",
-      "codex": "Model Context Protocol 伺服器為 Codex 提供額外的工具和資料來源"
+      "claude": "Model Context Protocol 伺服器為 Claude 提供額外的工具和資料來源"
     },
     "addButton": "新增 MCP 伺服器",
     "empty": "未設定 MCP 伺服器",
@@ -487,10 +429,6 @@
     "actions": {
       "edit": "編輯伺服器",
       "delete": "刪除伺服器"
-    },
-    "help": {
-      "title": "關於 Codex MCP",
-      "description": "Codex 支援基於 stdio 的 MCP 伺服器。您可以新增伺服器，透過額外的工具和資源來擴充 Codex 的功能。"
     }
   },
   "pluginSettings": {

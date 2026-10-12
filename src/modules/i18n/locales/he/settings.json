@@ -50,21 +50,6 @@
     "resetToDefaults": "איפוס לברירות המחדל",
     "cancelChanges": "ביטול שינויים"
   },
-  "voiceSettings": {
-    "title": "קול",
-    "description": "הקלטת דיבור לטקסט והקראה בקול, דרך שרת אודיו תואם OpenAI.",
-    "enable": "הפעלת קול",
-    "enableDescription": "הצגת כפתור המיקרופון וכפתור ההקראה בהודעות.",
-    "backendTitle": "שרת",
-    "backendDescription": "אפשר להפנות ל-OpenAI, ל-Groq או לשרת מקומי (LocalAI, Speaches, Kokoro-FastAPI). אפשר להשאיר ריק כדי להשתמש בברירת המחדל של השרת.",
-    "baseUrl": "כתובת בסיס",
-    "apiKey": "מפתח API",
-    "sttModel": "מודל דיבור לטקסט",
-    "ttsModel": "מודל טקסט לדיבור",
-    "voice": "קול",
-    "format": "פורמט אודיו",
-    "note": "כתובת בסיס מותאמת אישית נקראת ישירות מהדפדפן וחייבת לאפשר בקשות CORS מהדפדפן. אפשר להשאיר ריק כדי להשתמש בשרת שהוגדר בצד השרת."
-  },
   "quickSettings": {
     "title": "הגדרות מהירות",
     "sections": {
@@ -76,7 +61,6 @@
     "showRawParameters": "הצגת פרמטרים גולמיים",
     "showThinking": "הצגת חשיבה",
     "sendByCtrlEnter": "שליחה ב-Ctrl+Enter",
-    "voiceEnabled": "קול (מיקרופון + הקראה)",
     "sendByCtrlEnterDescription": "כשהאפשרות מופעלת, הודעה נשלחת ב-Ctrl+Enter במקום ב-Enter בלבד. שימושי למשתמשי IME כדי למנוע שליחה בטעות.",
     "dragHandle": {
       "dragging": "גרירת הידית",
@@ -129,7 +113,6 @@
     "appearance": "מראה",
     "git": "Git",
     "apiTokens": "API וטוקנים",
-    "voice": "קול",
     "tasks": "משימות",
     "browser": "דפדפן",
     "notifications": "התראות",
@@ -346,33 +329,9 @@
       "confirmDelete": "למחוק את טוקן ה-GitHub הזה?"
     },
     "apiDocsLink": "תיעוד API",
-    "documentation": {
-      "title": "תיעוד ה-API החיצוני",
-      "description": "איך להשתמש ב-API החיצוני כדי להפעיל סשנים של Claude/Cursor מאפליקציות אחרות.",
-      "viewLink": "צפייה בתיעוד ה-API ←"
-    },
     "loading": "טוען…",
     "version": {
       "updateAvailable": "יש עדכון זמין: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "בודק את התקנת TaskMaster…",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI לא מותקן",
-      "description": "צריך את TaskMaster CLI כדי להשתמש בניהול משימות. כדי להתחיל, יש להתקין אותו:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "צפייה ב-GitHub",
-      "afterInstallation": "אחרי ההתקנה:",
-      "steps": {
-        "restart": "הפעלה מחדש של האפליקציה",
-        "autoAvailable": "יכולות TaskMaster יהיו זמינות אוטומטית",
-        "initCommand": "הרצת task-master init בתיקיית הפרויקט"
-      }
-    },
-    "settings": {
-      "enableLabel": "הפעלת השילוב עם TaskMaster",
-      "enableDescription": "הצגת משימות, באנרים וסימונים בסרגל הצד של TaskMaster בכל הממשק"
     }
   },
   "agents": {
@@ -388,15 +347,6 @@
     "account": {
       "claude": {
         "description": "Claude, עוזר ה-AI של Anthropic"
-      },
-      "cursor": {
-        "description": "Cursor, עורך קוד מבוסס AI"
-      },
-      "codex": {
-        "description": "Codex, עוזר ה-AI של OpenAI"
-      },
-      "opencode": {
-        "description": "OpenCode, עוזר CLI"
       }
     },
     "connectionStatus": "סטטוס חיבור",
@@ -427,8 +377,7 @@
     "title": "הגדרות הרשאות",
     "skipPermissions": {
       "label": "דילוג על בקשות הרשאה (בזהירות)",
-      "claudeDescription": "שקול לדגל --dangerously-skip-permissions",
-      "cursorDescription": "שקול לדגל -f ב-Cursor CLI"
+      "claudeDescription": "שקול לדגל --dangerously-skip-permissions"
     },
     "allowedTools": {
       "title": "כלים מאושרים",
@@ -470,31 +419,6 @@
       "npmInstall": "- אישור npm install",
       "rmRf": "- חסימת מחיקה רקורסיבית"
     },
-    "codex": {
-      "permissionMode": "מצב הרשאות",
-      "description": "קובע איך Codex מטפל בשינויי קבצים ובהרצת פקודות",
-      "modes": {
-        "default": {
-          "title": "ברירת מחדל",
-          "description": "מריץ פקודות בתוך ה-sandbox של סביבת העבודה. Codex מחליט מתי נדרש אישור; בשילוב הלא-אינטראקטיבי הזה אי אפשר לאשר בקשות."
-        },
-        "acceptEdits": {
-          "title": "אישור עריכות",
-          "description": "כל הפקודות רצות אוטומטית בתוך סביבת העבודה. מצב אוטומטי מלא עם הרצה ב-sandbox."
-        },
-        "bypassPermissions": {
-          "title": "עקיפת הרשאות",
-          "description": "גישה מלאה למערכת ללא הגבלות. כל הפקודות רצות אוטומטית עם גישה מלאה לדיסק ולרשת. להשתמש בזהירות."
-        }
-      },
-      "technicalDetails": "פרטים טכניים",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. מריץ פקודות בתוך ה-sandbox של סביבת העבודה. Codex מחליט מתי נדרש אישור; בשילוב הלא-אינטראקטיבי הזה אי אפשר לאשר בקשות.",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. כל הפקודות רצות אוטומטית בתוך תיקיית הפרויקט.",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. גישה מלאה למערכת, להשתמש רק בסביבות מהימנות.",
-        "overrideNote": "אפשר לשנות את זה לכל סשן בנפרד עם כפתור המצב בממשק הצ'אט."
-      }
-    },
     "actions": {
       "add": "הוספה"
     }
@@ -502,10 +426,7 @@
   "mcpServers": {
     "title": "שרתי MCP",
     "description": {
-      "claude": "שרתי Model Context Protocol מספקים ל-Claude כלים ומקורות מידע נוספים",
-      "cursor": "שרתי Model Context Protocol מספקים ל-Cursor כלים ומקורות מידע נוספים",
-      "codex": "שרתי Model Context Protocol מספקים ל-Codex כלים ומקורות מידע נוספים",
-      "opencode": "שרתי Model Context Protocol מספקים ל-OpenCode כלים ומקורות מידע נוספים"
+      "claude": "שרתי Model Context Protocol מספקים ל-Claude כלים ומקורות מידע נוספים"
     },
     "addButton": "הוספת שרת MCP",
     "empty": "לא הוגדרו שרתי MCP",
@@ -532,10 +453,6 @@
     "actions": {
       "edit": "עריכת שרת",
       "delete": "מחיקת שרת"
-    },
-    "help": {
-      "title": "על Codex MCP",
-      "description": "Codex תומך בשרתי MCP מבוססי stdio. אפשר להוסיף שרתים שמרחיבים את היכולות של Codex עם כלים ומשאבים נוספים."
     }
   },
   "pluginSettings": {
@@ -712,9 +629,9 @@
     "menuLabel": "הוספת שרת MCP",
     "globalButtonLabel": "הוספת שרת MCP גלובלי",
     "providerButtonLabel": "הוספת שרת MCP ל-{{provider}}",
-    "globalAddDescription": "הוספת שרת MCP גלובלי כותבת שרת stdio או HTTP משותף אחד ל-Claude, Cursor, Codex ו-OpenCode.",
+    "globalAddDescription": "הוספת שרת MCP גלובלי כותבת שרת stdio או HTTP משותף אחד ל-Claude.",
     "providerAddDescription": "{{button}} משנה רק את {{provider}}.",
-    "globalModalDescription": "מוסיף את שרת ה-MCP הזה לכל הספקים: Claude, Cursor, Codex ו-OpenCode. נתמכות רק תעבורות stdio ו-HTTP, כי אותה תצורה צריכה לעבוד בכל הספקים.",
+    "globalModalDescription": "מוסיף את שרת ה-MCP הזה לכל הספקים: Claude. נתמכות רק תעבורות stdio ו-HTTP, כי אותה תצורה צריכה לעבוד בכל הספקים.",
     "refreshingScopes": "מרענן את היקפי הפרויקט…",
     "loadingServers": "טוען שרתי MCP…",
     "configCwd": "Cwd",

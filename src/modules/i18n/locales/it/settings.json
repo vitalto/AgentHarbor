@@ -302,33 +302,9 @@
       "confirmDelete": "Sei sicuro di voler eliminare questo token GitHub?"
     },
     "apiDocsLink": "Documentazione API",
-    "documentation": {
-      "title": "Documentazione API esterna",
-      "description": "Scopri come usare l'API esterna per avviare sessioni Claude/Cursor dalle tue applicazioni.",
-      "viewLink": "Vedi documentazione API →"
-    },
     "loading": "Caricamento...",
     "version": {
       "updateAvailable": "Aggiornamento disponibile: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "Verifica installazione TaskMaster...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI non installato",
-      "description": "TaskMaster CLI è necessario per usare le funzionalità di gestione attività. Installalo per iniziare:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "Vedi su GitHub",
-      "afterInstallation": "Dopo l'installazione:",
-      "steps": {
-        "restart": "Riavvia questa applicazione",
-        "autoAvailable": "Le funzionalità TaskMaster saranno automaticamente disponibili",
-        "initCommand": "Usa task-master init nella directory del tuo progetto"
-      }
-    },
-    "settings": {
-      "enableLabel": "Abilita integrazione TaskMaster",
-      "enableDescription": "Mostra attività TaskMaster, banner e indicatori nella barra laterale nell'interfaccia"
     }
   },
   "agents": {
@@ -344,12 +320,6 @@
     "account": {
       "claude": {
         "description": "Assistente AI Anthropic Claude"
-      },
-      "cursor": {
-        "description": "Editor di codice potenziato da AI Cursor"
-      },
-      "codex": {
-        "description": "Assistente AI OpenAI Codex"
       }
     },
     "connectionStatus": "Stato connessione",
@@ -367,8 +337,7 @@
     "title": "Impostazioni permessi",
     "skipPermissions": {
       "label": "Salta richieste di permesso (usa con cautela)",
-      "claudeDescription": "Equivalente al flag --dangerously-skip-permissions",
-      "cursorDescription": "Equivalente al flag -f in Cursor CLI"
+      "claudeDescription": "Equivalente al flag --dangerously-skip-permissions"
     },
     "allowedTools": {
       "title": "Strumenti consentiti",
@@ -429,31 +398,6 @@
       "npmInstall": "- Consenti npm install",
       "rmRf": "- Blocca eliminazione ricorsiva"
     },
-    "codex": {
-      "permissionMode": "Modalità permessi",
-      "description": "Controlla come Codex gestisce le modifiche ai file e l'esecuzione dei comandi",
-      "modes": {
-        "default": {
-          "title": "Predefinito",
-          "description": "Esegue i comandi nella sandbox dello spazio di lavoro. Codex decide quando è necessaria l’approvazione; le richieste non possono essere approvate in questa integrazione non interattiva."
-        },
-        "acceptEdits": {
-          "title": "Accetta modifiche",
-          "description": "Tutti i comandi vengono eseguiti automaticamente nell'area di lavoro. Modalità completamente automatica con esecuzione sandboxed."
-        },
-        "bypassPermissions": {
-          "title": "Ignora permessi",
-          "description": "Accesso completo al sistema senza restrizioni. Tutti i comandi vengono eseguiti automaticamente con accesso completo a disco e rete. Usa con cautela."
-        }
-      },
-      "technicalDetails": "Dettagli tecnici",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Esegue i comandi nella sandbox dello spazio di lavoro. Codex decide quando è necessaria l’approvazione; le richieste non possono essere approvate in questa integrazione non interattiva.",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Tutti i comandi vengono auto-eseguiti nella directory del progetto.",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Accesso completo al sistema, usa solo in ambienti attendibili.",
-        "overrideNote": "Puoi sovrascrivere questa impostazione per sessione usando il pulsante modalità nell'interfaccia chat."
-      }
-    },
     "actions": {
       "add": "Aggiungi"
     }
@@ -461,9 +405,7 @@
   "mcpServers": {
     "title": "Server MCP",
     "description": {
-      "claude": "I server Model Context Protocol forniscono strumenti e fonti dati aggiuntive a Claude",
-      "cursor": "I server Model Context Protocol forniscono strumenti e fonti dati aggiuntive a Cursor",
-      "codex": "I server Model Context Protocol forniscono strumenti e fonti dati aggiuntive a Codex"
+      "claude": "I server Model Context Protocol forniscono strumenti e fonti dati aggiuntive a Claude"
     },
     "addButton": "Aggiungi server MCP",
     "empty": "Nessun server MCP configurato",
@@ -486,10 +428,6 @@
     "actions": {
       "edit": "Modifica server",
       "delete": "Elimina server"
-    },
-    "help": {
-      "title": "Informazioni su Codex MCP",
-      "description": "Codex supporta server MCP basati su stdio. Puoi aggiungere server che estendono le capacità di Codex con strumenti e risorse aggiuntive."
     }
   },
   "pluginSettings": {

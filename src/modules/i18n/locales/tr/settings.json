@@ -303,33 +303,9 @@
       "confirmDelete": "Bu GitHub token'ını silmek istediğinden emin misin?"
     },
     "apiDocsLink": "API Dokümantasyonu",
-    "documentation": {
-      "title": "Harici API Dokümantasyonu",
-      "description": "Uygulamalarından Claude/Cursor oturumları tetiklemek için harici API'nin nasıl kullanılacağını öğren.",
-      "viewLink": "API Dokümantasyonunu Görüntüle →"
-    },
     "loading": "Yükleniyor...",
     "version": {
       "updateAvailable": "Güncelleme mevcut: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "TaskMaster kurulumu kontrol ediliyor...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI Kurulu Değil",
-      "description": "Görev yönetim özelliklerini kullanmak için TaskMaster CLI gereklidir. Başlamak için kur:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "GitHub'da Görüntüle",
-      "afterInstallation": "Kurulumdan sonra:",
-      "steps": {
-        "restart": "Bu uygulamayı yeniden başlat",
-        "autoAvailable": "TaskMaster özellikleri otomatik olarak kullanılabilir hale gelecek",
-        "initCommand": "Proje dizininde task-master init komutunu kullan"
-      }
-    },
-    "settings": {
-      "enableLabel": "TaskMaster Entegrasyonunu Etkinleştir",
-      "enableDescription": "TaskMaster görevlerini, banner'larını ve kenar çubuğu göstergelerini arayüz genelinde göster"
     }
   },
   "agents": {
@@ -345,12 +321,6 @@
     "account": {
       "claude": {
         "description": "Anthropic Claude AI asistanı"
-      },
-      "cursor": {
-        "description": "Cursor AI destekli kod editörü"
-      },
-      "codex": {
-        "description": "OpenAI Codex AI asistanı"
       }
     },
     "connectionStatus": "Bağlantı Durumu",
@@ -368,8 +338,7 @@
     "title": "İzin Ayarları",
     "skipPermissions": {
       "label": "İzin istemlerini atla (dikkatli kullan)",
-      "claudeDescription": "--dangerously-skip-permissions bayrağının eşdeğeri",
-      "cursorDescription": "Cursor CLI'daki -f bayrağının eşdeğeri"
+      "claudeDescription": "--dangerously-skip-permissions bayrağının eşdeğeri"
     },
     "allowedTools": {
       "title": "İzin Verilen Araçlar",
@@ -430,31 +399,6 @@
       "npmInstall": "- npm install'a izin ver",
       "rmRf": "- Özyinelemeli silmeyi engelle"
     },
-    "codex": {
-      "permissionMode": "İzin Modu",
-      "description": "Codex'in dosya değişiklikleri ve komut çalıştırmayı nasıl ele aldığını kontrol eder",
-      "modes": {
-        "default": {
-          "title": "Varsayılan",
-          "description": "Komutları çalışma alanı korumalı ortamında çalıştırır. Onay gerektiğine Codex karar verir; bu etkileşimsiz entegrasyonda istekler onaylanamaz."
-        },
-        "acceptEdits": {
-          "title": "Düzenlemeleri Kabul Et",
-          "description": "Tüm komutlar çalışma alanı içinde otomatik çalışır. Sandbox'lu çalıştırma ile tam otomatik mod."
-        },
-        "bypassPermissions": {
-          "title": "İzinleri Atla",
-          "description": "Kısıtlama olmadan tam sistem erişimi. Tüm komutlar tam disk ve ağ erişimiyle otomatik çalışır. Dikkatli kullan."
-        }
-      },
-      "technicalDetails": "Teknik ayrıntılar",
-      "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Komutları çalışma alanı korumalı ortamında çalıştırır. Onay gerektiğine Codex karar verir; bu etkileşimsiz entegrasyonda istekler onaylanamaz.",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Tüm komutlar proje dizini içinde otomatik çalışır.",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Tam sistem erişimi, yalnızca güvenilir ortamlarda kullan.",
-        "overrideNote": "Sohbet arayüzündeki mod düğmesini kullanarak bunu oturum başına geçersiz kılabilirsin."
-      }
-    },
     "actions": {
       "add": "Ekle"
     }
@@ -462,9 +406,7 @@
   "mcpServers": {
     "title": "MCP Sunucuları",
     "description": {
-      "claude": "Model Context Protocol sunucuları Claude'a ek araçlar ve veri kaynakları sağlar",
-      "cursor": "Model Context Protocol sunucuları Cursor'a ek araçlar ve veri kaynakları sağlar",
-      "codex": "Model Context Protocol sunucuları Codex'e ek araçlar ve veri kaynakları sağlar"
+      "claude": "Model Context Protocol sunucuları Claude'a ek araçlar ve veri kaynakları sağlar"
     },
     "addButton": "MCP Sunucusu Ekle",
     "empty": "Yapılandırılmış MCP sunucusu yok",
@@ -487,10 +429,6 @@
     "actions": {
       "edit": "Sunucuyu düzenle",
       "delete": "Sunucuyu sil"
-    },
-    "help": {
-      "title": "Codex MCP Hakkında",
-      "description": "Codex stdio tabanlı MCP sunucularını destekler. Codex'in yeteneklerini ek araçlar ve kaynaklarla genişleten sunucular ekleyebilirsin."
     }
   },
   "pluginSettings": {
