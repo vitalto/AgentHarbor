@@ -15,6 +15,9 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
@@ -27,6 +30,18 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test
-      - run: npm run test:client
+      - name: Server tests
+        run: npm test 2>&1 | tee server-tests.log
+      - name: Client tests
+        run: npm run test:client 2>&1 | tee client-tests.log
       - run: npm run build
+      # Job logs need a signed-in admin; an annotation shows the failures on the public run page.
+      - name: Annotate test failures
+        if: failure()
+        run: |
+          failures=$(grep -h -E -A14 '^not ok|FAIL ' server-tests.log client-tests.log 2>/dev/null | head -c 12000 || true)
+          [ -n "$failures" ] || exit 0
+          failures=${failures//'%'/'%25'}
+          failures=${failures//$'\r'/'%0D'}
+          failures=${failures//$'\n'/'%0A'}
+          echo "::error title=Test failures::$failures"
