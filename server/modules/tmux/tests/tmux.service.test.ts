@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
 
@@ -43,6 +45,35 @@ test('tmux adapter round-trips windows, pasted text and keys', async (t) => {
   await tmux.killWindow(pane.windowId);
   const remaining = await tmux.listPanes();
   assert.ok(!remaining.some((candidate) => candidate.paneId === pane.paneId));
+});
+
+test('without a UTF-8 locale (a bare service or CI) fields and non-ASCII paths still come back intact', async (t) => {
+  const localeVariables = ['LANG', 'LC_ALL', 'LC_CTYPE'];
+  const savedLocale = Object.fromEntries(localeVariables.map((name) => [name, process.env[name]]));
+  for (const name of localeVariables) {
+    delete process.env[name];
+  }
+  const cyrillicDirectory = mkdtempSync(path.join(os.tmpdir(), 'папка-'));
+  t.after(async () => {
+    await tmux.killServer();
+    rmSync(cyrillicDirectory, { recursive: true, force: true });
+    for (const name of localeVariables) {
+      if (savedLocale[name] !== undefined) {
+        process.env[name] = savedLocale[name];
+      }
+    }
+  });
+
+  await tmux.startDetachedSession(cyrillicDirectory);
+  const pane = await tmux.newWindow({ cwd: cyrillicDirectory, name: 'agent', command: 'cat' });
+  assert.equal(pane.windowName, 'agent');
+  // Until the command has started, tmux reports the client's own directory as the pane's.
+  let paneCwd = '';
+  for (let attempt = 0; attempt < 30 && paneCwd !== cyrillicDirectory; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    paneCwd = (await tmux.listPanes()).find((candidate) => candidate.paneId === pane.paneId)?.cwd ?? '';
+  }
+  assert.equal(paneCwd, cyrillicDirectory);
 });
 
 test('a window a small client left behind is restored to the default size once nobody shows it', async (t) => {

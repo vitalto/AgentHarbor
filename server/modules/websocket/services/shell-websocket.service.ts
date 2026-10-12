@@ -84,9 +84,11 @@ function viewerEnvironment(): NodeJS.ProcessEnv {
  * A grouped session shares the windows of the agent session but has its own
  * current window, so a browser switching windows never moves another client
  * (the phone). destroy-unattached removes it as soon as this viewer detaches.
+ * `-u`: the browser terminal is UTF-8 whatever the server's locale is.
  */
 function buildViewerArgs(gateway: ShellTmuxGateway, windowId: string, viewerName: string): string[] {
   return [
+    '-u',
     ...gateway.socketArgs(),
     'new-session', '-t', gateway.sessionName(), '-s', viewerName,
     ';', 'set-option', 'destroy-unattached', 'on',

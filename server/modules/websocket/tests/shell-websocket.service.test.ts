@@ -101,6 +101,7 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 function viewerArgsFor(windowId: string, viewerName: string): string[] {
   return [
+    '-u',
     'new-session', '-t', 'main', '-s', viewerName,
     ';', 'set-option', 'destroy-unattached', 'on',
     ';', 'select-window', '-t', windowId,
@@ -120,7 +121,7 @@ test('a session terminal attaches a grouped tmux viewer to the session window', 
     assert.equal(spawns.length, 1);
     const [spawn] = spawns;
     assert.equal(spawn.file, 'tmux');
-    const viewerName = spawn.args[4];
+    const viewerName = spawn.args[5];
     assert.match(viewerName, /^ah-v-[0-9a-f]+$/);
     assert.deepEqual(spawn.args, viewerArgsFor('@5', viewerName));
     assert.equal(spawn.options.cols, 120);
@@ -157,7 +158,7 @@ test('a plain shell opens a login-shell window named after the project and attac
   assert.equal(newWindows[0].name, 'sh:AgentHarbor');
   assert.equal(newWindows[0].cwd, '/mnt/d/Develop/AgentHarbor');
   assert.match(newWindows[0].command, /\$\{SHELL:-\/bin\/bash\}" -l/);
-  assert.deepEqual(spawns[0].args, viewerArgsFor('@9', spawns[0].args[4]));
+  assert.deepEqual(spawns[0].args, viewerArgsFor('@9', spawns[0].args[5]));
 });
 
 test('a plain shell reuses the project shell window that is still alive', async () => {
@@ -168,7 +169,7 @@ test('a plain shell reuses the project shell window that is still alive', async 
   await settle();
 
   assert.equal(newWindows.length, 0);
-  assert.deepEqual(spawns[0].args, viewerArgsFor('@4', spawns[0].args[4]));
+  assert.deepEqual(spawns[0].args, viewerArgsFor('@4', spawns[0].args[5]));
 });
 
 test('a session whose window cannot be opened gets an error frame and no viewer', async () => {

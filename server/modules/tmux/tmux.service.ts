@@ -59,13 +59,19 @@ function resolveSocketArgs(socketName: string | undefined): string[] {
   return inheritedSocketPath ? ['-S', inheritedSocketPath] : [];
 }
 
+/**
+ * Tells the tmux client its output may be UTF-8. Without a UTF-8 locale (a bare systemd service,
+ * CI) tmux prints the field separator and every non-ASCII character (Cyrillic paths) as "_".
+ */
+const UTF8_CLIENT_FLAG = '-u';
+
 export function createTmuxService(options: { socketName?: string; session?: string } = {}) {
   const socketArgs = resolveSocketArgs(options.socketName);
   const sessionName = () => options.session ?? getAgentConfig().tmuxSession;
 
   const run = (args: string[], stdin?: string): Promise<string> =>
     new Promise((resolve, reject) => {
-      const child = execFile('tmux', [...socketArgs, ...args], { maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+      const child = execFile('tmux', [UTF8_CLIENT_FLAG, ...socketArgs, ...args], { maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
         if (error) {
           reject(new TmuxError(`tmux ${args[0]} failed: ${(stderr || error.message).trim()}`));
           return;
@@ -187,7 +193,7 @@ export function createTmuxService(options: { socketName?: string; session?: stri
     /** Starts a detached server for tests; production relies on the user's existing server. */
     async startDetachedSession(cwd: string): Promise<void> {
       await new Promise<void>((resolve, reject) => {
-        const child = spawn('tmux', [...socketArgs, 'new-session', '-d', '-s', sessionName(), '-c', cwd, '-x', '200', '-y', '50']);
+        const child = spawn('tmux', [UTF8_CLIENT_FLAG, ...socketArgs, 'new-session', '-d', '-s', sessionName(), '-c', cwd, '-x', '200', '-y', '50']);
         child.on('error', reject);
         child.on('exit', (code) => (code === 0 ? resolve() : reject(new TmuxError(`new-session exited ${code}`))));
       });
