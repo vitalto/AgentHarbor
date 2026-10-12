@@ -6,7 +6,16 @@ import { readClaudeStatuses, type ClaudeStatus } from '@/modules/tmux/claude-sta
 import { paneRegistry, type PaneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { tmuxService, type TmuxService } from '@/modules/tmux/tmux.service.js';
 import { createTranscriptTail, type TranscriptTail } from '@/modules/tmux/transcript-tail.js';
-import { isInputPromptLine, isInputReady, keysForOption, keysToReachOption, parseTuiPrompt, type TuiPrompt } from '@/modules/tmux/tui-prompt.js';
+import {
+  isEmptyFreeTextSlot,
+  isInputPromptLine,
+  isInputReady,
+  keysForOption,
+  keysToReachOption,
+  parseTuiPrompt,
+  type QuestionStep,
+  type TuiPrompt,
+} from '@/modules/tmux/tui-prompt.js';
 
 /** A websocket (or anything with the same surface) watching a session. */
 export type MonitorSocket = { readyState: number; send(data: string): void };
@@ -413,7 +422,8 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
       if (!prompt || optionIndex < 0 || optionIndex >= prompt.options.length) {
         return false;
       }
-      if (!prompt.options[optionIndex].freeText) {
+      const option = prompt.options[optionIndex];
+      if (!option.freeText) {
         await deps.tmux.sendKeys(paneId, keysForOption(prompt, optionIndex));
         return true;
       }
@@ -422,11 +432,34 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
         return false;
       }
       await deps.tmux.sendKeys(paneId, keysToReachOption(prompt, optionIndex));
+      if (!isEmptyFreeTextSlot(option)) {
+        // A paste appends to what the slot already holds, e.g. an answer given before going back.
+        await deps.tmux.sendKeys(paneId, ['End', 'C-u']);
+      }
       await deps.tmux.pasteText(paneId, freeText);
       if (!(await waitForFreeTextToLand(paneId, freeText))) {
         return false;
       }
-      await deps.tmux.sendKeys(paneId, ['Enter']);
+      // Typing ticks a multi-select slot already; Enter would untick it.
+      if (option.checked === null) {
+        await deps.tmux.sendKeys(paneId, ['Enter']);
+      }
+      return true;
+    },
+
+    /** Moves an AskUserQuestion set to its previous or next tab (question or review step). */
+    async switchQuestion(appSessionId: string, step: QuestionStep): Promise<boolean> {
+      const paneId = await monitor.resolvePaneId(appSessionId);
+      if (!paneId) {
+        return false;
+      }
+      const prompt = parseTuiPrompt(await deps.tmux.capturePane(paneId));
+      if (!prompt?.questionTabs) {
+        return false;
+      }
+      // In a free-text slot ←/→ move the text cursor instead of switching questions.
+      const leaveFreeText = prompt.options.some((option) => option.selected && option.freeText) ? keysToReachOption(prompt, 0) : [];
+      await deps.tmux.sendKeys(paneId, [...leaveFreeText, step === 'previous' ? 'Left' : 'Right']);
       return true;
     },
 

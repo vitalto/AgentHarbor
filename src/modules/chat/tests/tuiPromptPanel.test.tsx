@@ -64,3 +64,49 @@ test('the free-text option is a field: its answer is sent with the index, never 
   fireEvent.click(screen.getByText('Chat about this'));
   assert.deepEqual(onChoose.mock.calls.at(-1), [2]);
 });
+
+const fruitsQuestion: TuiPrompt = {
+  question: 'Which fruits?',
+  body: ['Which fruits?'],
+  questionTabs: true,
+  options: [
+    { label: 'Apple', detail: 'Apple', selected: true, freeText: false, checked: true, confirmsSelection: false },
+    { label: 'Banana', detail: 'Banana', selected: false, freeText: false, checked: false, confirmsSelection: false },
+    { label: 'kiwi', detail: null, selected: false, freeText: true, checked: true, confirmsSelection: false },
+    { label: 'Next', detail: null, selected: false, freeText: false, checked: null, confirmsSelection: true },
+    { label: 'Chat about this', detail: null, selected: false, freeText: false, checked: null, confirmsSelection: false },
+  ],
+};
+
+test('a multi-select question shows ticks and a confirm button, and numbers only the answers', () => {
+  const onChoose = vi.fn();
+  render(<TuiPromptPanel prompt={fruitsQuestion} onChoose={onChoose} onCancel={vi.fn()} onQuestionStep={vi.fn()} />);
+
+  assert.equal(screen.getByRole('checkbox', { name: /Apple/ }).getAttribute('aria-checked'), 'true');
+  assert.equal(screen.getByRole('checkbox', { name: /Banana/ }).getAttribute('aria-checked'), 'false');
+  assert.ok(screen.getByText('4.'), '"Chat about this" keeps its TUI number although the confirm row sits before it');
+
+  fireEvent.click(screen.getByRole('checkbox', { name: /Banana/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  assert.deepEqual(onChoose.mock.calls, [[1], [3]]);
+
+  const field = screen.getByPlaceholderText('kiwi');
+  fireEvent.change(field, { target: { value: 'mango' } });
+  fireEvent.keyDown(field, { key: 'Enter' });
+  assert.deepEqual(onChoose.mock.calls.at(-1), [2, 'mango']);
+  assert.equal((field as HTMLInputElement).value, '', 'the field empties; the slot now shows the answer');
+});
+
+test('a question set can go back to an earlier question and forward again', () => {
+  const onQuestionStep = vi.fn();
+  render(<TuiPromptPanel prompt={fruitsQuestion} onChoose={vi.fn()} onCancel={vi.fn()} onQuestionStep={onQuestionStep} />);
+
+  fireEvent.click(screen.getByRole('button', { name: /Previous question/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Next question/ }));
+  assert.deepEqual(onQuestionStep.mock.calls, [['previous'], ['next']]);
+});
+
+test('menus outside a question set offer no question switching', () => {
+  render(<TuiPromptPanel prompt={bashPermission} onChoose={vi.fn()} onCancel={vi.fn()} onQuestionStep={vi.fn()} />);
+  assert.equal(screen.queryByRole('button', { name: /Previous question/ }), null);
+});

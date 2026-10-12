@@ -108,6 +108,8 @@ export type TerminalGateway = {
   unwatchSocket(socket: WebSocket): void;
   /** `freeText` answers a free-text option (AskUserQuestion's "Type something."). */
   chooseOption(sessionId: string, optionIndex: number, freeText?: string): Promise<boolean>;
+  /** Moves an AskUserQuestion set to its previous or next question (or the review step). */
+  switchQuestion(sessionId: string, step: 'previous' | 'next'): Promise<boolean>;
   sendKeys(sessionId: string, keys: string[]): Promise<boolean>;
   /** Types into the session's window while Claude is busy (the TUI queues it); false when there is no window. */
   typeWhileBusy(sessionId: string, text: string, attachments: BusySendAttachments): Promise<boolean>;
@@ -343,8 +345,9 @@ async function dispatchRun(
 const TUI_KEYS = new Set(['Escape', 'Enter', 'Up', 'Down', 'BTab', 'C-c', 'Tab']);
 
 /**
- * Handles `chat.tui-keys`: answers a menu the Claude TUI shows (`optionIndex`)
- * or presses raw keys in the session's window (`keys`, whitelisted).
+ * Handles `chat.tui-keys`: answers a menu the Claude TUI shows (`optionIndex`),
+ * switches an AskUserQuestion set's question (`questionStep`), or presses raw
+ * keys in the session's window (`keys`, whitelisted).
  */
 async function handleTuiKeys(ws: WebSocket, data: AnyRecord, dependencies: ChatWebSocketDependencies): Promise<void> {
   const sessionId = readRequiredSessionId(data);
@@ -360,6 +363,8 @@ async function handleTuiKeys(ws: WebSocket, data: AnyRecord, dependencies: ChatW
   }
   const delivered = typeof data.optionIndex === 'number'
     ? await terminal.chooseOption(sessionId, data.optionIndex, typeof data.freeText === 'string' ? data.freeText : undefined)
+    : data.questionStep === 'previous' || data.questionStep === 'next'
+    ? await terminal.switchQuestion(sessionId, data.questionStep)
     : await terminal.sendKeys(
       sessionId,
       (Array.isArray(data.keys) ? data.keys : []).filter((key: unknown): key is string => typeof key === 'string' && TUI_KEYS.has(key)),

@@ -120,3 +120,64 @@ test('readInputBox: an unsent message stays readable, a paste in progress is fla
 test('readInputBox: a named session draws its name into the top rule, the box is still there', () => {
   assert.deepEqual(readInputBox(screen('named-session-input')), { text: '', pasting: false });
 });
+
+test('multi-select question: checkboxes become checked flags, the Next row confirms, Chat about this follows it', () => {
+  const prompt = parseTuiPrompt(screen('multi-select'));
+  assert.ok(prompt);
+  assert.equal(prompt.question, 'Which fruits?');
+  assert.equal(prompt.questionTabs, true);
+  assert.ok(prompt.body.every((line) => !line.startsWith('←')), 'the tab bar is navigation, not dialog text');
+  assert.deepEqual(
+    prompt.options.map((option) => [option.label, option.checked, option.confirmsSelection, option.freeText]),
+    [
+      ['Apple', false, false, false],
+      ['Banana', false, false, false],
+      ['Type something', false, false, true],
+      ['Next', null, true, false],
+      ['Chat about this', null, false, false],
+    ],
+  );
+  assert.equal(prompt.options[0].detail, 'Apple');
+  assert.deepEqual(keysForOption(prompt, 3), ['Down', 'Down', 'Down', 'Enter']);
+
+  const checked = parseTuiPrompt(screen('multi-select-checked'));
+  assert.deepEqual(checked?.options.map((option) => option.checked), [true, false, false, null, null]);
+});
+
+test('multi-select question: the slot holding typed text stays a checked free-text slot wherever the cursor is', () => {
+  const typed = parseTuiPrompt(screen('multi-select-free-text-typed'));
+  assert.deepEqual(typed?.options[2], { label: 'kiwi', detail: null, selected: true, freeText: true, checked: true, confirmsSelection: false });
+
+  const onNext = parseTuiPrompt(screen('multi-select-next'));
+  assert.deepEqual(onNext?.options.map((option) => [option.label, option.selected, option.freeText]), [
+    ['Apple', false, false],
+    ['Banana', false, false],
+    ['kiwi', false, true],
+    ['Next', true, false],
+    ['Chat about this', false, false],
+  ]);
+  const onChat = parseTuiPrompt(screen('multi-select-next').map((line) => line
+    .replace(/^>(\s+Next)$/, ' $1')
+    .replace(/^ {2}4\. Chat about this/, '> 4. Chat about this')));
+  assert.deepEqual(onChat?.options.map((option) => option.freeText), [false, false, true, false, false]);
+});
+
+test('multi-select single question: its confirm row is Submit', () => {
+  const prompt = parseTuiPrompt(screen('multi-select-submit'));
+  assert.deepEqual(prompt?.options.map((option) => [option.label, option.selected, option.confirmsSelection]), [
+    ['Apple', false, false],
+    ['Banana', false, false],
+    ['Type something', false, false],
+    ['Submit', true, true],
+    ['Chat about this', false, false],
+  ]);
+});
+
+test('question tabs: only a question set offers switching questions', () => {
+  assert.equal(parseTuiPrompt(screen('ask-question'))?.questionTabs, false);
+  assert.equal(parseTuiPrompt(screen('bash-permission'))?.questionTabs, false);
+  const review = parseTuiPrompt(screen('ask-question-review'));
+  assert.equal(review?.questionTabs, true);
+  assert.equal(review?.body[0], 'Review your answers');
+  assert.deepEqual(review?.options.map((option) => option.checked), [null, null]);
+});

@@ -29,7 +29,7 @@ import ComposerAttachment from '@/modules/chat/composer/ComposerAttachment';
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
 import TuiPromptPanel from '@/modules/chat/composer/TuiPromptPanel';
-import type { TuiKey, TuiPrompt } from '@/modules/chat/utils/tuiPrompt';
+import type { QuestionStep, TuiKey, TuiPrompt } from '@/modules/chat/utils/tuiPrompt';
 
 type MentionableFile = {
   name: string;
@@ -41,6 +41,7 @@ type ChatComposerProps = {
   tuiPrompt: TuiPrompt | null;
   onTuiChoose: (optionIndex: number, freeText?: string) => void;
   onTuiKey: (key: TuiKey) => void;
+  onTuiQuestionStep: (step: QuestionStep) => void;
   /** The session has a live Claude window; its TUI also takes messages while Claude works. */
   hasLiveWindow: boolean;
   /** Control for the window's permission mode, shown when the session has a live window. */
@@ -102,6 +103,7 @@ export default function ChatComposer({
   tuiPrompt,
   onTuiChoose,
   onTuiKey,
+  onTuiQuestionStep,
   hasLiveWindow,
   permissionModeControl,
   activity,
@@ -222,7 +224,12 @@ export default function ChatComposer({
 
       {tuiPrompt && (
         <div className="mx-auto max-w-[54.25rem]">
-          <TuiPromptPanel prompt={tuiPrompt} onChoose={onTuiChoose} onCancel={() => onTuiKey('Escape')} />
+          <TuiPromptPanel
+            prompt={tuiPrompt}
+            onChoose={onTuiChoose}
+            onCancel={() => onTuiKey('Escape')}
+            onQuestionStep={onTuiQuestionStep}
+          />
         </div>
       )}
 

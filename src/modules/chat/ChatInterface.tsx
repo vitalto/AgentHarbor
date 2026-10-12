@@ -13,7 +13,7 @@ import SessionAgentsPanel from '@/modules/chat/composer/SessionAgentsPanel';
 import SessionProcessesPanel from '@/modules/chat/composer/SessionProcessesPanel';
 import { readComposerActivity } from '@/modules/chat/utils/backgroundTasks';
 import PermissionModePicker from '@/modules/chat/composer/PermissionModePicker';
-import type { TuiKey } from '@/modules/chat/utils/tuiPrompt';
+import type { QuestionStep, TuiKey } from '@/modules/chat/utils/tuiPrompt';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
 import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
@@ -316,6 +316,11 @@ function ChatInterface({
       sendMessage({ type: 'chat.tui-keys', sessionId: viewedSessionId, keys: [key] });
     }
   }, [sendMessage, viewedSessionId]);
+  const switchTuiQuestion = useCallback((questionStep: QuestionStep) => {
+    if (viewedSessionId) {
+      sendMessage({ type: 'chat.tui-keys', sessionId: viewedSessionId, questionStep });
+    }
+  }, [sendMessage, viewedSessionId]);
 
   useChatRealtimeHandlers({
     isActive,
@@ -555,6 +560,7 @@ function ChatInterface({
           tuiPrompt={viewedTui.prompt}
           onTuiChoose={chooseTuiOption}
           onTuiKey={pressTuiKey}
+          onTuiQuestionStep={switchTuiQuestion}
           hasLiveWindow={findWindow(viewedSessionId)?.location === 'tmux'}
           permissionModeControl={viewedSessionId ? <PermissionModePicker sessionId={viewedSessionId} /> : null}
           activity={composerActivity}

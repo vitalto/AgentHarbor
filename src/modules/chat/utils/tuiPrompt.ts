@@ -5,13 +5,22 @@ export type TuiPromptOption = {
   selected: boolean;
   /** AskUserQuestion's "Type something." slot: answered with typed text, not by picking it. */
   freeText: boolean;
+  /** A multi-select question's checkbox (choosing the option toggles it); null or absent without one. */
+  checked?: boolean | null;
+  /** The "Submit"/"Next" row that confirms a multi-select question's ticked options. */
+  confirmsSelection?: boolean;
 };
 
 export type TuiPrompt = {
   question: string;
   body: string[];
   options: TuiPromptOption[];
+  /** AskUserQuestion's tab bar is shown: its questions can be switched back and forth. */
+  questionTabs?: boolean;
 };
+
+/** Which way to switch an AskUserQuestion set's questions. */
+export type QuestionStep = 'previous' | 'next';
 
 // Spinner glyphs only: "●" marks tool calls and replies, whose truncated text also ends in "…".
 // The verb is a short phrase followed by its timer, e.g. "✻ Running tests… (12s · ↓ 2.1k tokens)".

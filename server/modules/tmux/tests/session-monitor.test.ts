@@ -225,6 +225,52 @@ test('a free-text answer whose paste never shows up is not submitted', async (t)
   assert.deepEqual(state.sentKeys, [['Down', 'Down', 'Down']]);
 });
 
+test('a multi-select free-text answer is typed but not confirmed, since Enter would untick it', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  state.activity = 'waiting';
+  state.screen = fixture('multi-select-checked');
+  state.onPaste = (text) => {
+    state.pasted.push(text);
+    state.screen = fixture('multi-select-free-text-typed');
+  };
+
+  assert.equal(await monitor.chooseOption('app1', 2, 'kiwi'), true);
+  assert.deepEqual(state.sentKeys, [['Down', 'Down']]);
+  assert.deepEqual(state.pasted, ['kiwi']);
+});
+
+test('a free-text slot that already holds text is cleared before the new answer is typed', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  state.activity = 'waiting';
+  state.screen = fixture('multi-select-next');
+  state.onPaste = (text) => {
+    state.pasted.push(text);
+    state.screen = fixture('multi-select-free-text-typed');
+  };
+
+  assert.equal(await monitor.chooseOption('app1', 2, 'kiwi'), true);
+  assert.deepEqual(state.sentKeys, [['Up'], ['End', 'C-u']]);
+});
+
+test('switching questions leaves a free-text slot first, where the arrows would move the text cursor', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  state.activity = 'waiting';
+
+  state.screen = fixture('bash-permission');
+  assert.equal(await monitor.switchQuestion('app1', 'previous'), false, 'a permission prompt has no questions to switch');
+
+  state.screen = fixture('multi-select-checked');
+  assert.equal(await monitor.switchQuestion('app1', 'next'), true);
+  assert.deepEqual(state.sentKeys.at(-1), ['Right']);
+
+  state.screen = fixture('multi-select-free-text-typed');
+  assert.equal(await monitor.switchQuestion('app1', 'previous'), true);
+  assert.deepEqual(state.sentKeys.at(-1), ['Up', 'Up', 'Left']);
+});
+
 test('a window still starting up has its menus surfaced and answered before it registers', async (t) => {
   const { monitor, state, cleanup } = await harness();
   t.after(cleanup);

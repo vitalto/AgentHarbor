@@ -1,0 +1,45 @@
+  options Apple, Banana, Cherry. Then repeat my answer verbatim, nothing else.
+
+● User answered Claude's questions:
+  ⎿  · Which fruits do you like? → Apple, Banana, kiwi
+
+● Apple, Banana, kiwi
+
+✻ Cogitated for 2s · done 0:22
+
+> Test only: call AskUserQuestion ONCE with TWO questions: Q1 header Fruits "Which fruits?" multiSelect true options
+  Apple, Banana; Q2 header Color "Which color?" single select options Red, Green. Then repeat my answers verbatim.
+
+● User declined to answer questions
+  ⎿  · Which fruits? (Apple / Banana)
+     · Which color? (Red / Green)
+
+✻ Cogitated for 1s · done 0:23
+
+> Same two-question AskUserQuestion again (Q1 Fruits multiSelect Apple/Banana, Q2 Color single Red/Green). Nothing
+  else.
+
+● User declined to answer questions
+  ⎿  · Which fruits? (Apple / Banana)
+     · Which color? (Red / Green)
+
+✻ Baked for 1s · done 0:24
+
+> Same two-question AskUserQuestion again (Q1 Fruits "Which fruits?" multiSelect Apple/Banana, Q2 Color "Which color?"
+  single Red/Green). Nothing else.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  [×] Fruits  [ ] Color  √ Submit  →
+
+Which fruits?
+
+  1. [√] Apple
+         Apple
+  2. [ ] Banana
+         Banana
+  3. [√] kiwi
+>    Next
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · ctrl+g to edit in Notepad · Esc to cancel
+

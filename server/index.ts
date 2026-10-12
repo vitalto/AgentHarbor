@@ -128,6 +128,7 @@ createWebSocketServer(server, {
             watch: (sessionId, socket) => sessionMonitor.watch(sessionId, socket),
             unwatchSocket: (socket) => sessionMonitor.unwatchSocket(socket),
             chooseOption: (sessionId, optionIndex, freeText) => sessionMonitor.chooseOption(sessionId, optionIndex, freeText),
+            switchQuestion: (sessionId, step) => sessionMonitor.switchQuestion(sessionId, step),
             sendKeys: (sessionId, keys) => sessionMonitor.sendKeys(sessionId, keys),
             typeWhileBusy: async (sessionId, text, attachments) => {
                 const pane = await findAgentWindow(sessionId);

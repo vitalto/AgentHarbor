@@ -1,28 +1,35 @@
 import { useState } from 'react';
-import { ArrowUpIcon, MessageSquareMoreIcon } from 'lucide-react';
+import { ArrowUpIcon, CheckSquareIcon, ChevronLeftIcon, ChevronRightIcon, MessageSquareMoreIcon, SquareIcon } from 'lucide-react';
 
 import { cn } from '@/shared/utils';
 import { Confirmation, ConfirmationTitle } from '@/modules/chat/composer/Confirmation';
-import type { TuiPrompt, TuiPromptOption } from '@/modules/chat/utils/tuiPrompt';
+import type { QuestionStep, TuiPrompt, TuiPromptOption } from '@/modules/chat/utils/tuiPrompt';
 
 type TuiPromptPanelProps = {
   prompt: TuiPrompt;
   onChoose: (optionIndex: number, freeText?: string) => void;
   onCancel: () => void;
+  onQuestionStep?: (step: QuestionStep) => void;
 };
 
 type FreeTextOptionProps = {
   option: TuiPromptOption;
-  index: number;
+  number: number;
   onSubmit: (freeText: string) => void;
 };
 
+function Tick({ checked }: { checked: boolean }) {
+  const Icon = checked ? CheckSquareIcon : SquareIcon;
+  return <Icon className={cn('h-4 w-4 shrink-0', checked ? 'text-primary' : 'text-muted-foreground')} aria-hidden />;
+}
+
 /** Picking this slot with nothing typed would make Claude decline the whole question, so it only sends text. */
-function FreeTextOption({ option, index, onSubmit }: FreeTextOptionProps) {
+function FreeTextOption({ option, number, onSubmit }: FreeTextOptionProps) {
   const [answer, setAnswer] = useState('');
   const submit = () => {
     if (answer.trim()) {
       onSubmit(answer);
+      setAnswer('');
     }
   };
 
@@ -33,7 +40,8 @@ function FreeTextOption({ option, index, onSubmit }: FreeTextOptionProps) {
         option.selected ? 'border-primary bg-primary/5' : 'border-border',
       )}
     >
-      <span className="text-muted-foreground">{index + 1}.</span>
+      <span className="text-muted-foreground">{number}.</span>
+      {typeof option.checked === 'boolean' && <Tick checked={option.checked} />}
       <input
         type="text"
         value={answer}
@@ -63,10 +71,15 @@ function FreeTextOption({ option, index, onSubmit }: FreeTextOptionProps) {
 /**
  * A menu the Claude TUI is showing right now (permission, question, trust
  * dialog), rendered as buttons. Choosing one moves the TUI cursor and presses
- * Enter in the real terminal.
+ * Enter in the real terminal; in a multi-select question that toggles the
+ * option, and the confirm row ("Next"/"Submit") moves on.
  */
-export default function TuiPromptPanel({ prompt, onChoose, onCancel }: TuiPromptPanelProps) {
+export default function TuiPromptPanel({ prompt, onChoose, onCancel, onQuestionStep }: TuiPromptPanelProps) {
   const context = prompt.body.filter((line) => line !== prompt.question);
+  const isMultiSelect = prompt.options.some((option) => typeof option.checked === 'boolean');
+  // The TUI does not number the confirm row, so the options after it keep their own numbers.
+  const optionNumbers = prompt.options.map((_, index) =>
+    prompt.options.slice(0, index + 1).filter((option) => !option.confirmsSelection).length);
 
   return (
     <Confirmation approval="pending" className="mb-3" data-testid="tui-prompt">
@@ -84,34 +97,81 @@ export default function TuiPromptPanel({ prompt, onChoose, onCancel }: TuiPrompt
         </details>
       )}
 
+      {isMultiSelect && (
+        <p className="text-xs text-muted-foreground">Tick every answer that applies, then press the button below them.</p>
+      )}
+
       <div className="flex w-full flex-col gap-1.5">
-        {prompt.options.map((option, index) => (option.freeText ? (
-          <FreeTextOption
-            // A question set reuses the slot for every question; a new question must start with an empty field.
-            key={`${prompt.body.join('\n')}-${index}`}
-            option={option}
-            index={index}
-            onSubmit={(freeText) => onChoose(index, freeText)}
-          />
-        ) : (
-          <button
-            key={`${index}-${option.label}`}
-            type="button"
-            onClick={() => onChoose(index)}
-            className={cn(
-              'w-full rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-accent',
-              option.selected ? 'border-primary bg-primary/5' : 'border-border',
-            )}
-          >
-            <span className="mr-2 text-muted-foreground">{index + 1}.</span>
-            <span className="text-foreground">{option.label}</span>
-            {option.detail && <span className="mt-0.5 block break-all text-xs text-muted-foreground">{option.detail}</span>}
-          </button>
-        )))}
+        {prompt.options.map((option, index) => {
+          if (option.freeText) {
+            return (
+              <FreeTextOption
+                // A question set reuses the slot for every question; a new question must start with an empty field.
+                key={`${prompt.body.join('\n')}-${index}`}
+                option={option}
+                number={optionNumbers[index]}
+                onSubmit={(freeText) => onChoose(index, freeText)}
+              />
+            );
+          }
+          if (option.confirmsSelection) {
+            return (
+              <button
+                key={`${index}-${option.label}`}
+                type="button"
+                onClick={() => onChoose(index)}
+                className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                {option.label}
+              </button>
+            );
+          }
+          const isCheckbox = typeof option.checked === 'boolean';
+          return (
+            <button
+              key={`${index}-${option.label}`}
+              type="button"
+              role={isCheckbox ? 'checkbox' : undefined}
+              aria-checked={isCheckbox ? Boolean(option.checked) : undefined}
+              onClick={() => onChoose(index)}
+              className={cn(
+                'w-full rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-accent',
+                option.selected ? 'border-primary bg-primary/5' : 'border-border',
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-muted-foreground">{optionNumbers[index]}.</span>
+                {isCheckbox && <Tick checked={Boolean(option.checked)} />}
+                <span className="text-foreground">{option.label}</span>
+              </span>
+              {option.detail && <span className="mt-0.5 block break-all text-xs text-muted-foreground">{option.detail}</span>}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="flex justify-end">
-        <button type="button" onClick={onCancel} className="text-xs text-muted-foreground hover:text-foreground">
+      <div className="flex items-center gap-1">
+        {prompt.questionTabs && onQuestionStep && (
+          <>
+            <button
+              type="button"
+              onClick={() => onQuestionStep('previous')}
+              className="flex items-center gap-0.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <ChevronLeftIcon className="h-3.5 w-3.5" aria-hidden />
+              Previous question
+            </button>
+            <button
+              type="button"
+              onClick={() => onQuestionStep('next')}
+              className="flex items-center gap-0.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              Next question
+              <ChevronRightIcon className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </>
+        )}
+        <button type="button" onClick={onCancel} className="ml-auto text-xs text-muted-foreground hover:text-foreground">
           Cancel (Esc)
         </button>
       </div>
