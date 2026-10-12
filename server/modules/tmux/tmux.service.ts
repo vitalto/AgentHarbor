@@ -18,7 +18,8 @@ export type AgentPane = {
 
 export type TmuxService = ReturnType<typeof createTmuxService>;
 
-const FIELD_SEPARATOR = '\u001f';
+// Printable on purpose: tmux 3.4 prints control characters in -F output as octal escapes ("\037").
+const FIELD_SEPARATOR = '|~|';
 const PANE_FORMAT = ['#{window_id}', '#{window_name}', '#{pane_id}', '#{pane_pid}', '#{pane_current_path}', '#{pane_dead}', '#{pane_start_command}', '#{pane_current_command}']
   .join(FIELD_SEPARATOR);
 
