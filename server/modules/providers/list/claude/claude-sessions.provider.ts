@@ -586,8 +586,12 @@ async function readTranscriptRows(
   return rows;
 }
 
-/** The only rows `settleBackgroundCommands` reads; skipping the rest keeps a multi-megabyte transcript cheap to poll. */
-const BACKGROUND_COMMAND_ROW_MARKERS = ['"run_in_background":true', '"backgroundTaskId"', 'task-notification', '"Successfully stopped', '"Successfully killed'];
+/**
+ * The only rows `settleBackgroundCommands` reads; skipping the rest keeps a multi-megabyte transcript cheap to poll.
+ * Every Bash call is kept, not just `run_in_background` ones: a foreground command that outlives its timeout is
+ * moved to the background too, and only its call carries the command and description.
+ */
+const BACKGROUND_COMMAND_ROW_MARKERS = ['"name":"Bash"', '"backgroundTaskId"', 'task-notification', '"Successfully stopped', '"Successfully killed'];
 
 export type SessionBackgroundCommand = BackgroundCommandInfo & { toolUseId: string };
 

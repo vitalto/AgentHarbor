@@ -14,7 +14,7 @@ function launch(toolUseId: string, taskId: string, timestamp: string, input: Any
     {
       type: 'assistant',
       timestamp,
-      message: { role: 'assistant', content: [{ type: 'tool_use', id: toolUseId, name: 'Bash', input: { ...input, run_in_background: true } }] },
+      message: { role: 'assistant', content: [{ type: 'tool_use', id: toolUseId, name: 'Bash', input: { run_in_background: true, ...input } }] },
     },
     {
       type: 'user',
@@ -117,4 +117,23 @@ test('a transcript lists its finished commands too, the running-sessions poll on
     ['bjob2', 'running', 'toolu_2'],
   ]);
   assert.deepEqual((await listRunningBackgroundCommands(transcript, 's1', liveSince)).map((command) => command.taskId), ['bjob2']);
+});
+
+test('a foreground command moved to the background by its timeout keeps its command and description', async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'ah-bg-commands-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const transcript = path.join(directory, 's1.jsonl');
+  const [call, result] = launch('toolu_1', 'bjob1', '2026-10-10T20:10:00.000Z', {
+    command: 'unity -projectPath x',
+    description: 'Open Unity editor',
+    timeout: 120000,
+    run_in_background: undefined,
+  });
+  const rows = [call, { ...result, toolUseResult: { ...result.toolUseResult, timedOutAfterMs: 120000 } }]
+    .map((row) => ({ ...row, sessionId: 's1' }));
+  await writeFile(transcript, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`);
+
+  const [command] = await listBackgroundCommands(transcript, 's1', liveSince);
+  assert.equal(command?.command, 'unity -projectPath x');
+  assert.equal(command?.description, 'Open Unity editor');
 });
