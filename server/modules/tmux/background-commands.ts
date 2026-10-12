@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process';
 
 import type { ClaudeProcess } from '@/modules/tmux/claude-status.js';
+import { runWindowsPowerShell } from '@/modules/tmux/windows-powershell.js';
 
-const POWERSHELL = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe';
 const TASKKILL = '/mnt/c/Windows/System32/taskkill.exe';
 
 /**
@@ -25,27 +25,19 @@ export function isShellRunningCommand(commandLine: string, command: string): boo
 
 type ChildProcess = { pid: number; commandLine: string };
 
-function listChildShells(parentPids: number[]): Promise<ChildProcess[]> {
+async function listChildShells(parentPids: number[]): Promise<ChildProcess[]> {
   const filter = parentPids.map((pid) => `ParentProcessId=${pid}`).join(' OR ');
   const script = `Get-CimInstance Win32_Process -Filter "(${filter}) AND Name='bash.exe'" | `
     + "ForEach-Object { '{0}|{1}' -f $_.ProcessId, ($_.CommandLine -replace \"`r?`n\", ' ') }";
-  return new Promise((resolve) => {
-    execFile(POWERSHELL, ['-NoProfile', '-NonInteractive', '-Command', script], { timeout: 15_000 }, (error, stdout) => {
-      if (error) {
-        resolve([]);
-        return;
-      }
-      const children: ChildProcess[] = [];
-      for (const line of stdout.split(/\r?\n/)) {
-        const separator = line.indexOf('|');
-        const pid = Number(line.slice(0, separator));
-        if (separator > 0 && Number.isInteger(pid) && pid > 0) {
-          children.push({ pid, commandLine: line.slice(separator + 1) });
-        }
-      }
-      resolve(children);
-    });
-  });
+  const children: ChildProcess[] = [];
+  for (const line of (await runWindowsPowerShell(script)).split(/\r?\n/)) {
+    const separator = line.indexOf('|');
+    const pid = Number(line.slice(0, separator));
+    if (separator > 0 && Number.isInteger(pid) && pid > 0) {
+      children.push({ pid, commandLine: line.slice(separator + 1) });
+    }
+  }
+  return children;
 }
 
 /**

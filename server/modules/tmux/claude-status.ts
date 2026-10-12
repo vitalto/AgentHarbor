@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { getAgentConfig, type AgentConfig } from '@/modules/tmux/agent-config.js';
+import { runWindowsPowerShell } from '@/modules/tmux/windows-powershell.js';
 
 /** `waiting` = the TUI shows a permission/question menu and blocks on the user. */
 export type ClaudeActivity = 'busy' | 'waiting' | 'idle';
@@ -102,7 +103,6 @@ async function readWindowsClaudePids(): Promise<Set<number> | null> {
   return pids;
 }
 
-const POWERSHELL = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe';
 const LIST_CLAUDE_COMMAND_LINES = "Get-CimInstance Win32_Process -Filter \"Name='claude.exe'\" | "
   + "ForEach-Object { '{0}|{1}|{2}' -f $_.ProcessId, $_.CreationDate.ToUniversalTime().ToString('o'), $_.CommandLine }";
 
@@ -113,11 +113,7 @@ const LIST_CLAUDE_COMMAND_LINES = "Get-CimInstance Win32_Process -Filter \"Name=
  * found only this way. Slow (PowerShell): for one-off checks, not polling.
  */
 export async function findWindowsClaudeByCommandLine(providerSessionId: string): Promise<ClaudeProcess[]> {
-  const output = await new Promise<string>((resolve) => {
-    execFile(POWERSHELL, ['-NoProfile', '-NonInteractive', '-Command', LIST_CLAUDE_COMMAND_LINES], { timeout: 15_000 }, (error, stdout) => {
-      resolve(error ? '' : stdout);
-    });
-  });
+  const output = await runWindowsPowerShell(LIST_CLAUDE_COMMAND_LINES);
   const found: ClaudeProcess[] = [];
   for (const line of output.split(/\r?\n/)) {
     const [pidText, createdText, ...commandParts] = line.split('|');
