@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
+import { Readable } from 'node:stream';
 import test from 'node:test';
 
 import express, { type RequestHandler } from 'express';
@@ -154,4 +155,22 @@ test('create route rejects invalid entry types without calling the service', asy
   });
 
   assert.equal(createCalled, false);
+});
+
+test('file content route sandboxes what it serves so project HTML never runs in the app origin', async () => {
+  const services = createFakeServices({
+    openFile: async () => ({
+      contentType: 'text/html',
+      stream: Readable.from(['<script>alert(1)</script>']),
+    }),
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/file-tree/projects/project-1/files/content?path=evil.html`);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-security-policy'), 'sandbox');
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(await response.text(), '<script>alert(1)</script>');
+  });
 });

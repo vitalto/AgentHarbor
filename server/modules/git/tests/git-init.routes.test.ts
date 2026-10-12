@@ -124,3 +124,33 @@ test('delete branch rejects a non-boolean force value before running Git', async
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test('checkout refuses a branch name that git would read as an option', async () => {
+  const spawnProcess = (() => {
+    throw new Error('Git must not run for invalid input');
+  }) as Parameters<typeof createGitRouter>[0]['spawnProcess'];
+  const router = createGitRouter({
+    fileSystem: { access: async () => undefined } as unknown as Parameters<typeof createGitRouter>[0]['fileSystem'],
+    spawnProcess,
+    resolveProjectPathById: () => '/workspace/repo',
+  });
+  const app = express();
+  app.use(express.json());
+  app.use('/api/git', router);
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+
+  try {
+    const address = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/git/checkout`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ project: 'project-1', branch: '--orphan' }),
+    });
+    const body = await response.json() as { error: string };
+    assert.equal(response.status, 500);
+    assert.match(body.error, /Invalid branch name/);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});

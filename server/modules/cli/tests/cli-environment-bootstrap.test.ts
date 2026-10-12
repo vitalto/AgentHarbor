@@ -149,16 +149,16 @@ export function createCliApplication() {
   }
 }
 
-test('CLI bootstrap selects Platform authentication from .env', async () => {
+test('the upstream Platform flag in .env no longer skips login', async () => {
   const result = await runCliBootstrapFixture(true);
 
   assert.deepEqual(result, {
     command: 'status',
     environmentFileReads: 0,
     mode: 'true',
-    authNextCalled: true,
-    authStatus: 200,
-    authenticatedUsername: 'bootstrap-user',
+    authNextCalled: false,
+    authStatus: 401,
+    authenticatedUsername: null,
   });
 });
 

@@ -134,6 +134,9 @@ export function createFileTreeRouter(
     const filePath = readRequiredString(request.query.path, 'path', 'Invalid file path');
     const file = await services.openFile(readProjectId(request), filePath);
     response.setHeader('Content-Type', file.contentType);
+    // Project files (HTML, SVG from any cloned repo) must never run as pages of this origin.
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader('Content-Security-Policy', 'sandbox');
     file.stream.pipe(response);
     file.stream.on('error', (error) => {
       logger.error('Error streaming File Tree content', error);

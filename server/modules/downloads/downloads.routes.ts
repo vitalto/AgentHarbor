@@ -99,7 +99,7 @@ export function createDownloadsRouter({ authenticate, tickets, toLocalPath, find
 
     response.setHeader('X-Content-Type-Options', 'nosniff');
     // send() refuses any path with a dot segment by default, and Windows homes
-    // are full of them (C:\Users\vital\.agentharbor\...).
+    // are full of them (C:\Users\<you>\.agentharbor\...).
     response.download(localPath, path.posix.basename(localPath), { dotfiles: 'allow' }, (error) => {
       if (error && !response.headersSent) {
         response.status(404).json({ error: 'File not found' });

@@ -108,8 +108,10 @@ router.get('/images/:filename', async (req, res) => {
   // force SVGs (which can carry scripts when rendered as a document) to
   // download instead of rendering inline. The chat UI is unaffected — it
   // fetches assets as blobs and shows them through <img>, where SVG scripts
-  // never execute.
+  // never execute. /files accepts any type, so an uploaded .html opened by
+  // URL (the token may ride in ?token=) is sandboxed out of the app's origin.
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', 'sandbox');
   if (asset.contentType === 'image/svg+xml') {
     res.setHeader('Content-Disposition', 'attachment');
   }

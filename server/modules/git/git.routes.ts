@@ -63,15 +63,16 @@ function spawnAsync(command, args, options = {}) {
 
 // Input validation helpers (defense-in-depth)
 function validateCommitRef(commit) {
-  // Allow hex hashes, HEAD, HEAD~N, HEAD^N, tag names, branch names
-  if (!/^[a-zA-Z0-9._~^{}@\/-]+$/.test(commit)) {
+  // Allow hex hashes, HEAD, HEAD~N, HEAD^N, tag names, branch names; never a
+  // leading dash, which git would parse as an option instead of a ref.
+  if (!/^[a-zA-Z0-9._~^{}@\/][a-zA-Z0-9._~^{}@\/-]*$/.test(commit)) {
     throw new Error('Invalid commit reference');
   }
   return commit;
 }
 
 function validateBranchName(branch) {
-  if (!/^[a-zA-Z0-9._\/-]+$/.test(branch)) {
+  if (!/^[a-zA-Z0-9._\/][a-zA-Z0-9._\/-]*$/.test(branch)) {
     throw new Error('Invalid branch name');
   }
   return branch;
@@ -94,7 +95,7 @@ function validateFilePath(file, projectPath) {
 }
 
 function validateRemoteName(remote) {
-  if (!/^[a-zA-Z0-9._-]+$/.test(remote)) {
+  if (!/^[a-zA-Z0-9._][a-zA-Z0-9._-]*$/.test(remote)) {
     throw new Error('Invalid remote name');
   }
   return remote;

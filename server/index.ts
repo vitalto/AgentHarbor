@@ -9,7 +9,7 @@ import http from 'http';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 
-import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
+import { AppError, findApplicationRoot, getModuleDirectory, terminalTextStyles } from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
@@ -120,7 +120,6 @@ chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackg
 
 createWebSocketServer(server, {
     verifyClient: {
-        isPlatform: IS_PLATFORM,
         authenticateWebSocket,
     },
     chat: {
@@ -144,18 +143,28 @@ createWebSocketServer(server, {
 });
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
-app.use(express.json({
-    limit: '50mb',
-    type: (req) => {
-        // Skip multipart/form-data requests (for file uploads like images)
-        const contentType = req.headers['content-type'] || '';
-        if (contentType.includes('multipart/form-data')) {
-            return false;
-        }
-        return contentType.includes('json');
-    }
-}));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+function createBodyParsers(limit: string) {
+    return [
+        express.json({
+            limit,
+            type: (req) => {
+                // Skip multipart/form-data requests (for file uploads like images)
+                const contentType = req.headers['content-type'] || '';
+                if (contentType.includes('multipart/form-data')) {
+                    return false;
+                }
+                return contentType.includes('json');
+            }
+        }),
+        express.urlencoded({ limit, extended: true }),
+    ];
+}
+
+// Large bodies are parsed only after authenticateToken, so a request without a
+// token cannot make the server buffer and parse 50 MB of JSON.
+const parseAuthenticatedBody = createBodyParsers('50mb');
+const parsePublicBody = createBodyParsers('1mb');
 
 // Public health check endpoint (no authentication required)
 app.get('/health', (req, res) => {
@@ -171,47 +180,47 @@ app.get('/health', (req, res) => {
 app.use('/api', validateApiKey);
 
 // Authentication routes (public)
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', parsePublicBody, authRoutes);
 
 // File Tree API Routes (protected)
-app.use('/api/file-tree', authenticateToken, fileTreeRoutes);
+app.use('/api/file-tree', authenticateToken, parseAuthenticatedBody, fileTreeRoutes);
 
 // Projects API Routes (protected)
-app.use('/api/projects', authenticateToken, projectModuleRoutes);
+app.use('/api/projects', authenticateToken, parseAuthenticatedBody, projectModuleRoutes);
 
 // Chat attachment upload/serving (global ~/.agentharbor/assets store, protected)
-app.use('/api/assets', authenticateToken, assetsRoutes);
+app.use('/api/assets', authenticateToken, parseAuthenticatedBody, assetsRoutes);
 
 // One-time download links (issuing is protected; the ticket itself is the credential for the GET)
-app.use('/api/downloads', downloadsRoutes);
+app.use('/api/downloads', parsePublicBody, downloadsRoutes);
 
 // Approvals for commands agents asked to run elevated (UAC cannot be clicked remotely).
-app.use('/api/elevation', authenticateToken, elevationRoutes);
+app.use('/api/elevation', authenticateToken, parseAuthenticatedBody, elevationRoutes);
 
 // Git API Routes (protected)
-app.use('/api/git', authenticateToken, gitRoutes);
+app.use('/api/git', authenticateToken, parseAuthenticatedBody, gitRoutes);
 
 // Git worktree management (protected)
-app.use('/api/worktrees', authenticateToken, worktreesRoutes);
+app.use('/api/worktrees', authenticateToken, parseAuthenticatedBody, worktreesRoutes);
 
 // Commands API Routes (protected)
-app.use('/api/commands', authenticateToken, commandsRoutes);
+app.use('/api/commands', authenticateToken, parseAuthenticatedBody, commandsRoutes);
 
 // Settings API Routes (protected)
-app.use('/api/settings', authenticateToken, settingsRoutes);
+app.use('/api/settings', authenticateToken, parseAuthenticatedBody, settingsRoutes);
 
-app.use('/api/system', authenticateToken, systemRoutes);
+app.use('/api/system', authenticateToken, parseAuthenticatedBody, systemRoutes);
 
-app.use('/api/notifications', authenticateToken, notificationRoutes);
+app.use('/api/notifications', authenticateToken, parseAuthenticatedBody, notificationRoutes);
 
 // User API Routes (protected)
-app.use('/api/user', authenticateToken, userRoutes);
+app.use('/api/user', authenticateToken, parseAuthenticatedBody, userRoutes);
 
 // Plugins API Routes (protected)
-app.use('/api/plugins', authenticateToken, pluginsRoutes);
+app.use('/api/plugins', authenticateToken, parseAuthenticatedBody, pluginsRoutes);
 
 // Unified provider MCP routes (protected)
-app.use('/api/providers', authenticateToken, providerRoutes);
+app.use('/api/providers', authenticateToken, parseAuthenticatedBody, providerRoutes);
 
 // Serve public files
 app.use(express.static(path.join(APP_ROOT, 'public')));

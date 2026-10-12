@@ -54,7 +54,7 @@ function resolveLegacyDatabasePath(): string {
 function ensureDatabaseDirectory(dbPath: string): void {
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     console.log('Created database directory:', dir);
   }
 }
@@ -89,6 +89,19 @@ function migrateLegacyDatabase(targetPath: string): void {
 }
 
 
+/**
+ * The database holds the JWT signing secret and the password hash: any other
+ * local account able to read it could mint a token and drive this user's shell.
+ * SQLite creates its -wal/-shm files with the database file's mode.
+ */
+function restrictToOwner(dbPath: string): void {
+  try {
+    fs.chmodSync(dbPath, 0o600);
+  } catch (err: any) {
+    console.warn('Could not restrict database permissions', { path: dbPath, error: err.message });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Singleton connection
 // ---------------------------------------------------------------------------
@@ -115,6 +128,7 @@ export function getConnection(): Database.Database {
   migrateLegacyDatabase(dbPath);
 
   instance = new Database(dbPath);
+  restrictToOwner(dbPath);
 
   // app_config must exist immediately — the auth middleware reads
   // the JWT secret at module-load time, before initializeDatabase() runs.
