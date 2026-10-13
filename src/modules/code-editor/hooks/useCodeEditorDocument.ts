@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { api, readApiJson } from '@/shared/api';
+import { api } from '@/shared/api';
 import type { CodeEditorFile } from '@/shared/types';
 import { isBinaryFile } from '@/modules/code-editor/utils/binaryFile';
 import { getPreviewKind } from '@/modules/code-editor/utils/previewableFile';
+import { readEditorFileText } from '@/modules/code-editor/utils/readEditorFile';
 
 type UseCodeEditorDocumentParams = {
   file: CodeEditorFile;
@@ -98,15 +99,11 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
           throw new Error('Missing project identifier');
         }
 
-        const response = await api.readFile(fileProjectId, filePath);
-        // Read through readApiJson so the API's own explanation reaches the
-        // pane — a directory, a path outside the project root, a missing file.
-        // The bare status showed all of those as an opaque "403 Forbidden".
-        const data = await readApiJson<{ content: string }>(response);
+        const text = await readEditorFileText(fileProjectId, filePath);
         if (isStaleLoad()) {
           return;
         }
-        applyLoadedContent(data.content);
+        applyLoadedContent(text);
       } catch (error) {
         if (isStaleLoad()) {
           return;
