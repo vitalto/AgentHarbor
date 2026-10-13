@@ -464,7 +464,7 @@
     "power": {
       "title": "Power",
       "label": "Shut down when all agents finish",
-      "description": "Once no agent has a turn, a question, a background command or a running subagent for {{minutes}} min, the computer shuts down with a {{seconds}} s countdown. Turns itself off after that.",
+      "description": "Once no agent has a turn, a background command or a running subagent for {{minutes}} min, the computer shuts down with a {{seconds}} s countdown. An agent waiting for your answer does not hold it back. Works once, like a sleep timer: it turns itself off after that and does not survive a server restart.",
       "checking": "Checking agents…",
       "waitingFor_one": "Waiting for {{count}} agent:",
       "waitingFor_other": "Waiting for {{count}} agents:",
@@ -474,7 +474,6 @@
       "failed": "The shutdown failed: {{error}}",
       "work": {
         "turn": "working",
-        "question": "waiting for an answer",
         "background-command": "background command",
         "subagent": "subagent"
       }

@@ -11,8 +11,13 @@ import { readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-s
  */
 export const SUBAGENT_ACTIVE_WINDOW_MS = 90_000;
 
-/** What keeps a Claude process from being done: a turn, a menu waiting for the user, a background command or a subagent. */
-export type UnfinishedWork = 'turn' | 'question' | 'background-command' | 'subagent';
+/**
+ * What keeps a Claude process from being done: a turn, a background command or
+ * a subagent. A menu waiting for the user (status `waiting`) is not on the
+ * list: permission prompts and AskUserQuestion never time out, so nothing
+ * happens there until someone answers.
+ */
+export type UnfinishedWork = 'turn' | 'background-command' | 'subagent';
 
 export type UnfinishedAgent = {
   providerSessionId: string;
@@ -49,9 +54,6 @@ export function findUnfinishedWork(
 ): UnfinishedWork | null {
   if (claude.activity === 'busy') {
     return 'turn';
-  }
-  if (claude.activity === 'waiting') {
-    return 'question';
   }
   if (claude.status === 'shell') {
     return 'background-command';

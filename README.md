@@ -43,9 +43,11 @@ chat UI on top of it:
   read-only and can be moved into tmux from the chat; a session is never resumed twice.
 - **Idle agents close themselves** after a time set in Settings -> Agents -> Runtime (the
   conversation stays and resumes on the next message).
-- **Shut down when all agents finish** - a one-shot switch in Settings -> Agents -> Runtime powers the
-  computer off once no Claude process has a turn, an open question, a background command or a running
-  subagent for 2 minutes, with a 60 s OS countdown that can be cancelled from the same page.
+- **Shut down when all agents finish** - a one-shot switch in Settings -> Agents -> Runtime, like a
+  sleep timer, powers the computer off once no Claude process has a turn, a background command or a
+  running subagent for 2 minutes (an agent waiting for an answer does not count: such a prompt never
+  times out), with a 60 s OS countdown that can be cancelled from the same page. It is not kept across
+  a server restart.
 - **File tree and editor**, **git panel** (stage, commit, branches, worktrees), MCP server and skills
   management, plugins.
 - **Responsive / PWA** - usable from a phone; the chat composer, menus and terminal all work on a

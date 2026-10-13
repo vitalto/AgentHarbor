@@ -10,15 +10,10 @@ const DEFAULT_QUIET_PERIOD_MS = 2 * 60_000;
 const DEFAULT_SHUTDOWN_DELAY_SECONDS = 60;
 const DEFAULT_CHECK_INTERVAL_MS = 20_000;
 
-export type ArmRecord = {
+type ArmRecord = {
   armedAt: number;
   /** Who armed it, to tell them when the shutdown starts. */
   armedBy: number | null;
-};
-
-export type ArmStore = {
-  read(): ArmRecord | null;
-  write(record: ArmRecord | null): void;
 };
 
 export type ShutdownWhenIdleState<TAgent> = {
@@ -39,7 +34,6 @@ export type ShutdownWhenIdleState<TAgent> = {
 export type ShutdownWhenIdleDependencies<TAgent> = {
   findUnfinishedAgents(): Promise<TAgent[]>;
   powerControl: PowerControl;
-  armStore: ArmStore;
   notify(userId: number | null, message: string): void;
   now?: () => number;
   quietPeriodMs?: number;
@@ -49,14 +43,14 @@ export type ShutdownWhenIdleDependencies<TAgent> = {
 export type ShutdownWhenIdle<TAgent> = ReturnType<typeof createShutdownWhenIdle<TAgent>>;
 
 /**
- * One-shot: once armed, waits until no Claude process has a turn, an open
- * question, a background command or a running subagent for the quiet period,
- * then asks the OS to power off and disarms itself.
+ * One-shot, like a sleep timer: once armed, waits until no Claude process has
+ * a turn, a background command or a running subagent for the quiet period,
+ * then asks the OS to power off and disarms itself. The arm lives only in
+ * memory, so a server restart drops it.
  */
 export function createShutdownWhenIdle<TAgent>({
   findUnfinishedAgents,
   powerControl,
-  armStore,
   notify,
   now = Date.now,
   quietPeriodMs = DEFAULT_QUIET_PERIOD_MS,
@@ -72,7 +66,6 @@ export function createShutdownWhenIdle<TAgent>({
 
   const setArm = (record: ArmRecord | null) => {
     arm = record;
-    armStore.write(record);
     unfinishedAgents = [];
     idleSince = null;
     checkedAt = null;
@@ -157,9 +150,7 @@ export function createShutdownWhenIdle<TAgent>({
       shutdownAt = null;
       return getState();
     },
-    /** Restores an arm that survived a server restart and starts checking. */
     start(intervalMs = DEFAULT_CHECK_INTERVAL_MS): void {
-      arm = armStore.read();
       setInterval(() => void check(), intervalMs).unref();
     },
   };

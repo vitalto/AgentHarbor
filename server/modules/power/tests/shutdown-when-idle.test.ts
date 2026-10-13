@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PowerControl } from '@/modules/power/power-control.js';
-import { createShutdownWhenIdle, type ArmRecord } from '@/modules/power/shutdown-when-idle.service.js';
+import { createShutdownWhenIdle } from '@/modules/power/shutdown-when-idle.service.js';
 import type { UnfinishedAgent } from '@/modules/tmux/index.js';
 
 const QUIET_PERIOD_MS = 120_000;
@@ -11,7 +11,6 @@ const busyAgent: UnfinishedAgent = { providerSessionId: 'session-1', cwd: '/home
 function createHarness({ failShutdown = false } = {}) {
   let clock = 1_000_000;
   let agents: UnfinishedAgent[] = [busyAgent];
-  let storedArm: ArmRecord | null = null;
   let cancellations = 0;
   const shutdownDelays: number[] = [];
   const notifications: Array<[number | null, string]> = [];
@@ -29,12 +28,6 @@ function createHarness({ failShutdown = false } = {}) {
   const service = createShutdownWhenIdle({
     findUnfinishedAgents: async () => agents,
     powerControl,
-    armStore: {
-      read: () => storedArm,
-      write: (record) => {
-        storedArm = record;
-      },
-    },
     notify: (userId, message) => notifications.push([userId, message]),
     now: () => clock,
     quietPeriodMs: QUIET_PERIOD_MS,
@@ -50,7 +43,6 @@ function createHarness({ failShutdown = false } = {}) {
     setAgents: (next: UnfinishedAgent[]) => {
       agents = next;
     },
-    storedArm: () => storedArm,
     cancellations: () => cancellations,
   };
 }
@@ -65,10 +57,9 @@ test('nothing happens while it is not armed', async () => {
 });
 
 test('arming lists the agents still working, and they hold the shutdown back', async () => {
-  const { service, advance, shutdownDelays, storedArm } = createHarness();
+  const { service, advance, shutdownDelays } = createHarness();
   const state = await service.arm(7);
   assert.equal(state.armed, true);
-  assert.equal(storedArm()?.armedBy, 7);
   assert.deepEqual(state.unfinishedAgents, [busyAgent]);
   advance(10 * QUIET_PERIOD_MS);
   await service.check();
@@ -76,7 +67,7 @@ test('arming lists the agents still working, and they hold the shutdown back', a
 });
 
 test('the shutdown starts once every agent stayed finished for the quiet period, then it disarms', async () => {
-  const { service, advance, setAgents, shutdownDelays, notifications, storedArm } = createHarness();
+  const { service, advance, setAgents, shutdownDelays, notifications } = createHarness();
   await service.arm(7);
   setAgents([]);
   await service.check();
@@ -90,7 +81,6 @@ test('the shutdown starts once every agent stayed finished for the quiet period,
   const state = service.getState();
   assert.equal(state.armed, false);
   assert.notEqual(state.shutdownAt, null);
-  assert.equal(storedArm(), null);
   assert.deepEqual(notifications.map(([userId]) => userId), [7]);
 });
 

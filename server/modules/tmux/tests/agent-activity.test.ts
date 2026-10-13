@@ -10,10 +10,15 @@ import {
 const now = 1_000_000_000;
 const resting = { activity: 'idle', status: 'idle' } as const;
 
-test('a turn, an open question and a background command are unfinished work', () => {
+test('a turn and a background command are unfinished work', () => {
   assert.equal(findUnfinishedWork({ activity: 'busy', status: 'busy' }, null, now), 'turn');
-  assert.equal(findUnfinishedWork({ activity: 'waiting', status: 'waiting' }, null, now), 'question');
   assert.equal(findUnfinishedWork({ activity: 'idle', status: 'shell' }, null, now), 'background-command');
+});
+
+test('an agent waiting for an answer has finished unless its subagent still runs', () => {
+  const waiting = { activity: 'waiting', status: 'waiting' } as const;
+  assert.equal(findUnfinishedWork(waiting, null, now), null);
+  assert.equal(findUnfinishedWork(waiting, now - 10_000, now), 'subagent');
 });
 
 test('a subagent counts as running while its transcript is still being written', () => {

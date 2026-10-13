@@ -18,7 +18,8 @@ const ELEVATION_HINT =
   'UAC prompts cannot be answered here: the user is remote and nobody can click a prompt on this PC. '
   + 'Run the part that needs admin rights with  elevate "<PowerShell command>"  (Git Bash) or  elevate.ps1 -Command "<PowerShell command>"  (PowerShell). '
   + 'It waits until the user approves that exact command in AgentHarbor, runs it elevated in the current directory and prints its output and exit code '
-  + '(126 = denied: do not retry, ask the user). Approval can take minutes: give the call a 600000 ms timeout or run it in the background. '
+  + '(126 = denied: do not retry, ask the user; 124 = nobody approved within 5 minutes). '
+  + 'Approval can take up to 5 minutes: give the call a 600000 ms timeout or run it in the background. '
   + 'A script that elevates itself must be run through elevate without its own RunAs step.';
 
 /**
