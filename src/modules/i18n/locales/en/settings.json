@@ -455,6 +455,11 @@
         "description": "An agent with no turn, question, background command, subagent or open terminal is closed; the chat continues with the next message. 0 keeps agents open. Default {{defaultValue}}.",
         "unit": "min"
       },
+      "backgroundReminderMinutes": {
+        "label": "Remind about background commands after",
+        "description": "When an agent has finished its turn but a background command is still running, the agent gets a short note from you after this long, then after gaps that double each time (1, 3, 7… times this value from the start). Catches a script waiting for something that will never happen. 0 turns it off. Default {{defaultValue}}.",
+        "unit": "min"
+      },
       "attachmentRetentionDays": {
         "label": "Keep pasted files for",
         "description": "Copies of pasted images and files handed to a Windows Claude are deleted after this. Default {{defaultValue}}.",

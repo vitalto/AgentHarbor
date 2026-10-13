@@ -15,3 +15,5 @@ export { sessionsService } from './services/sessions.service.js';
 
 export { initializeSessionsWatcher } from './services/sessions-watcher.service.js';
 export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
+
+export { startBackgroundCommandReminders } from './services/background-command-reminder.service.js';

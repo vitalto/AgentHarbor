@@ -25,10 +25,10 @@ test('saved agent settings override the environment, survive a reload and reset 
     loadStoredAgentSettings();
     assert.equal(getAgentConfig().idleCloseMinutes, 45);
 
-    saveAgentSettings({ idleCloseMinutes: 10, attachmentRetentionDays: 3 });
+    saveAgentSettings({ idleCloseMinutes: 10, attachmentRetentionDays: 3, backgroundReminderMinutes: 0 });
     loadStoredAgentSettings();
-    assert.deepEqual(describeAgentSettings().values, { idleCloseMinutes: 10, attachmentRetentionDays: 3 });
-    assert.deepEqual(describeAgentSettings().defaults, { idleCloseMinutes: 45, attachmentRetentionDays: 7 });
+    assert.deepEqual(describeAgentSettings().values, { idleCloseMinutes: 10, attachmentRetentionDays: 3, backgroundReminderMinutes: 0 });
+    assert.deepEqual(describeAgentSettings().defaults, { idleCloseMinutes: 45, attachmentRetentionDays: 7, backgroundReminderMinutes: 60 });
 
     saveAgentSettings({ idleCloseMinutes: null });
     loadStoredAgentSettings();
@@ -41,7 +41,7 @@ test('saved agent settings override the environment, survive a reload and reset 
     assert.throws(() => saveAgentSettings({ attachmentRetentionDays: 5, idleCloseMinutes: '5' }), AppError);
     assert.equal(getAgentConfig().attachmentRetentionDays, 3, 'a rejected update writes nothing');
   } finally {
-    saveAgentSettings({ idleCloseMinutes: null, attachmentRetentionDays: null });
+    saveAgentSettings({ idleCloseMinutes: null, attachmentRetentionDays: null, backgroundReminderMinutes: null });
     closeConnection();
     process.env.DATABASE_PATH = previousDatabasePath;
     if (previousIdleClose === undefined) {

@@ -108,6 +108,7 @@ Set variables in the environment or in a `.env` file in the repository root (see
 | `AH_STATE_DIR` | `~/.agentharbor` | AgentHarbor state (hook settings, pane registry). Must be writable by the Claude process |
 | `AH_IDLE_CLOSE_MINUTES` | `60` | Close Claude windows idle this long, unless a menu, running work or an open viewer keeps them (`0` = never). Default only: Settings -> Agents -> Runtime overrides it |
 | `AH_ATTACHMENT_RETENTION_DAYS` | `7` | Delete the copies of pasted files made for a Windows Claude after this many days. Default only, like the one above |
+| `AH_BACKGROUND_REMINDER_MINUTES` | `60` | Type a short reminder into an agent whose turn is over while a background command keeps running: after this many minutes, then 3x, 7x… from the start (`0` = never). Default only, like the ones above |
 | `SERVER_PORT` | `3001` | HTTP / WebSocket port |
 | `HOST` | `0.0.0.0` | Address to bind to |
 | `DATABASE_PATH` | `~/.agentharbor/auth.db` | SQLite database with the login account and app settings |

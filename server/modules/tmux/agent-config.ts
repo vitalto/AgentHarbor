@@ -38,6 +38,7 @@ export function readAgentConfig(env: NodeJS.ProcessEnv = process.env): AgentConf
     windowsClaude: /\.exe$/i.test(claudeCommand),
     idleCloseMinutes: readNonNegativeNumber(env.AH_IDLE_CLOSE_MINUTES, 60),
     attachmentRetentionDays: readNonNegativeNumber(env.AH_ATTACHMENT_RETENTION_DAYS, 7),
+    backgroundReminderMinutes: readNonNegativeNumber(env.AH_BACKGROUND_REMINDER_MINUTES, 60),
     wslDistro: env.WSL_DISTRO_NAME?.trim() || null,
   };
 }
@@ -55,7 +56,11 @@ export type AgentSettingsOverview = {
 };
 
 function pickAgentSettings(config: AgentConfig): AgentSettings {
-  return { idleCloseMinutes: config.idleCloseMinutes, attachmentRetentionDays: config.attachmentRetentionDays };
+  return {
+    idleCloseMinutes: config.idleCloseMinutes,
+    attachmentRetentionDays: config.attachmentRetentionDays,
+    backgroundReminderMinutes: config.backgroundReminderMinutes,
+  };
 }
 
 export function describeAgentSettings(): AgentSettingsOverview {

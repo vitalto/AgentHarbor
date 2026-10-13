@@ -7,6 +7,8 @@ export type AgentSettings = {
   idleCloseMinutes: number;
   /** Copies of pasted files made for a Windows Claude are deleted after this many days. */
   attachmentRetentionDays: number;
+  /** A resting agent is reminded of a background command after this many minutes, then after doubling gaps; 0 never. */
+  backgroundReminderMinutes: number;
 };
 
 export type AgentSettingName = keyof AgentSettings;
@@ -18,6 +20,7 @@ type AgentSettingRule = AgentSettingLimits & { storageKey: string };
 export const AGENT_SETTING_RULES: Record<AgentSettingName, AgentSettingRule> = {
   idleCloseMinutes: { storageKey: 'agent_settings.idle_close_minutes', minimum: 0, maximum: 7 * 24 * 60 },
   attachmentRetentionDays: { storageKey: 'agent_settings.attachment_retention_days', minimum: 1, maximum: 365 },
+  backgroundReminderMinutes: { storageKey: 'agent_settings.background_reminder_minutes', minimum: 0, maximum: 7 * 24 * 60 },
 };
 
 const AGENT_SETTING_NAMES = Object.keys(AGENT_SETTING_RULES) as AgentSettingName[];

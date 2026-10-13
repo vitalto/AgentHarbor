@@ -15,6 +15,7 @@ import {
     initializeSessionsWatcher,
     providerRuntimeService,
     sessionsService,
+    startBackgroundCommandReminders,
     typePromptWithAttachments,
 } from '@/modules/providers/index.js';
 import {
@@ -114,6 +115,7 @@ const sessionMonitor = configureSessionMonitor({
 writeHookSettings(getAgentConfig());
 sessionMonitor.start();
 startIdleReaper();
+startBackgroundCommandReminders();
 
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
 // A completed run stays subscribable while its session's background work

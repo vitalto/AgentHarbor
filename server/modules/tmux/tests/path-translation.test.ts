@@ -10,6 +10,7 @@ const windowsClaude: AgentConfig = {
   claudeArgs: '',
   idleCloseMinutes: 60,
   attachmentRetentionDays: 7,
+  backgroundReminderMinutes: 60,
   claudeHome: '/mnt/c/Users/u/.claude',
   stateDir: '/mnt/c/Users/u/.agentharbor',
   windowsClaude: true,
