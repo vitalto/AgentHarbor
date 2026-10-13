@@ -5,7 +5,8 @@
     "permissions": "Permissions",
     "mcpServers": "MCP Servers",
     "skills": "Skills",
-    "appearance": "Appearance"
+    "appearance": "Appearance",
+    "runtime": "Runtime"
   },
   "account": {
     "title": "Account",
@@ -439,6 +440,44 @@
     },
     "actions": {
       "add": "Add"
+    }
+  },
+  "runtime": {
+    "loading": "Loading…",
+    "resetToDefault": "Reset to default ({{value}})",
+    "windows": {
+      "title": "Agent windows",
+      "description": "Applies to every agent on this server, whichever device you change it from."
+    },
+    "settings": {
+      "idleCloseMinutes": {
+        "label": "Close idle agents after",
+        "description": "An agent with no turn, question, background command, subagent or open terminal is closed; the chat continues with the next message. 0 keeps agents open. Default {{defaultValue}}.",
+        "unit": "min"
+      },
+      "attachmentRetentionDays": {
+        "label": "Keep pasted files for",
+        "description": "Copies of pasted images and files handed to a Windows Claude are deleted after this. Default {{defaultValue}}.",
+        "unit": "days"
+      }
+    },
+    "power": {
+      "title": "Power",
+      "label": "Shut down when all agents finish",
+      "description": "Once no agent has a turn, a question, a background command or a running subagent for {{minutes}} min, the computer shuts down with a {{seconds}} s countdown. Turns itself off after that.",
+      "checking": "Checking agents…",
+      "waitingFor_one": "Waiting for {{count}} agent:",
+      "waitingFor_other": "Waiting for {{count}} agents:",
+      "allFinished": "All agents have finished. Shutting down in {{seconds}} s unless one starts again.",
+      "shuttingDown": "The computer shuts down at {{time}}.",
+      "cancelShutdown": "Cancel shutdown",
+      "failed": "The shutdown failed: {{error}}",
+      "work": {
+        "turn": "working",
+        "question": "waiting for an answer",
+        "background-command": "background command",
+        "subagent": "subagent"
+      }
     }
   },
   "mcpServers": {

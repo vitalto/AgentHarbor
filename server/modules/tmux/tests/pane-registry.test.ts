@@ -24,6 +24,7 @@ async function setup(panes: AgentPane[]) {
     claudeCommand: '/mnt/c/claude.exe',
     claudeArgs: '',
     idleCloseMinutes: 60,
+    attachmentRetentionDays: 7,
     claudeHome: path.join(root, 'claude'),
     stateDir: path.join(root, 'state'),
     windowsClaude: true,

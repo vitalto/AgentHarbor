@@ -500,6 +500,12 @@ export const api = {
   },
 
   // Commands agents asked to run elevated, waiting for the user's approval
+  power: {
+    shutdownWhenIdle: () => get('/api/power/shutdown-when-idle'),
+    setShutdownWhenIdle: (armed: boolean) => put('/api/power/shutdown-when-idle', { armed }),
+    cancelShutdown: () => post('/api/power/shutdown-when-idle/cancel'),
+  },
+
   elevation: {
     list: () => get('/api/elevation'),
     decide: (requestId: string, approved: boolean) =>
@@ -544,6 +550,10 @@ export const api = {
     deleteCredential: (credentialId: string) => del(`/api/settings/credentials/${credentialId}`),
     toggleCredential: (credentialId: string, isActive: boolean) =>
       patch(`/api/settings/credentials/${credentialId}/toggle`, { isActive }),
+
+    agentSettings: () => get('/api/settings/agent-settings'),
+    /** A number saves a setting; null returns it to the server's default. */
+    saveAgentSettings: (updates: Record<string, number | null>) => put('/api/settings/agent-settings', updates),
 
     notificationPreferences: () => get('/api/settings/notification-preferences'),
     saveNotificationPreferences: (preferences: unknown) =>

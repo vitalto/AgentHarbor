@@ -9,6 +9,7 @@ import {
   getPublicKey,
   notifyUserIfEnabled,
 } from '@/modules/notifications/index.js';
+import { describeAgentSettings, saveAgentSettings } from '@/modules/tmux/index.js';
 
 import { createSettingsRouter } from './settings.routes.js';
 import { createSettingsService } from './settings.service.js';
@@ -44,6 +45,10 @@ const settingsService = createSettingsService({
     remove: (endpoint) => pushSubscriptionsDb.removeSubscription(endpoint),
   },
   getVapidPublicKey: getPublicKey,
+  agentSettings: {
+    describe: describeAgentSettings,
+    save: saveAgentSettings,
+  },
 });
 
 /** Settings router assembled for the authenticated server mount. */

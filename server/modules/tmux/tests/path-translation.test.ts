@@ -9,6 +9,7 @@ const windowsClaude: AgentConfig = {
   claudeCommand: '/mnt/c/Users/u/.local/bin/claude.exe',
   claudeArgs: '',
   idleCloseMinutes: 60,
+  attachmentRetentionDays: 7,
   claudeHome: '/mnt/c/Users/u/.claude',
   stateDir: '/mnt/c/Users/u/.agentharbor',
   windowsClaude: true,

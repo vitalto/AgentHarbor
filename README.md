@@ -41,8 +41,11 @@ chat UI on top of it:
   markdown and text open in a viewer.
 - **Sessions from other terminals** - a Claude session already running in another terminal is shown
   read-only and can be moved into tmux from the chat; a session is never resumed twice.
-- **Idle agents close themselves** after `AH_IDLE_CLOSE_MINUTES` (the conversation stays and resumes
-  on the next message).
+- **Idle agents close themselves** after a time set in Settings -> Agents -> Runtime (the
+  conversation stays and resumes on the next message).
+- **Shut down when all agents finish** - a one-shot switch in Settings -> Agents -> Runtime powers the
+  computer off once no Claude process has a turn, an open question, a background command or a running
+  subagent for 2 minutes, with a 60 s OS countdown that can be cancelled from the same page.
 - **File tree and editor**, **git panel** (stage, commit, branches, worktrees), MCP server and skills
   management, plugins.
 - **Responsive / PWA** - usable from a phone; the chat composer, menus and terminal all work on a
@@ -101,7 +104,8 @@ Set variables in the environment or in a `.env` file in the repository root (see
 | `AH_CLAUDE_ARGS` | *(empty)* | Extra flags for every launch, e.g. `--permission-mode default` |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code's config directory (projects, sessions) |
 | `AH_STATE_DIR` | `~/.agentharbor` | AgentHarbor state (hook settings, pane registry). Must be writable by the Claude process |
-| `AH_IDLE_CLOSE_MINUTES` | `60` | Close Claude windows idle this long, unless a menu, running work or an open viewer keeps them (`0` = never) |
+| `AH_IDLE_CLOSE_MINUTES` | `60` | Close Claude windows idle this long, unless a menu, running work or an open viewer keeps them (`0` = never). Default only: Settings -> Agents -> Runtime overrides it |
+| `AH_ATTACHMENT_RETENTION_DAYS` | `7` | Delete the copies of pasted files made for a Windows Claude after this many days. Default only, like the one above |
 | `SERVER_PORT` | `3001` | HTTP / WebSocket port |
 | `HOST` | `0.0.0.0` | Address to bind to |
 | `DATABASE_PATH` | `~/.agentharbor/auth.db` | SQLite database with the login account and app settings |

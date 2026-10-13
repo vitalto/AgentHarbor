@@ -35,6 +35,11 @@ type SettingsDependencies = {
     remove(endpoint: string): void;
   };
   getVapidPublicKey(): string | null;
+  agentSettings: {
+    describe(): unknown;
+    /** Validates and saves a partial update; throws an AppError for a bad one. */
+    save(input: unknown): void;
+  };
 };
 
 function requiredString(value: unknown, fieldName: string, code: string): string {
@@ -149,6 +154,13 @@ export function createSettingsService(dependencies: SettingsDependencies) {
     },
     getVapidPublicKey() {
       return { publicKey: dependencies.getVapidPublicKey() };
+    },
+    getAgentSettings() {
+      return { success: true, settings: dependencies.agentSettings.describe() };
+    },
+    updateAgentSettings(input: unknown) {
+      dependencies.agentSettings.save(input);
+      return { success: true, settings: dependencies.agentSettings.describe() };
     },
     subscribeToPush(userId: number, input: Record<string, unknown>) {
       const endpoint = requiredString(input.endpoint, 'Endpoint', 'PUSH_SUBSCRIPTION_REQUIRED');

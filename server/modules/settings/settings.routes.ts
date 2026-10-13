@@ -42,6 +42,8 @@ export function createSettingsRouter(
   router.put('/notification-preferences', respond((req) => service.updateNotificationPreferences(
     userId(req), req.body ?? {},
   )));
+  router.get('/agent-settings', respond(() => service.getAgentSettings()));
+  router.put('/agent-settings', respond((req) => service.updateAgentSettings(req.body ?? {})));
   router.get('/push/vapid-public-key', respond(() => service.getVapidPublicKey()));
   router.post('/push/subscribe', respond((req) => service.subscribeToPush(userId(req), req.body ?? {})));
   router.post('/push/unsubscribe', respond((req) => service.unsubscribeFromPush(

@@ -1,13 +1,14 @@
-import fsp from 'node:fs/promises';
 import path from 'node:path';
 
+import { newestWrite } from '@/modules/tmux/agent-activity.js';
 import { getAgentConfig } from '@/modules/tmux/agent-config.js';
 import { readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
 import { readLastTranscriptEntryTime } from '@/shared/utils.js';
 
-const SWEEP_INTERVAL_MS = 5 * 60_000;
+// Short against the limit (minutes, user-set), so a window closes close to the time the user chose.
+const SWEEP_INTERVAL_MS = 60_000;
 
 export type IdleAgentFacts = {
   /** Claude's own status for the window's session, if it wrote one. */
@@ -37,27 +38,6 @@ export function shouldCloseIdleAgent(facts: IdleAgentFacts): boolean {
   return lastActiveAt > 0 && facts.now - lastActiveAt >= facts.idleLimitMs;
 }
 
-async function newestWrite(target: string, depth = 0): Promise<number | null> {
-  const stats = await fsp.stat(target).catch(() => null);
-  if (!stats) {
-    return null;
-  }
-  if (!stats.isDirectory()) {
-    return stats.mtimeMs;
-  }
-  if (depth > 3) {
-    return null;
-  }
-  let newest: number | null = null;
-  for (const name of await fsp.readdir(target).catch(() => [] as string[])) {
-    const candidate = await newestWrite(path.join(target, name), depth + 1);
-    if (candidate !== null && (newest === null || candidate > newest)) {
-      newest = candidate;
-    }
-  }
-  return newest;
-}
-
 async function lastWriteOf(pane: PaneSession): Promise<number | null> {
   if (!pane.transcriptPath || !pane.providerSessionId) {
     return null;
@@ -70,7 +50,7 @@ async function lastWriteOf(pane: PaneSession): Promise<number | null> {
   return known.length > 0 ? Math.max(...known) : null;
 }
 
-/** Closes registered Claude windows idle for longer than AH_IDLE_CLOSE_MINUTES (0 disables). */
+/** Closes registered Claude windows idle for longer than the idle-close setting (0 disables). */
 export async function sweepIdleAgents(): Promise<string[]> {
   const idleLimitMs = getAgentConfig().idleCloseMinutes * 60_000;
   if (idleLimitMs <= 0) {

@@ -1,5 +1,8 @@
-export { getAgentConfig, readAgentConfig } from '@/modules/tmux/agent-config.js';
-export type { AgentConfig } from '@/modules/tmux/agent-config.js';
+export { describeAgentSettings, getAgentConfig, readAgentConfig } from '@/modules/tmux/agent-config.js';
+export type { AgentConfig, AgentSettingsOverview } from '@/modules/tmux/agent-config.js';
+export { loadStoredAgentSettings, saveAgentSettings } from '@/modules/tmux/agent-settings.js';
+export { findUnfinishedAgents } from '@/modules/tmux/agent-activity.js';
+export type { UnfinishedAgent, UnfinishedWork } from '@/modules/tmux/agent-activity.js';
 export { writeHookSettings } from '@/modules/tmux/agent-launch.js';
 export { stopBackgroundCommand } from '@/modules/tmux/background-commands.js';
 export { stageAttachmentForClaude } from '@/modules/tmux/attachment-staging.js';

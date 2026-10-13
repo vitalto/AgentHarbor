@@ -21,6 +21,7 @@ import {
     configureSessionMonitor,
     findAgentWindow,
     getAgentConfig,
+    loadStoredAgentSettings,
     startIdleReaper,
     writeHookSettings,
 } from '@/modules/tmux/index.js';
@@ -51,6 +52,7 @@ import providerRoutes from './modules/providers/provider.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
 import { downloadsRoutes } from './modules/downloads/index.js';
 import { elevationRoutes } from './modules/elevation/index.js';
+import { powerRoutes, startShutdownWhenIdle } from './modules/power/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
@@ -197,6 +199,9 @@ app.use('/api/downloads', parsePublicBody, downloadsRoutes);
 
 // Approvals for commands agents asked to run elevated (UAC cannot be clicked remotely).
 app.use('/api/elevation', authenticateToken, parseAuthenticatedBody, elevationRoutes);
+
+// Powers the computer off once every agent has finished, when the user armed it.
+app.use('/api/power', authenticateToken, parseAuthenticatedBody, powerRoutes);
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, parseAuthenticatedBody, gitRoutes);
@@ -353,6 +358,8 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+        loadStoredAgentSettings();
+        startShutdownWhenIdle();
 
         // Configure Web Push (VAPID keys)
         configureWebPush();

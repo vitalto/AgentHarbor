@@ -14,9 +14,9 @@ type AgentsSettingsTabProps = {
   projects: AgentSettingsProject[];
 };
 
-const AGENT_CATEGORIES: AgentCategory[] = ['account', 'permissions', 'mcp', 'skills'];
+const AGENT_CATEGORIES: AgentCategory[] = ['account', 'permissions', 'runtime', 'mcp', 'skills'];
 
-/** Rendered by Settings for the "agents" tab, hosting Claude's account, permission, MCP and skill settings. */
+/** Rendered by Settings for the "agents" tab, hosting Claude's account, permission, runtime, MCP and skill settings. */
 export default function AgentsSettingsTab({
   providerAuthStatus,
   onProviderLogin,

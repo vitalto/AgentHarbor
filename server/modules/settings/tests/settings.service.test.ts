@@ -17,6 +17,7 @@ function dependencies(overrides: Partial<Dependencies> = {}): Dependencies {
     },
     pushSubscriptions: { save: () => undefined, remove: () => undefined },
     getVapidPublicKey: () => null,
+    agentSettings: { describe: () => ({}), save: () => undefined },
     ...overrides,
   };
 }
@@ -51,4 +52,24 @@ test('subscribeToPush persists the subscription and enables Web Push', () => {
     keys: { p256dh: 'key', auth: 'auth' },
   });
   assert.deepEqual(operations, ['save:https://push.example.test', 'preferences', 'notify']);
+});
+
+test('updateAgentSettings saves the update and answers with the settings as they are now', () => {
+  let saved: unknown = null;
+  let current = { idleCloseMinutes: 60 };
+  const service = createSettingsService(dependencies({
+    agentSettings: {
+      describe: () => current,
+      save: (input) => {
+        saved = input;
+        current = { idleCloseMinutes: 15 };
+      },
+    },
+  }));
+
+  assert.deepEqual(service.updateAgentSettings({ idleCloseMinutes: 15 }), {
+    success: true,
+    settings: { idleCloseMinutes: 15 },
+  });
+  assert.deepEqual(saved, { idleCloseMinutes: 15 });
 });

@@ -5,15 +5,15 @@ import { getAgentConfig, type AgentConfig } from '@/modules/tmux/agent-config.js
 import { toClaudePath } from '@/modules/tmux/path-translation.js';
 
 export const ATTACHMENTS_DIRECTORY = 'attachments';
-const STAGED_ATTACHMENT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const isWslSharePath = (claudePath: string) => claudePath.startsWith('\\\\');
 
-async function pruneStagedAttachments(stagingDirectory: string, now: number): Promise<void> {
+async function pruneStagedAttachments(stagingDirectory: string, maxAgeMs: number, now: number): Promise<void> {
   for (const name of await fs.readdir(stagingDirectory)) {
     const stagedPath = path.join(stagingDirectory, name);
     try {
-      if (now - (await fs.stat(stagedPath)).mtimeMs > STAGED_ATTACHMENT_MAX_AGE_MS) {
+      if (now - (await fs.stat(stagedPath)).mtimeMs > maxAgeMs) {
         await fs.unlink(stagedPath);
       }
     } catch {
@@ -41,7 +41,7 @@ export async function stageAttachmentForClaude(
   }
 
   await fs.mkdir(stagingDirectory, { recursive: true });
-  await pruneStagedAttachments(stagingDirectory, now);
+  await pruneStagedAttachments(stagingDirectory, config.attachmentRetentionDays * DAY_MS, now);
   const stagedPath = path.join(stagingDirectory, path.basename(localPath));
   await fs.copyFile(localPath, stagedPath);
   return toClaudePath(stagedPath, config);

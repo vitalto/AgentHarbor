@@ -3,6 +3,7 @@ import { McpServers } from '@/modules/mcp';
 import { ProviderSkills } from '@/modules/skills';
 import AccountContent from '@/modules/settings/tabs/agents-settings/sections/content/AccountContent';
 import PermissionsContent from '@/modules/settings/tabs/agents-settings/sections/content/PermissionsContent';
+import RuntimeContent from '@/modules/settings/tabs/agents-settings/sections/content/RuntimeContent';
 
 type AgentCategoryContentSectionProps = {
   selectedAgent: AgentProvider;
@@ -49,6 +50,8 @@ export default function AgentCategoryContentSection({
           }}
         />
       )}
+
+      {selectedCategory === 'runtime' && <RuntimeContent />}
 
       {selectedCategory === 'mcp' && (
         // AgentSettingsProject.name is populated from the DB projectId by
