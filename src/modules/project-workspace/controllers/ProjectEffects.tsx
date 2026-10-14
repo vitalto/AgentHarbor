@@ -5,11 +5,12 @@ import { writeSelectedProvider } from '@/shared/selectedProvider';
 import { useProjectEffectsState } from '@/modules/project-workspace/context/ProjectsStateContext';
 import type { LLMProvider, ProjectWorkspaceShellProps } from '@/shared/types';
 
-/** Headless controller rendered by ProjectWorkspaceShell to register palette operations and handle service-worker navigation messages. */
+/** Headless controller rendered by ProjectWorkspaceShell to register palette operations, keep the browser tab title on the open session and handle service-worker navigation messages. */
 export default function ProjectEffects({
   navigate,
 }: Pick<ProjectWorkspaceShellProps, 'navigate'>) {
   const {
+    pageTitle,
     openSettings,
     refreshProjectsSilently,
     setActiveTab,
@@ -20,6 +21,12 @@ export default function ProjectEffects({
     openSettings,
     refreshProjects: refreshProjectsSilently,
   });
+
+  // Lives here rather than in the sidebar: the sidebar's project list is not
+  // mounted on the Recent/Archived tabs, in search or when collapsed.
+  useEffect(() => {
+    document.title = pageTitle;
+  }, [pageTitle]);
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {

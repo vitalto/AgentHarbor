@@ -4,6 +4,7 @@ import type { NavigateFunction } from 'react-router-dom';
 
 import { useProjectsState } from '@/modules/project-workspace/hooks/useProjectsState';
 import type { IsSessionProcessing,ServerEvent } from '@/shared/types';
+import { getPageTitle } from '@/shared/utils';
 
 type ProjectsState = ReturnType<typeof useProjectsState>;
 
@@ -37,7 +38,9 @@ type ProjectCommandState = Pick<
 type ProjectEffectsState = Pick<
   ProjectsState,
   'openSettings' | 'refreshProjectsSilently' | 'setActiveTab' | 'setSidebarOpen'
->;
+> & {
+  pageTitle: string;
+};
 
 type ProjectActiveSessionState = {
   activeSessionId: string | null;
@@ -127,14 +130,18 @@ export function ProjectsStateProvider({
     [state.handleNewSession, state.openSettings, state.selectedProject, state.setActiveTab],
   );
 
+  const pageTitle = getPageTitle(state.selectedProject, state.selectedSession);
+
   const effectsState = useMemo<ProjectEffectsState>(
     () => ({
+      pageTitle,
       openSettings: state.openSettings,
       refreshProjectsSilently: state.refreshProjectsSilently,
       setActiveTab: state.setActiveTab,
       setSidebarOpen: state.setSidebarOpen,
     }),
     [
+      pageTitle,
       state.openSettings,
       state.refreshProjectsSilently,
       state.setActiveTab,
