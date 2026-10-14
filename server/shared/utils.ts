@@ -183,14 +183,15 @@ export function getClaudeGlobalConfigPath(): string {
 }
 
 /**
- * Roots the file browser and viewer may read from even though they are outside
- * every project.
+ * Roots the file browser may list even though they are outside the workspace
+ * root. (The file viewer reads any absolute path; see `resolveReadablePath` in
+ * the file-tree service.)
  *
  * Claude writes a background agent's output file and a background command's log
  * under the system temp directory, and a transcript quotes those paths
- * verbatim, so the file browser and the file viewer have to be able to follow
- * them. `/tmp` is listed literally as well as via `os.tmpdir()` because the two
- * differ on macOS, where the temp directory is under `/var/folders`.
+ * verbatim, so the file browser has to be able to follow them. `/tmp` is
+ * listed literally as well as via `os.tmpdir()` because the two differ on
+ * macOS, where the temp directory is under `/var/folders`.
  *
  * A background agent's `.output` file is only a symlink to the agent's
  * transcript, `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`.
@@ -266,8 +267,8 @@ export async function resolvePathUnderRoots(targetPath: string, roots: string[])
 }
 
 /**
- * Resolves a path that is readable because it lives under a read-only root,
- * or `null` when it does not.
+ * Resolves a path the file browser may list because it lives under a
+ * read-only root, or `null` when it does not.
  */
 export function resolveReadOnlyRootPath(targetPath: string): Promise<string | null> {
   return resolvePathUnderRoots(targetPath, READ_ONLY_ROOTS);

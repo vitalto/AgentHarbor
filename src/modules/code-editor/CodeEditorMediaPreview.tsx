@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 
+import { api } from '@/shared/api';
 import type { CodeEditorFile,PreviewKind } from '@/shared/types';
 import { getPreviewMimeType } from '@/modules/code-editor/utils/previewableFile';
-import { fetchEditorFileBlob } from '@/modules/code-editor/utils/readEditorFile';
 
 type CodeEditorMediaPreviewProps = {
   file: CodeEditorFile;
@@ -75,7 +75,7 @@ export default function CodeEditorMediaPreview({
         // The content endpoint requires the auth header, so we fetch the bytes
         // ourselves and hand the media element a blob URL instead of a bare src.
         // Fetching a blob (rather than streaming) also lets <video>/<audio> seek.
-        const response = await fetchEditorFileBlob(projectId, file.path, { signal: controller.signal });
+        const response = await api.readFileBlob(projectId, file.path, { signal: controller.signal });
 
         if (!response.ok) {
           throw new Error(`Request failed with status ${response.status}`);

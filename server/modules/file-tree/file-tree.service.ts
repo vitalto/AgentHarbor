@@ -336,25 +336,15 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
   }
 
   /**
-   * Resolves a path the viewer is allowed to read.
-   *
-   * A file reference in a transcript is normally inside the project, but a
-   * background command's log lives in the system temp directory and a
-   * background agent's output file is a link from there into the Claude
-   * projects directory, and the transcript quotes those paths verbatim. Those
-   * resolve through the read-only root policy instead of the project root; the
-   * writing endpoints keep using `resolvePathInsideProject` alone, so nothing
-   * outside the project can be changed.
+   * Resolves a path the viewer may read. A chat tool card opens whatever file
+   * an agent touched, wherever it lives (a render under C:\AI, a log in the
+   * temp directory), and whoever is signed in can already read all of it
+   * through the downloads API and the shell, so any absolute path is allowed.
+   * A relative path belongs to the project. The writing endpoints use
+   * `resolvePathInsideProject` alone, so nothing outside the project can be changed.
    */
-  async function resolveReadablePath(projectRoot: string, targetPath: string): Promise<string> {
-    if (path.isAbsolute(targetPath)) {
-      const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(targetPath);
-      if (readOnlyPath) {
-        return readOnlyPath;
-      }
-    }
-
-    return resolvePathInsideProject(projectRoot, targetPath);
+  function resolveReadablePath(projectRoot: string, targetPath: string): string {
+    return path.isAbsolute(targetPath) ? path.resolve(targetPath) : resolvePathInsideProject(projectRoot, targetPath);
   }
 
   async function cleanupTemporaryFiles(files: FileTreeUploadedFile[]): Promise<void> {
@@ -450,7 +440,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async readTextFile(projectId, filePath) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = await resolveReadablePath(projectRoot, dependencies.workspace.toLocalPath(filePath));
+      const resolvedPath = resolveReadablePath(projectRoot, dependencies.workspace.toLocalPath(filePath));
       try {
         const content = await fileSystem.readTextFile(resolvedPath);
         return { content, path: resolvedPath };
@@ -465,7 +455,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async openFile(projectId, filePath) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = await resolveReadablePath(projectRoot, dependencies.workspace.toLocalPath(filePath));
+      const resolvedPath = resolveReadablePath(projectRoot, dependencies.workspace.toLocalPath(filePath));
       try {
         await fileSystem.access(resolvedPath);
       } catch {

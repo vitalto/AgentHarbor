@@ -541,27 +541,32 @@ test('the temp directory can be browsed and read, but never written to', async (
   }
 });
 
-test('reading through a symlink out of the temp directory is still refused', async () => {
-  const temporaryDirectory = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-tmp-'));
+test('any absolute path can be read, but nothing outside the project can be written', async () => {
   const projectRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-project-'));
-  // The link target has to sit under no read-only root. Beside this file is
-  // deterministic; a directory under `$HOME` lands under `/tmp` whenever a
-  // test run isolates its home there, and the Claude projects directory is a
-  // read-only root too.
+  // Under no project and no read-only root, like a render an agent left under C:\AI.
   const outsideDirectory = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-outside-'));
+  const renderPath = path.join(outsideDirectory, 'render.txt');
 
   try {
     assert.equal(await resolveReadOnlyRootPath(outsideDirectory), null);
-    await fsPromises.writeFile(path.join(outsideDirectory, 'secret.txt'), 'secret', 'utf8');
-    await fsPromises.symlink(outsideDirectory, path.join(temporaryDirectory, 'escape'));
+    await fsPromises.writeFile(renderPath, 'pixels', 'utf8');
 
     const service = createRealFileSystemService(projectRoot);
+    assert.equal((await service.readTextFile('project-1', renderPath)).content, 'pixels');
+    (await service.openFile('project-1', renderPath)).stream.destroy();
+
     await assert.rejects(
-      service.readTextFile('project-1', path.join(temporaryDirectory, 'escape', 'secret.txt')),
+      service.saveTextFile('project-1', renderPath, 'overwritten'),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+    );
+    assert.equal(await fsPromises.readFile(renderPath, 'utf8'), 'pixels');
+
+    // A relative path belongs to the project and cannot climb out of it.
+    await assert.rejects(
+      service.readTextFile('project-1', path.relative(projectRoot, renderPath)),
       (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
     );
   } finally {
-    await fsPromises.rm(temporaryDirectory, { recursive: true, force: true });
     await fsPromises.rm(projectRoot, { recursive: true, force: true });
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
   }
