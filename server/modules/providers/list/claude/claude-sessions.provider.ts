@@ -442,6 +442,45 @@ function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTask
   return notifications;
 }
 
+type ClaudeAgentLatestWord =
+  | { kind: 'report'; status: string }
+  | { kind: 'resume'; resumeRow: AnyRecord };
+
+/**
+ * The newest thing each background agent did, keyed by agent id: reported an
+ * outcome, or was resumed with `SendMessage`.
+ *
+ * Notifications keyed by tool-use id cannot answer this for a resumed agent:
+ * the resume is a tool call of its own, and every report after it names that
+ * call, never the original launch. Reading only the launch's notifications
+ * left an agent that failed and was sent another message drawn `failed` while
+ * it worked again, and one resumed after `completed` drawn done whatever its
+ * later runs ended with.
+ */
+function collectLatestAgentWords(messages: AnyRecord[]): Map<string, ClaudeAgentLatestWord> {
+  const latestWords = new Map<string, ClaudeAgentLatestWord>();
+
+  for (const message of messages) {
+    const resumeResult = readObjectRecord(message.toolUseResult);
+    if (resumeResult && resumeResult.success !== false && typeof resumeResult.resumedAgentId === 'string' && resumeResult.resumedAgentId) {
+      latestWords.set(resumeResult.resumedAgentId, { kind: 'resume', resumeRow: message });
+      continue;
+    }
+
+    for (const text of readTaskNotificationTexts(message)) {
+      if (!text.trimStart().startsWith('<task-notification>')) {
+        continue;
+      }
+      const taskId = readTaggedValue(text, 'task-id');
+      if (taskId) {
+        latestWords.set(taskId, { kind: 'report', status: readTaggedValue(text, 'status') || 'completed' });
+      }
+    }
+  }
+
+  return latestWords;
+}
+
 const COMMAND_STATUS_BY_NOTIFICATION: Record<string, BackgroundCommandInfo['status']> = {
   completed: 'completed',
   failed: 'failed',
@@ -921,6 +960,7 @@ async function getSessionMessages(
     // acknowledgement forever, with its report rendering as a raw user bubble
     // further down or, for a queue-operation record, nowhere at all.
     const notificationsByToolUseId = collectTaskNotifications(messages);
+    const latestAgentWords = collectLatestAgentWords(messages);
     const foldedNotificationUuids = new Set<string>();
 
     // A background agent runs inside the CLI process that launched it, so once
@@ -980,9 +1020,16 @@ async function getSessionMessages(
       if (launch === 'agent') {
         const agentId = String(message.toolUseResult.agentId);
         const subagent = subagentsById.get(agentId);
-        const status: SubagentInfo['status'] = notification
-          ? notification.status === 'completed' ? 'completed' : 'failed'
-          : unreportedStatus;
+        const latestWord = latestAgentWords.get(agentId);
+        // A resume restarts the question of how the agent ends, and it is
+        // answered the way a launch's is: by a later report, or by whether the
+        // process the resumed run lives in is still up.
+        const reportedStatus = latestWord?.kind === 'report' ? latestWord.status : notification?.status;
+        const status: SubagentInfo['status'] = latestWord?.kind === 'resume'
+          ? launchedByLiveRun(latestWord.resumeRow) ? 'running' : 'stopped'
+          : reportedStatus
+            ? reportedStatus === 'completed' ? 'completed' : 'failed'
+            : unreportedStatus;
 
         if (subagent && subagent.activity.length > 0) {
           message.subagentTools = subagent.activity;

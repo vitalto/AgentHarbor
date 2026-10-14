@@ -403,6 +403,97 @@ test('Claude history drops every notification row of a task that reported more t
   }
 });
 
+const RESUME_TOOL_USE_ID = 'toolu_send_message_1';
+
+/**
+ * Rewrites the fixture into an agent that failed and was then resumed with
+ * `SendMessage`, the way Claude records it: the resume is a tool call of its
+ * own, and the resumed run's report names that call, not the original launch.
+ */
+async function writeFailedThenResumedAgent(parentPath: string, resumedRunReport?: 'completed' | 'failed'): Promise<void> {
+  const lines = (await readFile(parentPath, 'utf8')).split('\n').filter(Boolean);
+  const failedLines = lines.map((line) => (line.includes('task-notification')
+    ? line
+      .replace('<status>completed</status>', '<status>failed</status>')
+      .replace(/<result>[^<]*<\/result>/, '')
+      .replace(/<summary>[^<]*<\/summary>/, '<summary>Agent \\"Survey the repo\\" failed: API Error: Out of memory</summary>')
+    : line));
+  const resumeLines: Record<string, unknown>[] = [
+    {
+      type: 'assistant',
+      uuid: 'assistant-resume',
+      sessionId: SESSION_ID,
+      timestamp: '2026-08-21T10:10:00.000Z',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: RESUME_TOOL_USE_ID, name: 'SendMessage', input: { to: AGENT_ID, message: 'Carry on' } }],
+      },
+    },
+    {
+      type: 'user',
+      uuid: 'resume-ack',
+      sessionId: SESSION_ID,
+      timestamp: '2026-08-21T10:10:01.000Z',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: RESUME_TOOL_USE_ID, content: `{"success":true,"message":"Resuming agent ${AGENT_ID}"}` }],
+      },
+      toolUseResult: { success: true, message: `Resuming agent ${AGENT_ID}`, resumedAgentId: AGENT_ID },
+    },
+  ];
+  if (resumedRunReport) {
+    resumeLines.push({
+      type: 'queue-operation',
+      operation: 'enqueue',
+      sessionId: SESSION_ID,
+      timestamp: '2026-08-21T10:20:00.000Z',
+      content: [
+        '<task-notification>',
+        `<task-id>${AGENT_ID}</task-id>`,
+        `<tool-use-id>${RESUME_TOOL_USE_ID}</tool-use-id>`,
+        `<status>${resumedRunReport}</status>`,
+        '<summary>Agent "Survey the repo" finished</summary>',
+        '<result>Done after the resume.</result>',
+        '</task-notification>',
+      ].join('\n'),
+    });
+  }
+  await writeFile(parentPath, `${[...failedLines, ...resumeLines.map((line) => JSON.stringify(line))].join('\n')}\n`, 'utf8');
+}
+
+for (const [scenario, liveRunStartedAt, resumedRunReport, expected] of [
+  ['running while the resumed run is still working', '2026-08-21T09:59:00.000Z', undefined, 'running'],
+  ['stopped once the process running the resumed run is gone', null, undefined, 'stopped'],
+  ['settled by the resumed run\'s own report', null, 'completed', 'completed'],
+] as const) {
+  test(`Claude history reports a failed agent resumed with SendMessage as ${scenario}`, { concurrency: false }, async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-resumed-agent-'));
+
+    try {
+      const parentPath = await writeClaudeSubagentSession(tempRoot);
+      await writeFailedThenResumedAgent(parentPath, resumedRunReport);
+
+      await withIsolatedDatabase(async () => {
+        const now = new Date().toISOString();
+        sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+
+        const history = await new ClaudeSessionsProvider({
+          getLiveRunStartTime: () => (liveRunStartedAt === null ? null : Date.parse(liveRunStartedAt)),
+        }).fetchHistory(SESSION_ID, { providerSessionId: SESSION_ID });
+        const agentRow = history.messages.find(
+          (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
+        );
+
+        // The launch's own notification said `failed`, but the agent was sent
+        // another message after it; the card follows the agent's newest word.
+        assert.equal(agentRow?.subagent?.status, expected);
+      });
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+}
+
 /** Strips the `<task-notification>` turn so the agent has no reported outcome. */
 async function dropTaskNotification(parentPath: string): Promise<void> {
   const raw = await readFile(parentPath, 'utf8');
