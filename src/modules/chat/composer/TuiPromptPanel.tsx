@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowUpIcon, CheckSquareIcon, ChevronLeftIcon, ChevronRightIcon, MessageSquareMoreIcon, SquareIcon } from 'lucide-react';
 
 import { cn } from '@/shared/utils';
@@ -7,10 +7,25 @@ import type { QuestionStep, TuiPrompt, TuiPromptOption } from '@/modules/chat/ut
 
 type TuiPromptPanelProps = {
   prompt: TuiPrompt;
+  /** When a safeguard pause will be auto-answered (epoch ms); shows a countdown toward the first option. */
+  autoAnswerAt?: number | null;
   onChoose: (optionIndex: number, freeText?: string) => void;
   onCancel: () => void;
   onQuestionStep?: (step: QuestionStep) => void;
 };
+
+/** Seconds left until `deadline`, re-rendering once a second; null when there is no deadline. */
+function useCountdown(deadline: number | null | undefined): number | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!deadline) {
+      return;
+    }
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [deadline]);
+  return deadline ? Math.max(0, Math.ceil((deadline - now) / 1000)) : null;
+}
 
 type FreeTextOptionProps = {
   option: TuiPromptOption;
@@ -74,9 +89,11 @@ function FreeTextOption({ option, number, onSubmit }: FreeTextOptionProps) {
  * Enter in the real terminal; in a multi-select question that toggles the
  * option, and the confirm row ("Next"/"Submit") moves on.
  */
-export default function TuiPromptPanel({ prompt, onChoose, onCancel, onQuestionStep }: TuiPromptPanelProps) {
+export default function TuiPromptPanel({ prompt, autoAnswerAt, onChoose, onCancel, onQuestionStep }: TuiPromptPanelProps) {
   const context = prompt.body.filter((line) => line !== prompt.question);
   const isMultiSelect = prompt.options.some((option) => typeof option.checked === 'boolean');
+  const secondsLeft = useCountdown(prompt.safeguardPause ? autoAnswerAt : null);
+  const autoAnswerLabel = prompt.options[0]?.label;
   // The TUI does not number the confirm row, so the options after it keep their own numbers.
   const optionNumbers = prompt.options.map((_, index) =>
     prompt.options.slice(0, index + 1).filter((option) => !option.confirmsSelection).length);
@@ -87,6 +104,12 @@ export default function TuiPromptPanel({ prompt, onChoose, onCancel, onQuestionS
         <MessageSquareMoreIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="font-medium text-foreground">{prompt.question}</span>
       </ConfirmationTitle>
+
+      {secondsLeft !== null && autoAnswerLabel && (
+        <p className="text-xs text-muted-foreground" data-testid="tui-auto-answer">
+          Auto-selecting <span className="font-medium text-foreground">{autoAnswerLabel}</span> in {secondsLeft}s — choose another option to keep control.
+        </p>
+      )}
 
       {context.length > 0 && (
         <details className="text-xs" open={context.length <= 4}>

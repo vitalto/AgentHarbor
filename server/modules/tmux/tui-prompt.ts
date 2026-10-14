@@ -18,6 +18,13 @@ export type TuiPrompt = {
   options: TuiPromptOption[];
   /** AskUserQuestion's tab bar is shown: ←/→ switch between its questions and the review step. */
   questionTabs: boolean;
+  /**
+   * The model-safeguard "Session paused" dialog (Opus 5.5 stopped the turn and
+   * offers to switch models). Unlike a real question it is safe to answer
+   * automatically: the monitor picks the first option on a timer so the agent
+   * is not blocked invisibly.
+   */
+  safeguardPause: boolean;
 };
 
 const MENU_FOOTER = /Esc to cancel|Enter to confirm|Enter to select/;
@@ -59,6 +66,41 @@ function findFooter(lines: string[]): number {
 /** AskUserQuestion's tab bar with several questions: `←  [×] Q1  [ ] Q2  √ Submit  →`. */
 const QUESTION_SET_TABS = /^\s*←\s.*\bSubmit\s+→$/;
 
+/** The title line of the model-safeguard dialog ("Opus 5.5's safeguards flagged this session"). */
+const SAFEGUARD_TITLE = /^\s*Session paused\s*$/;
+/** A safeguard title must sit this few lines under the dialog's top rule to count. */
+const SAFEGUARD_TITLE_DEPTH = 3;
+
+/**
+ * End of the safeguard "Session paused" dialog: the line just past its last
+ * numbered option. Unlike other menus it draws no key-hint footer and may be
+ * followed by a status line ("Waiting for API response…"), so it is anchored on
+ * its title under a dialog rule instead. -1 when no such dialog is open.
+ */
+function findSafeguardMenuEnd(lines: string[]): number {
+  const titleIndex = lines.findIndex((line) => SAFEGUARD_TITLE.test(line));
+  if (titleIndex < 0) {
+    return -1;
+  }
+  let hasRuleAbove = false;
+  for (let index = titleIndex - 1; index >= 0 && index >= titleIndex - SAFEGUARD_TITLE_DEPTH; index -= 1) {
+    if (DIALOG_BORDER.test(lines[index])) {
+      hasRuleAbove = true;
+      break;
+    }
+  }
+  if (!hasRuleAbove) {
+    return -1;
+  }
+  let lastOption = -1;
+  for (let index = titleIndex + 1; index < lines.length; index += 1) {
+    if (NUMBERED_OPTION.test(lines[index])) {
+      lastOption = index;
+    }
+  }
+  return lastOption > titleIndex ? lastOption + 1 : -1;
+}
+
 /**
  * Index of the menu's key-hint footer, or — for the question set's review step
  * ("Ready to submit your answers?"), which draws no footer — the line just
@@ -68,6 +110,10 @@ function findMenuEnd(lines: string[]): number {
   const footer = findFooter(lines);
   if (footer >= 0) {
     return footer;
+  }
+  const safeguard = findSafeguardMenuEnd(lines);
+  if (safeguard >= 0) {
+    return safeguard;
   }
   const last = lastNonEmptyIndex(lines);
   if (last < 0 || !NUMBERED_OPTION.test(lines[last])) {
@@ -255,8 +301,11 @@ export function parseTuiPrompt(lines: string[]): TuiPrompt | null {
 
   const dialogText = readBody(lines, block.topIndex);
   const body = dialogText.filter((line) => !QUESTION_SET_TABS.test(line));
-  const question = [...body].reverse().find((line) => line.endsWith('?')) ?? body.join(' ');
-  return { question, body, options, questionTabs: body.length < dialogText.length };
+  const safeguardPause = body.some((line) => SAFEGUARD_TITLE.test(line));
+  const question = safeguardPause
+    ? 'Session paused'
+    : [...body].reverse().find((line) => line.endsWith('?')) ?? body.join(' ');
+  return { question, body, options, questionTabs: body.length < dialogText.length, safeguardPause };
 }
 
 /** Which way to switch an AskUserQuestion set's tabs. */

@@ -17,6 +17,8 @@ export type TuiPrompt = {
   options: TuiPromptOption[];
   /** AskUserQuestion's tab bar is shown: its questions can be switched back and forth. */
   questionTabs?: boolean;
+  /** The model-safeguard "Session paused" dialog, which the server answers on a timer unless the user picks first. */
+  safeguardPause?: boolean;
 };
 
 /** Which way to switch an AskUserQuestion set's questions. */

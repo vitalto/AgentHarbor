@@ -56,6 +56,8 @@ type Watch = {
   tailPath: string | null;
   prompt: TuiPrompt | null;
   promptKey: string | null;
+  /** When the open safeguard pause will be auto-answered (epoch ms), or null when no such dialog is up. */
+  safeguardDeadline: number | null;
   screenKey: string | null;
   lastScreenAt: number;
   subagentsCheckedAt: number;
@@ -76,6 +78,10 @@ const TURN_START_GRACE_MS = 20_000;
 /** The TUI absorbs a paste at its own pace ("Pasting…"); this many polls bound the wait (~3 s). */
 const FREE_TEXT_LANDING_POLLS = 30;
 const FREE_TEXT_POLL_MS = 100;
+/** How long the safeguard "Session paused" dialog is shown before the first option is picked for the user. */
+const SAFEGUARD_AUTO_MS = 60_000;
+/** If the auto-answer did not close the dialog (keys lost), try again this soon rather than every tick. */
+const SAFEGUARD_RETRY_MS = 5_000;
 
 const withoutWhitespace = (text: string) => text.replace(/\s+/g, '');
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -155,7 +161,7 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
     let watch = watches.get(appSessionId);
     if (!watch) {
       watch = {
-        appSessionId, sockets: new Set(), tail: null, tailPath: null, prompt: null, promptKey: null,
+        appSessionId, sockets: new Set(), tail: null, tailPath: null, prompt: null, promptKey: null, safeguardDeadline: null,
         screenKey: null, lastScreenAt: 0, subagentsCheckedAt: 0, subagentsWrittenAt: null, turn: null, turnWaiters: [],
       };
       watches.set(appSessionId, watch);
@@ -188,7 +194,11 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
     }
     watch.prompt = prompt;
     watch.promptKey = key;
-    broadcast(watch, prompt ? { kind: 'tui_prompt', prompt } : { kind: 'tui_prompt_cleared' });
+    // The safeguard pause is the only menu answered on a timer; it is armed when it first appears.
+    watch.safeguardDeadline = prompt?.safeguardPause ? now() + SAFEGUARD_AUTO_MS : null;
+    broadcast(watch, prompt
+      ? { kind: 'tui_prompt', prompt, autoAnswerAt: watch.safeguardDeadline ?? undefined }
+      : { kind: 'tui_prompt_cleared' });
   }
 
   function emitScreen(watch: Watch, lines: string[]): void {
@@ -287,6 +297,14 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
       emitPrompt(watch, null);
     }
 
+    // Opus 5.5's safeguard "Session paused" dialog blocks the turn with no timeout; after a grace period
+    // pick its first option ("Switch to Opus 4.8") so the agent is not stuck invisibly. A human watching
+    // can still choose the other option first, which clears the prompt and the deadline with it.
+    if (watch.prompt?.safeguardPause && watch.safeguardDeadline !== null && now() >= watch.safeguardDeadline) {
+      watch.safeguardDeadline = now() + SAFEGUARD_RETRY_MS;
+      await monitor.chooseOption(watch.appSessionId, 0).catch(() => false);
+    }
+
     if (pane && activity === 'busy' && now() - watch.lastScreenAt >= SCREEN_INTERVAL_MS) {
       watch.lastScreenAt = now();
       emitScreen(watch, screenTail(await deps.tmux.capturePane(pane.pane.paneId)));
@@ -363,7 +381,7 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
       const watch = watchFor(appSessionId);
       watch.sockets.add(socket);
       if (watch.prompt) {
-        sendJson(socket, { kind: 'tui_prompt', sessionId: appSessionId, prompt: watch.prompt });
+        sendJson(socket, { kind: 'tui_prompt', sessionId: appSessionId, prompt: watch.prompt, autoAnswerAt: watch.safeguardDeadline ?? undefined });
       }
     },
 

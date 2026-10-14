@@ -4,23 +4,25 @@ import type { TuiPrompt } from '@/modules/chat/utils/tuiPrompt';
 
 export type TuiSessionState = {
   prompt: TuiPrompt | null;
+  /** When an open safeguard pause will be auto-answered (epoch ms), or null when there is no countdown. */
+  autoAnswerAt: number | null;
   /** What the TUI prints right now, above its input box; empty when idle. */
   screen: string[];
 };
 
 export type TuiEvent =
-  | { kind: 'tui_prompt'; prompt: TuiPrompt }
+  | { kind: 'tui_prompt'; prompt: TuiPrompt; autoAnswerAt?: number }
   | { kind: 'tui_prompt_cleared' }
   | { kind: 'tui_screen'; lines: string[] };
 
-const EMPTY_STATE: TuiSessionState = { prompt: null, screen: [] };
+const EMPTY_STATE: TuiSessionState = { prompt: null, autoAnswerAt: null, screen: [] };
 
 export function applyTuiEvent(state: TuiSessionState, event: TuiEvent): TuiSessionState {
   switch (event.kind) {
     case 'tui_prompt':
-      return { ...state, prompt: event.prompt };
+      return { ...state, prompt: event.prompt, autoAnswerAt: event.autoAnswerAt ?? null };
     case 'tui_prompt_cleared':
-      return { ...state, prompt: null };
+      return { ...state, prompt: null, autoAnswerAt: null };
     case 'tui_screen':
       return { ...state, screen: event.lines };
   }

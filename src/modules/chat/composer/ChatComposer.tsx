@@ -39,6 +39,8 @@ type MentionableFile = {
 type ChatComposerProps = {
   /** A menu the session's Claude TUI is showing right now, if any. */
   tuiPrompt: TuiPrompt | null;
+  /** When a safeguard pause will be auto-answered (epoch ms), for the countdown; null when there is none. */
+  tuiAutoAnswerAt?: number | null;
   onTuiChoose: (optionIndex: number, freeText?: string) => void;
   onTuiKey: (key: TuiKey) => void;
   onTuiQuestionStep: (step: QuestionStep) => void;
@@ -101,6 +103,7 @@ type ChatComposerProps = {
  */
 export default function ChatComposer({
   tuiPrompt,
+  tuiAutoAnswerAt,
   onTuiChoose,
   onTuiKey,
   onTuiQuestionStep,
@@ -226,6 +229,7 @@ export default function ChatComposer({
         <div className="mx-auto max-w-[54.25rem]">
           <TuiPromptPanel
             prompt={tuiPrompt}
+            autoAnswerAt={tuiAutoAnswerAt}
             onChoose={onTuiChoose}
             onCancel={() => onTuiKey('Escape')}
             onQuestionStep={onTuiQuestionStep}

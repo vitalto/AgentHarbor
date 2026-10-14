@@ -194,6 +194,41 @@ test('a waiting menu is broadcast as a prompt, answered by key, and cleared', as
   assert.equal(socket.frames.at(-1)?.kind, 'tui_prompt_cleared');
 });
 
+test('the safeguard "Session paused" dialog is surfaced with a deadline and auto-answered once it passes', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  const socket = new FakeSocket();
+  monitor.watch('app1', socket);
+
+  state.activity = 'waiting';
+  state.screen = fixture('session-paused');
+  await monitor.tick();
+  const promptFrame = socket.frames.find((frame) => frame.kind === 'tui_prompt');
+  assert.ok(promptFrame);
+  assert.equal((promptFrame.prompt as { safeguardPause: boolean }).safeguardPause, true);
+  assert.equal(promptFrame.autoAnswerAt, state.clock + 60_000, 'the auto-answer deadline is broadcast');
+
+  await monitor.tick();
+  assert.deepEqual(state.sentKeys, [], 'nothing is pressed before the deadline');
+
+  state.clock += 60_000;
+  await monitor.tick();
+  assert.deepEqual(state.sentKeys.at(-1), ['Enter'], 'the first option ("Switch to Opus 4.8") is picked');
+});
+
+test('an ordinary waiting menu is never auto-answered, however long it stays open', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  monitor.watch('app1', new FakeSocket());
+  state.activity = 'waiting';
+  state.screen = fixture('bash-permission');
+  await monitor.tick();
+
+  state.clock += 10 * 60_000;
+  await monitor.tick();
+  assert.deepEqual(state.sentKeys, [], 'a real permission prompt keeps waiting for the human');
+});
+
 test('a free-text answer is typed into the "Type something." slot before Enter; an empty one is refused', async (t) => {
   const { monitor, state, cleanup } = await harness();
   t.after(cleanup);

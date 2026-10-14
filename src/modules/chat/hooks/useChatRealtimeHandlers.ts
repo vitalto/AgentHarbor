@@ -202,7 +202,11 @@ export function useChatRealtimeHandlers({
             if (isActiveRef.current) {
               void playNotificationSound();
             }
-            onTuiEvent?.(sid, { kind: 'tui_prompt', prompt: msg.prompt as Extract<TuiEvent, { kind: 'tui_prompt' }>['prompt'] });
+            onTuiEvent?.(sid, {
+              kind: 'tui_prompt',
+              prompt: msg.prompt as Extract<TuiEvent, { kind: 'tui_prompt' }>['prompt'],
+              autoAnswerAt: typeof msg.autoAnswerAt === 'number' ? msg.autoAnswerAt : undefined,
+            });
           }
           return;
 

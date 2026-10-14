@@ -36,6 +36,34 @@ test('cancel sends Esc through its own callback', () => {
   assert.equal(onCancel.mock.calls.length, 1);
 });
 
+const safeguardPause: TuiPrompt = {
+  question: 'Session paused',
+  body: ['Session paused', "Opus 5.5's safeguards flagged this session.", 'Details: `[cyber]`'],
+  safeguardPause: true,
+  options: [
+    { label: 'Switch to Opus 4.8', detail: null, selected: true, freeText: false },
+    { label: 'Edit prompt and retry with Opus 5.5', detail: null, selected: false, freeText: false },
+  ],
+};
+
+test('a safeguard pause shows a countdown toward its first option; choosing keeps control', () => {
+  const onChoose = vi.fn();
+  render(
+    <TuiPromptPanel prompt={safeguardPause} autoAnswerAt={Date.now() + 42_000} onChoose={onChoose} onCancel={vi.fn()} />,
+  );
+
+  const countdown = screen.getByTestId('tui-auto-answer');
+  assert.match(countdown.textContent ?? '', /Auto-selecting\s+Switch to Opus 4\.8\s+in \d+s/);
+
+  fireEvent.click(screen.getByText('Edit prompt and retry with Opus 5.5'));
+  assert.deepEqual(onChoose.mock.calls, [[1]]);
+});
+
+test('an ordinary prompt shows no auto-answer countdown even if a deadline is passed in', () => {
+  render(<TuiPromptPanel prompt={bashPermission} autoAnswerAt={Date.now() + 42_000} onChoose={vi.fn()} onCancel={vi.fn()} />);
+  assert.equal(screen.queryByTestId('tui-auto-answer'), null);
+});
+
 const colorQuestion: TuiPrompt = {
   question: 'Which color do you prefer?',
   body: ['Which color do you prefer?'],

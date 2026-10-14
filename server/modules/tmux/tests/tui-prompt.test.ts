@@ -73,6 +73,27 @@ test('AskUserQuestion review step: a menu without the key-hint footer, recognise
   assert.equal(isInputReady(lines), false);
 });
 
+test('safeguard "Session paused" dialog: parsed despite no footer and a trailing status line', () => {
+  const lines = screen('session-paused');
+  const prompt = parseTuiPrompt(lines);
+  assert.ok(prompt);
+  assert.equal(prompt.safeguardPause, true);
+  assert.equal(prompt.question, 'Session paused');
+  assert.deepEqual(prompt.options.map((option) => [option.label, option.selected, option.freeText]), [
+    ['Switch to Opus 4.8', true, false],
+    ['Edit prompt and retry with Opus 5.5', false, false],
+  ]);
+  assert.ok(prompt.body.some((line) => line.includes('[cyber]')), 'the details stay in the body');
+  assert.deepEqual(keysForOption(prompt, 0), ['Enter']);
+  assert.equal(isInputReady(lines), false);
+});
+
+test('ordinary menus are not flagged as a safeguard pause', () => {
+  for (const name of ['bash-permission', 'ask-question', 'trust-folder', 'multi-select']) {
+    assert.equal(parseTuiPrompt(screen(name))?.safeguardPause, false, name);
+  }
+});
+
 test('permission prompts have no free-text option', () => {
   for (const name of ['bash-permission', 'write-permission', 'trust-folder']) {
     assert.ok(parseTuiPrompt(screen(name))?.options.every((option) => !option.freeText), name);

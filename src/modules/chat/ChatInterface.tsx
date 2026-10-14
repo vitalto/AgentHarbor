@@ -558,6 +558,7 @@ function ChatInterface({
 
           <ChatComposer
           tuiPrompt={viewedTui.prompt}
+          tuiAutoAnswerAt={viewedTui.autoAnswerAt}
           onTuiChoose={chooseTuiOption}
           onTuiKey={pressTuiKey}
           onTuiQuestionStep={switchTuiQuestion}
