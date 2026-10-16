@@ -129,6 +129,9 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
 
       try {
         const entry = JSON.parse(line) as AnyRecord;
+        if (isApiRequestRecord(entry)) {
+          continue;
+        }
         const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
         if (timestamp && !transcript.startedAt) {
           transcript.startedAt = timestamp;
@@ -614,7 +617,7 @@ async function readTranscriptRows(
     }
     try {
       const entry = JSON.parse(line) as AnyRecord;
-      if (entry.sessionId === providerSessionId) {
+      if (entry.sessionId === providerSessionId && !isApiRequestRecord(entry)) {
         rows.push(entry);
       }
     } catch {
@@ -675,6 +678,16 @@ export async function listRunningBackgroundCommands(
 }
 
 /** True for a row the user typed, as opposed to a tool result or an injected note. */
+/**
+ * Claude Code 2.1.302 logs every API request it sends into the transcript
+ * (`api-request`, `api-request-shape`, `api-request-blob`). A blob holds a copy
+ * of a request message, the user's prompt included, as `message.role: 'user'`
+ * with no uuid or timestamp, so it must never be read as a conversation turn.
+ */
+function isApiRequestRecord(row: AnyRecord): boolean {
+  return typeof row.type === 'string' && row.type.startsWith('api-request');
+}
+
 function isUserPromptRow(row: AnyRecord): boolean {
   if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true) {
     return false;
@@ -1428,7 +1441,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
 
   private normalizeMessageRows(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
-    if (!raw) {
+    if (!raw || isApiRequestRecord(raw)) {
       return [];
     }
 

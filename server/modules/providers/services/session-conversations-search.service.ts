@@ -407,7 +407,10 @@ type ClaudeSearchableMessage = {
  * of those rows rather than the raw wrapper syntax.
  */
 function extractClaudeSearchableMessage(entry: AnyRecord): ClaudeSearchableMessage | null {
-  if (!entry.message?.content || entry.isApiErrorMessage) {
+  // Conversation turns only: Claude Code 2.1.302 also logs each API request as
+  // an `api-request-blob` row whose `message` repeats the prompt together with
+  // every system reminder sent with it.
+  if (!entry.message?.content || entry.isApiErrorMessage || (entry.type !== 'user' && entry.type !== 'assistant')) {
     return null;
   }
 
