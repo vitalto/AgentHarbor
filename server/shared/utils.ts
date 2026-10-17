@@ -200,10 +200,10 @@ function toMountedDrivePath(windowsPath: string): string | null {
   return match ? `/mnt/${match[1].toLowerCase()}/${match[2].replace(/\\/g, '/')}` : null;
 }
 
-const FORBIDDEN_MOUNTED_DRIVE_PATHS = FORBIDDEN_WORKSPACE_PATHS
-  .map(toMountedDrivePath)
-  .filter((mountedPath): mountedPath is string => mountedPath !== null)
-  .map((mountedPath) => mountedPath.toLowerCase());
+const FORBIDDEN_MOUNTED_DRIVE_PATHS = FORBIDDEN_WORKSPACE_PATHS.flatMap((forbiddenPath) => {
+  const mountedPath = toMountedDrivePath(forbiddenPath);
+  return mountedPath ? [{ forbiddenPath, caseFoldedMountedPath: mountedPath.toLowerCase() }] : [];
+});
 
 /**
  * Returns the system directory `normalizedPath` is, or lies under, or `null`.
@@ -229,9 +229,11 @@ export function findForbiddenWorkspaceAncestor(normalizedPath: string): string |
 
   const caseFoldedPath = normalizedPath.toLowerCase();
   if (MOUNTED_DRIVE_PATH_PREFIX.test(caseFoldedPath)) {
-    const mountedMatch = FORBIDDEN_MOUNTED_DRIVE_PATHS.find((forbiddenPath) => isUnder(caseFoldedPath, forbiddenPath));
+    const mountedMatch = FORBIDDEN_MOUNTED_DRIVE_PATHS.find(
+      ({ caseFoldedMountedPath }) => isUnder(caseFoldedPath, caseFoldedMountedPath),
+    );
     if (mountedMatch) {
-      return mountedMatch;
+      return mountedMatch.forbiddenPath;
     }
   }
 

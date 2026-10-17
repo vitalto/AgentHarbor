@@ -10,6 +10,11 @@ import type { FolderSuggestion } from '@/shared/types';
 
 const HOME_FOLDER = '~';
 
+// From WSL the Windows "hidden" attribute is invisible, so a drive root's
+// system folders ($RECYCLE.BIN, System Volume Information) are hidden by name.
+const isHiddenFolderName = (name: string) =>
+  name.startsWith('.') || name.startsWith('$') || name === 'System Volume Information';
+
 type FolderBrowserModalProps = {
   isOpen: boolean;
   autoAdvanceOnSelect: boolean;
@@ -80,7 +85,7 @@ export default function FolderBrowserModal({
   const visibleFolders = useMemo(
     () =>
       folders
-        .filter((folder) => showHiddenFolders || !folder.name.startsWith('.'))
+        .filter((folder) => showHiddenFolders || !isHiddenFolderName(folder.name))
         .sort((firstFolder, secondFolder) =>
           firstFolder.name.toLowerCase().localeCompare(secondFolder.name.toLowerCase()),
         ),

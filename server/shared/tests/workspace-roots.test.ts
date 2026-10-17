@@ -31,9 +31,9 @@ test('only single-letter mounts count as Windows drives, and only for a Windows 
 });
 
 test('Windows system folders stay forbidden when reached through the drive mount, in any case', () => {
-  assert.equal(findForbiddenWorkspaceAncestor('/mnt/c/Windows'), '/mnt/c/windows');
-  assert.equal(findForbiddenWorkspaceAncestor('/mnt/c/WINDOWS/System32'), '/mnt/c/windows');
-  assert.equal(findForbiddenWorkspaceAncestor('/mnt/c/Program Files (x86)/Tool'), '/mnt/c/program files (x86)');
+  assert.equal(findForbiddenWorkspaceAncestor('/mnt/c/Windows'), 'C:\\Windows');
+  assert.equal(findForbiddenWorkspaceAncestor('/mnt/c/WINDOWS/System32'), 'C:\\Windows');
+  assert.equal(findForbiddenWorkspaceAncestor('/mnt/c/Program Files (x86)/Tool'), 'C:\\Program Files (x86)');
   assert.equal(findForbiddenWorkspaceAncestor('/mnt/c/Users/alice/SampleProject'), null);
   assert.equal(findForbiddenWorkspaceAncestor('/mnt/d/Develop/SampleProject'), null);
   assert.equal(findForbiddenWorkspaceAncestor('/etc/nginx'), '/etc');
