@@ -1399,6 +1399,8 @@ export type FileTreeWorkspaceGateway = {
   resolveReadOnlyRootPath(candidatePath: string): Promise<string | null>;
   /** Maps a path as Claude wrote it (`C:\…` from a Windows Claude) to one this server can open. */
   toLocalPath(candidatePath: string): string;
+  /** Inverse of `toLocalPath`: the folder browser shows and returns paths the way the user and Claude write them. */
+  toDisplayPath(localPath: string): string;
 };
 
 /**

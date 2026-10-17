@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
@@ -166,9 +166,32 @@ function Sidebar({
     document.body.classList.toggle('pwa-mode', isPWA);
   }, [isPWA]);
 
-  const handleProjectCreated = () => {
+  // A project the wizard created opens as soon as the refreshed list contains it.
+  const projectIdToOpenRef = useRef<string | null>(null);
+
+  const openProjectWhenListed = useCallback((projectId: string) => {
+    const projectToOpen = projects.find((project) => project.projectId === projectId);
+    if (!projectToOpen) {
+      return false;
+    }
+    projectIdToOpenRef.current = null;
+    handleProjectSelect(projectToOpen);
+    return true;
+  }, [handleProjectSelect, projects]);
+
+  const handleProjectCreated = (project?: Record<string, unknown>) => {
+    const projectId = typeof project?.projectId === 'string' ? project.projectId : null;
+    if (projectId && !openProjectWhenListed(projectId)) {
+      projectIdToOpenRef.current = projectId;
+    }
     void paletteOps.refreshProjects();
   };
+
+  useEffect(() => {
+    if (projectIdToOpenRef.current) {
+      openProjectWhenListed(projectIdToOpenRef.current);
+    }
+  }, [openProjectWhenListed]);
 
   // Stable so memo() on the row components can bail out; an inline arrow here
   // would give every row a new callback on each sidebar render.

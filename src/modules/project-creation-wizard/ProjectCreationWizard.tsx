@@ -3,17 +3,24 @@ import { FolderPlus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import ErrorBanner from '@/modules/project-creation-wizard/ErrorBanner';
+import FolderBrowserModal from '@/modules/project-creation-wizard/FolderBrowserModal';
 import StepConfiguration from '@/modules/project-creation-wizard/StepConfiguration';
 import StepReview from '@/modules/project-creation-wizard/StepReview';
 import WizardFooter from '@/modules/project-creation-wizard/WizardFooter';
 import WizardProgress from '@/modules/project-creation-wizard/WizardProgress';
 import { useGithubTokens } from '@/modules/project-creation-wizard/hooks/useGithubTokens';
+import { useWorkspaceLocations } from '@/modules/project-creation-wizard/hooks/useWorkspaceLocations';
 import { cloneWorkspaceWithProgress, createProjectRequest } from '@/modules/project-creation-wizard/utils/workspaceApi';
-import { isCloneWorkflow, shouldShowGithubAuthentication } from '@/modules/project-creation-wizard/utils/pathUtils';
+import {
+  isCloneWorkflow,
+  shouldShowGithubAuthentication,
+  withProjectsDirectoryPlace,
+} from '@/modules/project-creation-wizard/utils/pathUtils';
 import type { TokenMode, WizardFormState, WizardStep } from '@/shared/types';
 
 type ProjectCreationWizardProps = {
   onClose: () => void;
+  /** Also called with just `{ projectId }` when the user picks a folder that already is a project, to open it. */
   onProjectCreated?: (project?: Record<string, unknown>) => void;
 };
 
@@ -36,6 +43,23 @@ export default function ProjectCreationWizard({
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cloneProgress, setCloneProgress] = useState('');
+  const [isChoosingProjectsDirectory, setIsChoosingProjectsDirectory] = useState(false);
+  const {
+    locations,
+    loading: loadingLocations,
+    error: locationsError,
+    changeProjectsDirectory,
+  } = useWorkspaceLocations();
+
+  const openExistingProject = useCallback((projectId: string) => {
+    onProjectCreated?.({ projectId });
+    onClose();
+  }, [onClose, onProjectCreated]);
+
+  const handleProjectsDirectoryChosen = useCallback((directoryPath: string) => {
+    setIsChoosingProjectsDirectory(false);
+    void changeProjectsDirectory(directoryPath);
+  }, [changeProjectsDirectory]);
 
   const shouldLoadTokens =
     step === 1 && shouldShowGithubAuthentication(formState.githubUrl);
@@ -168,6 +192,9 @@ export default function ProjectCreationWizard({
               loadingTokens={loadingTokens}
               tokenLoadError={tokenLoadError}
               isCreating={isCreating}
+              locations={locations}
+              loadingLocations={loadingLocations}
+              locationsError={locationsError}
               onWorkspacePathChange={(workspacePath) => updateField('workspacePath', workspacePath)}
               onGithubUrlChange={(githubUrl) => updateField('githubUrl', githubUrl)}
               onTokenModeChange={updateTokenMode}
@@ -178,6 +205,8 @@ export default function ProjectCreationWizard({
                 updateField('newGithubToken', newGithubToken)
               }
               onAdvanceToConfirm={() => setStep(2)}
+              onOpenProject={openExistingProject}
+              onChangeProjectsDirectory={() => setIsChoosingProjectsDirectory(true)}
             />
           )}
 
@@ -201,6 +230,16 @@ export default function ProjectCreationWizard({
           onCreate={handleCreate}
         />
       </div>
+
+      <FolderBrowserModal
+        isOpen={isChoosingProjectsDirectory}
+        autoAdvanceOnSelect={false}
+        initialPath={locations?.projectsDirectory}
+        places={withProjectsDirectoryPlace(locations?.projectsDirectory ?? null, locations?.places ?? [])}
+        title={t('projectWizard.projectsFolder.browseTitle')}
+        onClose={() => setIsChoosingProjectsDirectory(false)}
+        onFolderSelected={handleProjectsDirectoryChosen}
+      />
     </div>
   );
 }

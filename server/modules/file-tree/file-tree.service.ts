@@ -360,7 +360,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
   return {
     async browseWorkspace(inputPath) {
       const requestedPath = inputPath
-        ? expandWorkspacePath(dependencies.workspace.rootPath, inputPath)
+        ? expandWorkspacePath(dependencies.workspace.rootPath, dependencies.workspace.toLocalPath(inputPath))
         : dependencies.workspace.rootPath;
       const targetPath = path.resolve(requestedPath);
       const resolvedPath = await resolveBrowsablePath(targetPath);
@@ -379,7 +379,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       const fileTree = await buildFileTree(resolvedPath, 1);
       const directories = fileTree
         .filter((item) => item.type === 'directory')
-        .map((item) => ({ path: item.path, name: item.name, type: 'directory' as const }))
+        .map((item) => ({ path: dependencies.workspace.toDisplayPath(item.path), name: item.name, type: 'directory' as const }))
         .sort((left, right) => {
           const leftHidden = left.name.startsWith('.');
           const rightHidden = right.name.startsWith('.');
@@ -402,11 +402,11 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
           ]
         : directories;
 
-      return { path: resolvedPath, suggestions };
+      return { path: dependencies.workspace.toDisplayPath(resolvedPath), suggestions };
     },
 
     async createWorkspaceFolder(folderPath) {
-      const expandedPath = expandWorkspacePath(dependencies.workspace.rootPath, folderPath);
+      const expandedPath = expandWorkspacePath(dependencies.workspace.rootPath, dependencies.workspace.toLocalPath(folderPath));
       const resolvedInput = path.resolve(expandedPath);
       const validation = await dependencies.workspace.validatePath(resolvedInput);
       if (!validation.valid) {
@@ -435,7 +435,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         });
       }
 
-      return { success: true, path: targetPath };
+      return { success: true, path: dependencies.workspace.toDisplayPath(targetPath) };
     },
 
     async readTextFile(projectId, filePath) {

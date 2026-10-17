@@ -2,6 +2,7 @@ import express, { type Request } from 'express';
 
 import type { PendingCloneRequests } from '@/modules/projects/services/project-clone-request.service.js';
 import type { startCloneProject } from '@/modules/projects/services/project-clone.service.js';
+import { toLocalPath } from '@/modules/tmux/index.js';
 import { AppError, asyncHandler } from '@/shared/utils.js';
 
 type ProjectCloneRouterDependencies = {
@@ -57,7 +58,7 @@ export function createProjectCloneRouter(dependencies: ProjectCloneRouterDepende
       const userId = requireAuthenticatedUserId(req);
       const requestBody = req.body as Record<string, unknown>;
       const cloneId = dependencies.pendingCloneRequests.add(userId, {
-        workspacePath: typeof requestBody.path === 'string' ? requestBody.path : '',
+        workspacePath: typeof requestBody.path === 'string' ? toLocalPath(requestBody.path.trim()) : '',
         githubUrl: typeof requestBody.githubUrl === 'string' ? requestBody.githubUrl : '',
         githubTokenId: typeof requestBody.githubTokenId === 'number' ? requestBody.githubTokenId : null,
         newGithubToken: typeof requestBody.newGithubToken === 'string' ? requestBody.newGithubToken : null,

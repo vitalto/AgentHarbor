@@ -141,6 +141,19 @@
   },
   "projectWizard": {
     "title": "Create New Project",
+    "projectsFolder": {
+      "title": "Projects folder",
+      "change": "Change",
+      "choose": "Choose projects folder",
+      "setupHint": "Choose the folder where you keep your projects (for example Develop). Its projects will be listed here, and a new one can be created in it by typing a name.",
+      "searchPlaceholder": "Find a project or type a new name",
+      "createNew": "Create new project \"{{name}}\"",
+      "open": "Open",
+      "empty": "No folders here yet. Type a name to create a project.",
+      "invalidName": "A folder name cannot contain \\ / : * ? \" < > | or end with a dot or space",
+      "anyFolder": "Or any folder on this computer",
+      "browseTitle": "Choose the projects folder"
+    },
     "steps": {
       "type": "Type",
       "configure": "Configure",

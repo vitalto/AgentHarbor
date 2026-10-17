@@ -1,3 +1,5 @@
+import type { WorkspacePlace } from '@/modules/project-creation-wizard/utils/workspaceApi';
+
 const SSH_PREFIXES = ['git@', 'ssh://'];
 const WINDOWS_DRIVE_PATTERN = /^[A-Za-z]:\\?$/;
 
@@ -46,3 +48,28 @@ export const joinFolderPath = (basePath: string, folderName: string): string => 
     normalizedBasePath.includes('\\') && !normalizedBasePath.includes('/') ? '\\' : '/';
   return `${normalizedBasePath}${separator}${folderName.trim()}`;
 };
+
+// Windows forbids these characters and a trailing dot or space; the stricter
+// rule is used everywhere so a name never depends on which side creates it.
+const FORBIDDEN_FOLDER_NAME_CHARACTERS = /[\/:*?"<>|]/;
+
+export const isValidFolderName = (name: string): boolean => {
+  const trimmedName = name.trim();
+  return (
+    trimmedName.length > 0
+    && trimmedName !== '.'
+    && trimmedName !== '..'
+    && !FORBIDDEN_FOLDER_NAME_CHARACTERS.test(trimmedName)
+    && !/[. ]$/.test(trimmedName)
+  );
+};
+
+export const getFolderName = (folderPath: string): string =>
+  folderPath.split(/[\/]/).filter(Boolean).pop() ?? folderPath;
+
+/** Puts the projects folder (labelled by its name, e.g. "Develop") in front of the browser's places. */
+export const withProjectsDirectoryPlace = (
+  projectsDirectory: string | null,
+  places: WorkspacePlace[],
+): WorkspacePlace[] =>
+  projectsDirectory ? [{ label: getFolderName(projectsDirectory), path: projectsDirectory }, ...places] : places;

@@ -225,6 +225,9 @@ export const api = {
   deleteProject: (projectId: string, hardDelete = false) =>
     del(`/api/projects/${projectId}${query({ force: hardDelete })}`),
   createProject: (projectData: unknown) => post('/api/projects/create-project', projectData),
+  workspaceLocations: () => get('/api/projects/workspace-locations'),
+  saveProjectsDirectory: (directoryPath: string | null) =>
+    put('/api/projects/workspace-locations/projects-directory', { path: directoryPath }),
   migrateLegacyProjectStars: (projectIds: string[]) =>
     post('/api/projects/migrate-legacy-stars', { projectIds }),
   toggleProjectStar: (projectId: string) =>

@@ -19,6 +19,32 @@ type CreateFolderResponse = {
   details?: string;
 };
 
+export type WorkspacePlace = {
+  label: string;
+  path: string;
+};
+
+export type ProjectsDirectoryFolder = {
+  name: string;
+  path: string;
+  /** Set when the folder is already an active project. */
+  projectId: string | null;
+};
+
+/** Mirrors the server's WorkspaceLocations. */
+export type WorkspaceLocations = {
+  projectsDirectory: string | null;
+  projectsDirectoryFolders: ProjectsDirectoryFolder[];
+  places: WorkspacePlace[];
+};
+
+type WorkspaceLocationsResponse = {
+  success?: boolean;
+  locations?: WorkspaceLocations;
+  error?: string | CreateProjectApiError;
+  details?: string;
+};
+
 type CreateProjectPayload = {
   path: string;
   customName?: string;
@@ -132,6 +158,20 @@ export const createFolderInFilesystem = async (folderPath: string) => {
 
   return data.path || folderPath;
 };
+
+const readWorkspaceLocations = async (response: Response) => {
+  const data = await parseJson<WorkspaceLocationsResponse>(response);
+  if (!response.ok || !data.locations) {
+    throw new Error(resolveCreateProjectErrorMessage(data) || 'Failed to load project folders');
+  }
+  return data.locations;
+};
+
+export const fetchWorkspaceLocations = async () => readWorkspaceLocations(await api.workspaceLocations());
+
+/** `null` forgets the chosen projects folder. */
+export const saveProjectsDirectory = async (directoryPath: string | null) =>
+  readWorkspaceLocations(await api.saveProjectsDirectory(directoryPath));
 
 export const createProjectRequest = async (payload: CreateProjectPayload) => {
   const response = await api.createProject(payload);

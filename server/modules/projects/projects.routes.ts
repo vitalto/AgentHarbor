@@ -8,6 +8,8 @@ import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils
 import { getArchivedProjectsWithSessions, getProjectSessionsPage, getProjectsWithSessions } from '@/modules/projects/services/projects-with-sessions-fetch.service.js';
 import { deleteOrArchiveProject, restoreArchivedProject } from '@/modules/projects/services/project-delete.service.js';
 import { applyLegacyStarredProjectIds, toggleProjectStar } from '@/modules/projects/services/project-star.service.js';
+import { workspaceLocationsService } from '@/modules/projects/services/workspace-locations.service.js';
+import { toLocalPath } from '@/modules/tmux/index.js';
 
 /**
  * How long a posted clone request waits for its progress stream to be opened.
@@ -93,11 +95,33 @@ router.get(
   }),
 );
 
+router.get(
+  '/workspace-locations',
+  asyncHandler(async (_req, res) => {
+    res.json({ success: true, locations: await workspaceLocationsService.getLocations() });
+  }),
+);
+
+router.put(
+  '/workspace-locations/projects-directory',
+  asyncHandler(async (req, res) => {
+    const requestedPath = (req.body as { path?: unknown } | undefined)?.path;
+    if (requestedPath !== null && (typeof requestedPath !== 'string' || !requestedPath.trim())) {
+      throw new AppError('path must be a folder path or null', {
+        code: 'INVALID_PROJECTS_DIRECTORY',
+        statusCode: 400,
+      });
+    }
+    res.json({ success: true, locations: await workspaceLocationsService.setProjectsDirectory(requestedPath) });
+  }),
+);
+
 router.post(
   '/create-project',
   asyncHandler(async (req, res) => {
     const requestBody = req.body as Record<string, unknown>;
-    const projectPath = typeof requestBody.path === 'string' ? requestBody.path : '';
+    // The wizard shows a Windows Claude's folders as `D:\...`; projects are stored as this server sees them.
+    const projectPath = typeof requestBody.path === 'string' ? toLocalPath(requestBody.path.trim()) : '';
     const customName = typeof requestBody.customName === 'string' ? requestBody.customName : null;
 
     if (requestBody.workspaceType !== undefined) {

@@ -1,16 +1,23 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderOpen } from 'lucide-react';
 
 import { Button, Input } from '@/shared/ui';
 import { browseFilesystemFolders } from '@/modules/project-creation-wizard/utils/workspaceApi';
-import { getSuggestionRootPath } from '@/modules/project-creation-wizard/utils/pathUtils';
+import {
+  getSuggestionRootPath,
+  joinFolderPath,
+  withProjectsDirectoryPlace,
+} from '@/modules/project-creation-wizard/utils/pathUtils';
+import type { WorkspacePlace } from '@/modules/project-creation-wizard/utils/workspaceApi';
 import type { FolderSuggestion } from '@/shared/types';
 import FolderBrowserModal from '@/modules/project-creation-wizard/FolderBrowserModal';
 
 type WorkspacePathFieldProps = {
   value: string;
   disabled?: boolean;
+  projectsDirectory: string | null;
+  places: WorkspacePlace[];
   onChange: (path: string) => void;
   onAdvanceToConfirm: () => void;
 };
@@ -19,6 +26,8 @@ type WorkspacePathFieldProps = {
 export default function WorkspacePathField({
   value,
   disabled = false,
+  projectsDirectory,
+  places,
   onChange,
   onAdvanceToConfirm,
 }: WorkspacePathFieldProps) {
@@ -63,6 +72,11 @@ export default function WorkspacePathField({
     };
   }, [value]);
 
+  const browserPlaces = useMemo(
+    () => withProjectsDirectoryPlace(projectsDirectory, places),
+    [places, projectsDirectory],
+  );
+
   const handleSuggestionSelect = useCallback(
     (suggestion: FolderSuggestion) => {
       onChange(suggestion.path);
@@ -90,7 +104,7 @@ export default function WorkspacePathField({
             type="text"
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            placeholder="/path/to/project/workspace"
+            placeholder={projectsDirectory ? joinFolderPath(projectsDirectory, 'my-project') : '/path/to/project/workspace'}
             className="w-full"
             disabled={disabled}
           />
@@ -126,6 +140,8 @@ export default function WorkspacePathField({
       <FolderBrowserModal
         isOpen={showFolderBrowser}
         autoAdvanceOnSelect={false}
+        initialPath={value.trim() ? getSuggestionRootPath(value) : projectsDirectory}
+        places={browserPlaces}
         onClose={() => setShowFolderBrowser(false)}
         onFolderSelected={handleFolderSelected}
       />

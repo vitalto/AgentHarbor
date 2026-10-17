@@ -5,11 +5,19 @@ import { Eye, EyeOff, FolderOpen, FolderPlus, Loader2, Plus, X } from 'lucide-re
 import { Button, Input } from '@/shared/ui';
 import { browseFilesystemFolders, createFolderInFilesystem } from '@/modules/project-creation-wizard/utils/workspaceApi';
 import { getParentPath, joinFolderPath } from '@/modules/project-creation-wizard/utils/pathUtils';
+import type { WorkspacePlace } from '@/modules/project-creation-wizard/utils/workspaceApi';
 import type { FolderSuggestion } from '@/shared/types';
+
+const HOME_FOLDER = '~';
 
 type FolderBrowserModalProps = {
   isOpen: boolean;
   autoAdvanceOnSelect: boolean;
+  /** Where browsing starts; the home folder when it cannot be opened. */
+  initialPath?: string | null;
+  /** Shortcuts shown above the list: the projects folder, home, each Windows drive. */
+  places?: WorkspacePlace[];
+  title?: string;
   onClose: () => void;
   onFolderSelected: (folderPath: string, advanceToConfirm: boolean) => void;
 };
@@ -18,11 +26,14 @@ type FolderBrowserModalProps = {
 export default function FolderBrowserModal({
   isOpen,
   autoAdvanceOnSelect,
+  initialPath = null,
+  places = [],
+  title,
   onClose,
   onFolderSelected,
 }: FolderBrowserModalProps) {
   const { t } = useTranslation();
-  const [currentPath, setCurrentPath] = useState('~');
+  const [currentPath, setCurrentPath] = useState(HOME_FOLDER);
   const [folders, setFolders] = useState<FolderSuggestion[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [showHiddenFolders, setShowHiddenFolders] = useState(false);
@@ -34,9 +45,9 @@ export default function FolderBrowserModal({
   // Keep the loader stable across locale changes: t lands in a ref so an
   // open browser does not reload and snap back to the home folder when the
   // user switches language.
-  const loadFoldersRef = useRef<(pathToLoad: string) => Promise<void>>();
+  const loadFoldersRef = useRef<(pathToLoad: string, fallbackPath?: string) => Promise<void>>();
 
-  const loadFolders = useCallback(async (pathToLoad: string) => {
+  const loadFolders = useCallback(async (pathToLoad: string, fallbackPath?: string) => {
     setLoadingFolders(true);
     setError(null);
 
@@ -45,6 +56,10 @@ export default function FolderBrowserModal({
       setCurrentPath(result.path);
       setFolders(result.suggestions);
     } catch (loadError) {
+      if (fallbackPath && fallbackPath !== pathToLoad) {
+        await loadFoldersRef.current?.(fallbackPath);
+        return;
+      }
       setError(loadError instanceof Error ? loadError.message : t('folderBrowser.loadFailed'));
     } finally {
       setLoadingFolders(false);
@@ -59,8 +74,8 @@ export default function FolderBrowserModal({
     if (!isOpen) {
       return;
     }
-    void loadFoldersRef.current?.('~');
-  }, [isOpen]);
+    void loadFoldersRef.current?.(initialPath?.trim() || HOME_FOLDER, HOME_FOLDER);
+  }, [initialPath, isOpen]);
 
   const visibleFolders = useMemo(
     () =>
@@ -117,7 +132,7 @@ export default function FolderBrowserModal({
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
               <FolderOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{t('folderBrowser.title')}</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title ?? t('folderBrowser.title')}</h3>
           </div>
 
           <div className="flex items-center gap-2">
@@ -151,6 +166,29 @@ export default function FolderBrowserModal({
             </button>
           </div>
         </div>
+
+        {places.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 border-b border-gray-200 px-4 py-2 dark:border-gray-700">
+            {places.map((place) => {
+              const isCurrent = place.path.toLowerCase() === currentPath.toLowerCase();
+              return (
+                <button
+                  key={`${place.label}:${place.path}`}
+                  type="button"
+                  onClick={() => loadFolders(place.path)}
+                  title={place.path}
+                  className={`rounded-md border px-2.5 py-1 font-mono text-xs transition-colors ${
+                    isCurrent
+                      ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {place.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {showNewFolderInput && (
           <div className="border-b border-gray-200 bg-blue-50 px-4 py-3 dark:border-gray-700 dark:bg-blue-900/20">

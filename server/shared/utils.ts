@@ -127,6 +127,36 @@ export function getGitErrorDetails(error: unknown): string {
  */
 export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
 
+const SINGLE_DRIVE_LETTER = /^[a-z]$/;
+
+/**
+ * A Windows Claude driven from WSL works in Windows folders, so each mounted
+ * Windows drive (`/mnt/c`, `/mnt/d`, ...) is a workspace root next to
+ * `WORKSPACES_ROOT`. Other entries under `/mnt` (`wsl`, `wslg`, a named USB
+ * mount) are not drive letters and stay out.
+ */
+export async function listWindowsDriveRoots(
+  env: NodeJS.ProcessEnv = process.env,
+  mountRoot = '/mnt',
+): Promise<string[]> {
+  if (!/\.exe$/i.test(env.AH_CLAUDE_CMD?.trim() ?? '')) {
+    return [];
+  }
+  try {
+    const entries = await readdir(mountRoot, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isDirectory() && SINGLE_DRIVE_LETTER.test(entry.name))
+      .map((entry) => path.join(mountRoot, entry.name))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+export async function getWorkspaceRoots(): Promise<string[]> {
+  return [WORKSPACES_ROOT, ...await listWindowsDriveRoots()];
+}
+
 /**
  * System-critical paths that must never be used as workspace roots.
  *
@@ -159,6 +189,54 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
   'C:\\System Volume Information',
   'C:\\$Recycle.Bin',
 ];
+
+const WINDOWS_ABSOLUTE_PATH = /^([A-Za-z]):\\(.*)$/;
+const MOUNTED_DRIVE_PATH_PREFIX = /^\/mnt\/[a-z](\/|$)/;
+
+// Under WSL the Windows system folders are reached through the drive mount
+// (`/mnt/c/Windows`), and NTFS ignores case, so `/mnt/c/WINDOWS` is the same folder.
+function toMountedDrivePath(windowsPath: string): string | null {
+  const match = WINDOWS_ABSOLUTE_PATH.exec(windowsPath);
+  return match ? `/mnt/${match[1].toLowerCase()}/${match[2].replace(/\\/g, '/')}` : null;
+}
+
+const FORBIDDEN_MOUNTED_DRIVE_PATHS = FORBIDDEN_WORKSPACE_PATHS
+  .map(toMountedDrivePath)
+  .filter((mountedPath): mountedPath is string => mountedPath !== null)
+  .map((mountedPath) => mountedPath.toLowerCase());
+
+/**
+ * Returns the system directory `normalizedPath` is, or lies under, or `null`.
+ * `/var/tmp` and `/var/folders` (macOS temp) are user-writable and allowed.
+ */
+export function findForbiddenWorkspaceAncestor(normalizedPath: string): string | null {
+  const isUnder = (candidate: string, ancestor: string) =>
+    candidate === ancestor || (ancestor !== '/' && candidate.startsWith(`${ancestor}${path.sep}`));
+
+  for (const forbiddenPath of FORBIDDEN_WORKSPACE_PATHS) {
+    const normalizedForbiddenPath = normalizeProjectPath(forbiddenPath);
+    if (!isUnder(normalizedPath, normalizedForbiddenPath)) {
+      continue;
+    }
+    if (
+      normalizedForbiddenPath === '/var'
+      && (normalizedPath.startsWith('/var/tmp') || normalizedPath.startsWith('/var/folders'))
+    ) {
+      continue;
+    }
+    return forbiddenPath;
+  }
+
+  const caseFoldedPath = normalizedPath.toLowerCase();
+  if (MOUNTED_DRIVE_PATH_PREFIX.test(caseFoldedPath)) {
+    const mountedMatch = FORBIDDEN_MOUNTED_DRIVE_PATHS.find((forbiddenPath) => isUnder(caseFoldedPath, forbiddenPath));
+    if (mountedMatch) {
+      return mountedMatch;
+    }
+  }
+
+  return null;
+}
 
 /**
  * Claude Code's config directory (projects/, sessions/, settings.json,
@@ -332,14 +410,29 @@ export function normalizeProjectPath(inputPath: string): string {
   return normalized.replace(/[\\/]+$/, '');
 }
 
+async function resolveExistingRoots(roots: string[]): Promise<string[]> {
+  const resolvedRoots = await Promise.all(roots.map(async (root) => {
+    try {
+      return normalizeProjectPath(await realpath(root));
+    } catch {
+      return null;
+    }
+  }));
+  return resolvedRoots.filter((root): root is string => root !== null);
+}
+
 /**
  * Validates that a user-supplied workspace path is safe to use.
  *
  * Call this before any filesystem mutation that creates or registers projects.
- * The function resolves symlinks, enforces `WORKSPACES_ROOT` containment, and
- * blocks known system directories.
+ * The function resolves symlinks, requires the path to lie under one of
+ * `workspaceRoots` (by default `WORKSPACES_ROOT` plus the mounted Windows
+ * drives, see `getWorkspaceRoots`), and blocks known system directories.
  */
-export async function validateWorkspacePath(requestedPath: string): Promise<WorkspacePathValidationResult> {
+export async function validateWorkspacePath(
+  requestedPath: string,
+  workspaceRoots?: string[],
+): Promise<WorkspacePathValidationResult> {
   try {
     const normalizedRequestedPath = normalizeProjectPath(requestedPath);
     if (!normalizedRequestedPath) {
@@ -359,25 +452,12 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       };
     }
 
-    for (const forbiddenPath of FORBIDDEN_WORKSPACE_PATHS) {
-      const normalizedForbiddenPath = normalizeProjectPath(forbiddenPath);
-      if (
-        normalizedPath === normalizedForbiddenPath
-        || normalizedPath.startsWith(`${normalizedForbiddenPath}${path.sep}`)
-      ) {
-        // Allow specific user-writable folders under /var.
-        if (
-          normalizedForbiddenPath === '/var'
-          && (normalizedPath.startsWith('/var/tmp') || normalizedPath.startsWith('/var/folders'))
-        ) {
-          continue;
-        }
-
-        return {
-          valid: false,
-          error: `Cannot create workspace in system directory: ${forbiddenPath}`,
-        };
-      }
+    const forbiddenAncestor = findForbiddenWorkspaceAncestor(normalizedPath);
+    if (forbiddenAncestor) {
+      return {
+        valid: false,
+        error: `Cannot create workspace in system directory: ${forbiddenAncestor}`,
+      };
     }
 
     let resolvedPath = normalizeProjectPath(absolutePath);
@@ -402,14 +482,23 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       }
     }
 
-    const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
-    if (
-      !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-      && resolvedPath !== resolvedWorkspaceRoot
-    ) {
+    const resolvedForbiddenAncestor = findForbiddenWorkspaceAncestor(resolvedPath);
+    if (resolvedForbiddenAncestor) {
       return {
         valid: false,
-        error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`,
+        error: `Cannot create workspace in system directory: ${resolvedForbiddenAncestor}`,
+      };
+    }
+
+    const allowedRoots = workspaceRoots ?? await getWorkspaceRoots();
+    const resolvedWorkspaceRoots = await resolveExistingRoots(allowedRoots);
+    const isInsideWorkspaceRoot = (candidatePath: string) => resolvedWorkspaceRoots.some(
+      (root) => candidatePath === root || candidatePath.startsWith(`${root}${path.sep}`),
+    );
+    if (!isInsideWorkspaceRoot(resolvedPath)) {
+      return {
+        valid: false,
+        error: `Workspace path must be within the allowed workspace root: ${allowedRoots.join(', ')}`,
       };
     }
 
@@ -419,11 +508,8 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       if (pathStats.isSymbolicLink()) {
         const symlinkTarget = await readlink(absolutePath);
         const resolvedSymlinkPath = path.resolve(path.dirname(absolutePath), symlinkTarget);
-        const realSymlinkPath = await realpath(resolvedSymlinkPath);
-        if (
-          !realSymlinkPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-          && realSymlinkPath !== resolvedWorkspaceRoot
-        ) {
+        const realSymlinkPath = normalizeProjectPath(await realpath(resolvedSymlinkPath));
+        if (!isInsideWorkspaceRoot(realSymlinkPath)) {
           return {
             valid: false,
             error: 'Symlink target is outside the allowed workspace root',
