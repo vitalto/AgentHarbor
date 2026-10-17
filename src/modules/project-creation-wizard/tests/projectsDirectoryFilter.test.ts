@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 import { test } from 'vitest';
 
-import { isValidFolderName } from '@/modules/project-creation-wizard/utils/pathUtils';
+import { isValidFolderName, withProjectsDirectoryPlace } from '@/modules/project-creation-wizard/utils/pathUtils';
 import { matchProjectsDirectoryFolders } from '@/modules/project-creation-wizard/utils/projectsDirectoryFilter';
 
 const folder = (name: string, projectId: string | null = null) => ({
@@ -36,4 +36,14 @@ test('a name Windows cannot hold is not offered for creation', () => {
   assert.equal(isValidFolderName('trailing.'), false);
   assert.equal(isValidFolderName('..'), false);
   assert.equal(isValidFolderName('a/b'), false);
+  assert.equal(isValidFolderName('a\\b'), false);
+});
+
+test('the projects folder leads the places, labelled by its own name', () => {
+  const places = [{ label: 'C:', path: 'C:\\' }];
+  assert.deepEqual(withProjectsDirectoryPlace('D:\\Develop', places), [
+    { label: 'Develop', path: 'D:\\Develop' },
+    ...places,
+  ]);
+  assert.equal(withProjectsDirectoryPlace(null, places), places);
 });

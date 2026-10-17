@@ -51,7 +51,7 @@ export const joinFolderPath = (basePath: string, folderName: string): string => 
 
 // Windows forbids these characters and a trailing dot or space; the stricter
 // rule is used everywhere so a name never depends on which side creates it.
-const FORBIDDEN_FOLDER_NAME_CHARACTERS = /[\/:*?"<>|]/;
+const FORBIDDEN_FOLDER_NAME_CHARACTERS = /[\\/:*?"<>|]/;
 
 export const isValidFolderName = (name: string): boolean => {
   const trimmedName = name.trim();
@@ -65,7 +65,7 @@ export const isValidFolderName = (name: string): boolean => {
 };
 
 export const getFolderName = (folderPath: string): string =>
-  folderPath.split(/[\/]/).filter(Boolean).pop() ?? folderPath;
+  folderPath.split(/[\\/]/).filter(Boolean).pop() ?? folderPath;
 
 /** Puts the projects folder (labelled by its name, e.g. "Develop") in front of the browser's places. */
 export const withProjectsDirectoryPlace = (
