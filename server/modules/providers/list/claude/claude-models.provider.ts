@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { findAgentWindow } from '@/modules/tmux/index.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderCurrentActiveModel,
@@ -300,9 +301,11 @@ export class ClaudeProviderModels implements IProviderModels {
 
     try {
       const session = sessionsDb.getSessionById(sessionId);
+      // A new session's row gets its transcript path only from the next sync scan; its window knows it from the start.
+      const transcriptPath = session?.jsonl_path ?? (await findAgentWindow(sessionId))?.transcriptPath ?? null;
       // Transcript rows carry Claude's own session id, not the app's.
-      const activeModel = session?.jsonl_path
-        ? await readClaudeSessionModelFromJsonl(session.provider_session_id ?? sessionId, session.jsonl_path)
+      const activeModel = transcriptPath
+        ? await readClaudeSessionModelFromJsonl(session?.provider_session_id ?? sessionId, transcriptPath)
         : null;
       if (activeModel?.model) {
         return activeModel;
