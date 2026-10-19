@@ -8,6 +8,7 @@ import { getAgentConfig } from '@/modules/tmux/agent-config.js';
 import { findSessionHolders, forgetWindowsProcessCache, readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
 import { buildAgentLaunch, writeHookSettings } from '@/modules/tmux/agent-launch.js';
 import {
+  isModelSwitchConfirmation,
   keepUserSelectionSettings,
   LAUNCH_DEFAULT_SELECTION,
   normalizeSelection,
@@ -126,6 +127,32 @@ async function recordAppliedSelection(windowId: string, selection: AgentSelectio
   await tmuxService.setWindowOption(windowId, APPLIED_EFFORT_OPTION, selection.effort);
 }
 
+const MODEL_SWITCH_DIALOG_TIMEOUT_MS = 5_000;
+/** The input box shows again for a moment after /model is sent, before the confirmation replaces it. */
+const MODEL_SWITCH_SETTLED_MS = 1_000;
+
+/** Answers "Switch model?" with yes: the user asked for the model, and the re-read history is the price of it. */
+async function confirmModelSwitch(paneId: string): Promise<void> {
+  const deadline = Date.now() + MODEL_SWITCH_DIALOG_TIMEOUT_MS;
+  let inputBoxSince: number | null = null;
+  while (Date.now() < deadline) {
+    const lines = await tmuxService.capturePane(paneId);
+    if (isModelSwitchConfirmation(lines)) {
+      await tmuxService.sendKeys(paneId, ['Enter']);
+      return;
+    }
+    if (readInputBox(lines) === null) {
+      inputBoxSince = null;
+    } else {
+      inputBoxSince ??= Date.now();
+      if (Date.now() - inputBoxSince >= MODEL_SWITCH_SETTLED_MS) {
+        return;
+      }
+    }
+    await delay(INPUT_POLL_MS);
+  }
+}
+
 /**
  * Brings the window's model and reasoning effort to what the chat sends with,
  * typing /model and /effort when they differ. Called while the input box is
@@ -146,6 +173,9 @@ export async function applyAgentSelection(
     for (const command of commands) {
       await waitForInputReady(appSessionId, pane.paneId);
       await typeIntoAgent(pane.paneId, command);
+      if (command.startsWith('/model ')) {
+        await confirmModelSwitch(pane.paneId);
+      }
     }
     await waitForInputReady(appSessionId, pane.paneId);
   };

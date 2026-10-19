@@ -72,6 +72,16 @@ export function rewritesUserSettings(command: string): boolean {
   return command.startsWith('/model ') || command === '/effort auto';
 }
 
+/**
+ * Whether the screen shows the confirmation `/model` asks for when the
+ * conversation is cached for the current model (Claude Code 2.1.303), with
+ * the cursor on "Yes, switch".
+ */
+export function isModelSwitchConfirmation(lines: string[]): boolean {
+  return lines.some((line) => line.trim() === 'Switch model?')
+    && lines.some((line) => /^\s*>\s*1\.\s+Yes, switch\b/.test(line));
+}
+
 /** The user-settings keys those commands rewrite; the app means its choice for one session only. */
 const SELECTION_SETTING_KEYS = ['model', 'effortLevel', 'modelSettings'] as const;
 

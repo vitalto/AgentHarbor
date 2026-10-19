@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  isModelSwitchConfirmation,
   keepUserSelectionSettings,
   LAUNCH_DEFAULT_SELECTION,
   normalizeSelection,
@@ -97,4 +98,22 @@ test('settings rewritten by the typed commands are restored once Claude has writ
   });
 
   assert.deepEqual(JSON.parse(await readFile(settingsPath, 'utf8')), { model: 'opus', theme: 'dark' });
+});
+
+test('the "Switch model?" confirmation is recognised with the cursor on yes', () => {
+  // Captured from Claude Code 2.1.303 after /model sonnet in a conversation cached for Haiku.
+  const screen = [
+    '● PONG',
+    '✻ Baked for 1s · done 22:14',
+    '▔'.repeat(80),
+    '   Switch model?',
+    '   Your next response will be slower and use more tokens',
+    '   This conversation is cached for the current model. Switching to Sonnet 5.5',
+    '   means the full history gets re-read on your next message.',
+    '   > 1. Yes, switch to Sonnet 5.5',
+    '     2. No, go back',
+  ];
+  assert.equal(isModelSwitchConfirmation(screen), true);
+  assert.equal(isModelSwitchConfirmation(screen.map((line) => line.replace('> 1.', '  1.').replace('  2.', '> 2.'))), false);
+  assert.equal(isModelSwitchConfirmation(['> ', '────', '  ⏵⏵ bypass permissions on']), false);
 });
