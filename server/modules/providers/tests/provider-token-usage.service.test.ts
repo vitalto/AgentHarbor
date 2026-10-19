@@ -147,6 +147,16 @@ test('the Claude summarizer reports zero for a transcript with no assistant turn
   assert.equal(usage.total, 200_000);
 });
 
+test('without CONTEXT_WINDOW the window follows the model of the newest turn', () => {
+  const turnBy = (model: string) => [{ type: 'assistant', message: { model, usage: { input_tokens: 10, output_tokens: 1 } } }];
+
+  assert.equal(summarizeClaudeTokenUsage(turnBy('claude-opus-5-5'), undefined).total, 1_000_000);
+  assert.equal(summarizeClaudeTokenUsage(turnBy('claude-haiku-5-5'), undefined).total, 1_000_000);
+  assert.equal(summarizeClaudeTokenUsage(turnBy('claude-opus-5'), undefined).total, 1_000_000);
+  assert.equal(summarizeClaudeTokenUsage(turnBy('claude-haiku-4-5'), undefined).total, 200_000);
+  assert.equal(summarizeClaudeTokenUsage(turnBy('claude-opus-5-5'), '300000').total, 300_000);
+});
+
 /** Padding rows large enough to push earlier rows out of the 4MB tail window. */
 function paddingLines(totalBytes: number): string {
   const line = JSON.stringify({ type: 'attachment', filler: 'x'.repeat(4096) });

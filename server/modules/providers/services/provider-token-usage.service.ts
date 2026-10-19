@@ -83,6 +83,13 @@ const defaultDependencies: ProviderTokenUsageServiceDependencies = {
     sessionsDb.isProviderSessionSuperseded(providerSessionId, provider),
 };
 
+const CLAUDE_5_GENERATION = /^claude-[a-z]+-5(?:-|$)/;
+
+/** Claude Code gives the Claude 5 generation a 1M window (its /context says "1m tokens"); older models only as a `[1m]` variant. */
+export function claudeContextWindowForModel(model: string | undefined): number {
+  return model && (CLAUDE_5_GENERATION.test(model) || model.endsWith('[1m]')) ? 1_000_000 : 200_000;
+}
+
 function readUsageNumber(value: unknown): number {
   const parsedValue = Number(value);
   return Number.isFinite(parsedValue) ? parsedValue : 0;
@@ -109,6 +116,7 @@ export function summarizeClaudeTokenUsage(
   let outputTokens = 0;
   let cacheReadTokens = 0;
   let cacheCreationTokens = 0;
+  let model: string | undefined;
 
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
@@ -148,11 +156,12 @@ export function summarizeClaudeTokenUsage(
     cacheCreationTokens = rowCacheCreationTokens;
     inputTokens = rowInputTokens;
     outputTokens = rowOutputTokens;
+    model = typeof entry.message?.model === 'string' ? entry.message.model : undefined;
     break;
   }
 
   const parsedContextWindow = Number.parseInt(configuredContextWindow ?? '', 10);
-  const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160_000;
+  const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : claudeContextWindowForModel(model);
   const cacheTokens = cacheReadTokens + cacheCreationTokens;
 
   return {
