@@ -3,7 +3,9 @@ import { timingSafeEqual } from 'node:crypto';
 
 import jwt from 'jsonwebtoken';
 
-import { userDb, appConfigDb } from '../database/index.js';
+import { apiKeysDb, userDb, appConfigDb } from '../database/index.js';
+
+const API_KEY_PREFIX = 'ck_';
 
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
@@ -40,6 +42,18 @@ const authenticateToken = async (req, res, next) => {
       error: 'Access denied. No token provided.',
       code: 'AUTH_TOKEN_INVALID',
     });
+  }
+
+  // Scripts and the `ah` CLI authenticate with a key from Settings -> API keys instead of a login JWT.
+  if (token.startsWith(API_KEY_PREFIX)) {
+    const keyOwner = apiKeysDb.validateApiKey(token);
+    const user = keyOwner ? userDb.getUserById(keyOwner.id) : null;
+    if (!user) {
+      res.setHeader('X-Auth-Error', 'invalid-token');
+      return res.status(401).json({ error: 'Invalid API key', code: 'AUTH_TOKEN_INVALID' });
+    }
+    req.user = user;
+    return next();
   }
 
   try {

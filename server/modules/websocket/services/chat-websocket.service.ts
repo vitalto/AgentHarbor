@@ -115,7 +115,7 @@ export type TerminalGateway = {
   typeWhileBusy(sessionId: string, text: string, attachments: BusySendAttachments): Promise<boolean>;
 };
 
-type ChatWebSocketDependencies = {
+export type ChatWebSocketDependencies = {
   /** Central dispatcher for every provider SDK/CLI runtime. */
   runtime: ProviderRuntimeGateway;
   terminal?: TerminalGateway;
@@ -211,10 +211,30 @@ type ResolvedSendTarget = {
   provider: LLMProvider;
 };
 
-/**
- * Shared front half of `chat.send` and `chat.edit-send`: the session row and
- * provider come from the database, never from the client.
- */
+type SendTargetError = { code: string; error: string };
+
+/** The session row and provider come from the database, never from the client. */
+function findSendTarget(
+  sessionId: string,
+  dependencies: ChatWebSocketDependencies,
+): ResolvedSendTarget | SendTargetError {
+  const session = sessionsDb.getSessionById(sessionId);
+  if (!session) {
+    return {
+      code: 'SESSION_NOT_FOUND',
+      error: `Session "${sessionId}" was not found. Create it via POST /api/providers/sessions first.`,
+    };
+  }
+
+  const provider = session.provider as LLMProvider;
+  if (!dependencies.runtime.hasRuntime(provider)) {
+    return { code: 'UNSUPPORTED_PROVIDER', error: `Provider "${provider}" is not available.` };
+  }
+
+  return { sessionId, session, provider };
+}
+
+/** Shared front half of `chat.send` and `chat.edit-send`. */
 function resolveSendTarget(
   ws: WebSocket,
   data: AnyRecord,
@@ -227,24 +247,47 @@ function resolveSendTarget(
     return null;
   }
 
-  const session = sessionsDb.getSessionById(sessionId);
-  if (!session) {
-    sendProtocolError(
-      ws,
-      'SESSION_NOT_FOUND',
-      `Session "${sessionId}" was not found. Create it via POST /api/providers/sessions first.`,
-      sessionId
-    );
+  const target = findSendTarget(sessionId, dependencies);
+  if ('code' in target) {
+    sendProtocolError(ws, target.code, target.error, sessionId);
     return null;
   }
+  return target;
+}
 
-  const provider = session.provider as LLMProvider;
-  if (!dependencies.runtime.hasRuntime(provider)) {
-    sendProtocolError(ws, 'UNSUPPORTED_PROVIDER', `Provider "${provider}" is not available.`, sessionId);
-    return null;
+export type SocketlessSendResult =
+  | { delivery: 'started' | 'queued' }
+  | SendTargetError;
+
+/**
+ * `chat.send` for callers without a socket (the `ah` CLI over REST). Returns
+ * once the message is handed over: a busy session queues it in the TUI (with
+ * the model it already runs), an idle one starts the turn in the background.
+ */
+export async function sendWithoutSocket(
+  userId: string | number | null,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies,
+): Promise<SocketlessSendResult> {
+  const sessionId = readRequiredSessionId(data);
+  if (!sessionId) {
+    return { code: 'SESSION_ID_REQUIRED', error: 'A sessionId is required.' };
+  }
+  const target = findSendTarget(sessionId, dependencies);
+  if ('code' in target) {
+    return target;
   }
 
-  return { sessionId, session, provider };
+  if (chatRunRegistry.isProcessing(sessionId)) {
+    const content = typeof data.content === 'string' ? data.content : '';
+    if (await dependencies.terminal?.typeWhileBusy(sessionId, content, { images: [], files: [] })) {
+      return { delivery: 'queued' };
+    }
+    return { code: 'RUN_IN_PROGRESS', error: `Session "${sessionId}" is busy and has no window to queue into.` };
+  }
+
+  void dispatchRun(null, userId, sessionId, target.session, data, dependencies);
+  return { delivery: 'started' };
 }
 
 /**

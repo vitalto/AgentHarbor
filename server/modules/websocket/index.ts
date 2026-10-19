@@ -5,4 +5,5 @@ export { chatRunRegistry } from './services/chat-run-registry.service.js';
 // sessions it (re)indexed from disk through the same builder the chat gateway
 // uses, so both paths put the identical delta on the wire.
 export { broadcastSessionUpserted, broadcastSessionUpsertedBatch } from './services/session-upsert-broadcast.service.js';
-export type { ProviderRuntimeGateway } from './services/chat-websocket.service.js';
+export type { ChatWebSocketDependencies, ProviderRuntimeGateway } from './services/chat-websocket.service.js';
+export { createChatRouter } from './chat.routes.js';

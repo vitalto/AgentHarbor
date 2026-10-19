@@ -6,9 +6,11 @@
   "type": "module",
   "main": "dist-server/server/index.js",
   "bin": {
-    "agentharbor": "dist-server/server/modules/cli/cli.js"
+    "agentharbor": "dist-server/server/modules/cli/cli.js",
+    "ah": "bin/ah.mjs"
   },
   "files": [
+    "bin/",
     "server/",
     "shared/",
     "dist/",

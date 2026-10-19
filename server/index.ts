@@ -26,7 +26,7 @@ import {
     startIdleReaper,
     writeHookSettings,
 } from '@/modules/tmux/index.js';
-import { chatRunRegistry, createWebSocketServer } from '@/modules/websocket/index.js';
+import { chatRunRegistry, createChatRouter, createWebSocketServer, type ChatWebSocketDependencies } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
 
@@ -122,28 +122,30 @@ startBackgroundCommandReminders();
 // (agents, workflows, backgrounded commands) is still reporting through it.
 chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackgroundWork(sessionId));
 
+const chatGateway: ChatWebSocketDependencies = {
+    runtime: providerRuntimeService,
+    terminal: {
+        watch: (sessionId, socket) => sessionMonitor.watch(sessionId, socket),
+        unwatchSocket: (socket) => sessionMonitor.unwatchSocket(socket),
+        chooseOption: (sessionId, optionIndex, freeText) => sessionMonitor.chooseOption(sessionId, optionIndex, freeText),
+        switchQuestion: (sessionId, step) => sessionMonitor.switchQuestion(sessionId, step),
+        sendKeys: (sessionId, keys) => sessionMonitor.sendKeys(sessionId, keys),
+        typeWhileBusy: async (sessionId, text, attachments) => {
+            const pane = await findAgentWindow(sessionId);
+            if (!pane) {
+                return false;
+            }
+            await typePromptWithAttachments(pane.pane.paneId, text, attachments);
+            return true;
+        },
+    },
+};
+
 createWebSocketServer(server, {
     verifyClient: {
         authenticateWebSocket,
     },
-    chat: {
-        runtime: providerRuntimeService,
-        terminal: {
-            watch: (sessionId, socket) => sessionMonitor.watch(sessionId, socket),
-            unwatchSocket: (socket) => sessionMonitor.unwatchSocket(socket),
-            chooseOption: (sessionId, optionIndex, freeText) => sessionMonitor.chooseOption(sessionId, optionIndex, freeText),
-            switchQuestion: (sessionId, step) => sessionMonitor.switchQuestion(sessionId, step),
-            sendKeys: (sessionId, keys) => sessionMonitor.sendKeys(sessionId, keys),
-            typeWhileBusy: async (sessionId, text, attachments) => {
-                const pane = await findAgentWindow(sessionId);
-                if (!pane) {
-                    return false;
-                }
-                await typePromptWithAttachments(pane.pane.paneId, text, attachments);
-                return true;
-            },
-        },
-    },
+    chat: chatGateway,
     getPluginPort,
 });
 
@@ -229,6 +231,9 @@ app.use('/api/plugins', authenticateToken, parseAuthenticatedBody, pluginsRoutes
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, parseAuthenticatedBody, providerRoutes);
+
+// Sending to a session without a websocket (the `ah` CLI)
+app.use('/api/chat', authenticateToken, parseAuthenticatedBody, createChatRouter(chatGateway));
 
 // Serve public files
 app.use(express.static(path.join(APP_ROOT, 'public')));
