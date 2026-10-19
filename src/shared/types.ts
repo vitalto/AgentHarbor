@@ -700,6 +700,8 @@ export type ModelCommandData = {
     provider?: string;
     providerLabel?: string;
     model?: string;
+    /** Model id that wrote the session's latest reply; null before the first one. */
+    answeringModel?: string | null;
   };
   available?: Partial<Record<LLMProvider, string[]>>;
   availableModels?: string[];
@@ -727,6 +729,7 @@ export type StatusCommandData = {
   packageName?: string;
   uptime?: string;
   model?: string;
+  answeringModel?: string | null;
   provider?: string;
   nodeVersion?: string;
   platform?: string;

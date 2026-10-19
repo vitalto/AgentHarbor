@@ -1,6 +1,7 @@
 import { sessionsDb } from '@/modules/database/index.js';
 import { listRunningBackgroundCommands } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import {
+  applyAgentSelection,
   ensureAgentWindow,
   findSessionHolders,
   getSessionMonitor,
@@ -50,6 +51,7 @@ export const claudeTmuxRuntime: IProviderRuntime = {
     try {
       const pane = await ensureAgentWindow(appSessionId);
       await waitForInputReady(appSessionId, pane.pane.paneId);
+      await applyAgentSelection(appSessionId, pane.pane, { model: options.model, effort: options.effort });
       const turnEnded = getSessionMonitor().beginTurn(appSessionId);
       await typePromptWithAttachments(pane.pane.paneId, command, options);
       return await turnEnded;

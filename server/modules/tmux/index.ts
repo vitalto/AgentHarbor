@@ -9,6 +9,7 @@ export { stageAttachmentForClaude } from '@/modules/tmux/attachment-staging.js';
 export {
   AgentBusyElsewhereError,
   AgentWindowError,
+  applyAgentSelection,
   clearAgentConversation,
   closeAgentWindow,
   ensureAgentWindow,

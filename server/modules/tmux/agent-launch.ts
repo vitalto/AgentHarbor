@@ -68,8 +68,9 @@ export type AgentLaunch = { command: string; env: Record<string, string> };
 
 export function buildAgentLaunch(
   config: AgentConfig,
-  input: { resumeSessionId?: string; newSessionId?: string },
+  input: { resumeSessionId?: string; newSessionId?: string; selectionArgs?: string[] },
 ): AgentLaunch {
+  const selectionArgs = (input.selectionArgs ?? []).map((arg) => ` ${quoteForShell(arg)}`).join('');
   const sessionArgs = input.resumeSessionId
     ? ` --resume ${quoteForShell(input.resumeSessionId)}`
     : input.newSessionId
@@ -79,7 +80,7 @@ export function buildAgentLaunch(
 
   // `exec` makes Claude the pane process, so `$$` here equals tmux's #{pane_pid}.
   const extraArgs = config.claudeArgs ? ` ${config.claudeArgs}` : '';
-  const command = `export AH_PANE="\${TMUX_PANE#%}-$$"; exec ${quoteForShell(config.claudeCommand)}${settingsArg}${extraArgs}${sessionArgs}`;
+  const command = `export AH_PANE="\${TMUX_PANE#%}-$$"; exec ${quoteForShell(config.claudeCommand)}${settingsArg}${extraArgs}${selectionArgs}${sessionArgs}`;
 
   const env: Record<string, string> = { AH_STATE_DIR: config.stateDir };
   if (config.windowsClaude) {

@@ -96,6 +96,9 @@ test('launch command registers the pane through the hook', async (t) => {
   const fresh = buildAgentLaunch({ ...config, windowsClaude: false, claudeCommand: 'claude' }, { newSessionId: 'n1' });
   assert.match(fresh.command, /exec 'claude' --settings '.+' --session-id 'n1'$/);
   assert.equal(fresh.env.WSLENV, undefined);
+
+  const chosen = buildAgentLaunch(config, { resumeSessionId: 'abc', selectionArgs: ['--model', 'sonnet[1m]', '--effort', 'max'] });
+  assert.match(chosen.command, / '--model' 'sonnet\[1m\]' '--effort' 'max' --resume 'abc'$/);
 });
 
 test('the PreToolUse hook sends UAC attempts to elevate, only once the broker is installed', async (t) => {

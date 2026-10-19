@@ -13,7 +13,7 @@ import { createCommandsRouter } from '../commands.routes.js';
  * session wins, otherwise the client's requested model, otherwise the catalog
  * default.
  */
-function createModelsService(sessionModels: Record<string, string> = {}) {
+function createModelsService(sessionModels: Record<string, string> = {}, answeringModels: Record<string, string> = {}) {
   return {
     getProviderModels: async () => ({
       OPTIONS: [{ value: 'default', label: 'Default' }],
@@ -35,6 +35,7 @@ function createModelsService(sessionModels: Record<string, string> = {}) {
       };
     },
     resolveResumeModel: async () => undefined,
+    readAnsweringModel: async (_provider: string, sessionId?: string | null) => (sessionId && answeringModels[sessionId]) || null,
   };
 }
 
@@ -42,6 +43,7 @@ async function executeCommand(
   commandName: string,
   context: Record<string, unknown>,
   sessionModels: Record<string, string> = {},
+  answeringModels: Record<string, string> = {},
 ): Promise<Record<string, unknown>> {
   const router = createCommandsRouter({
     fileSystem: {
@@ -49,7 +51,7 @@ async function executeCommand(
     } as unknown as typeof import('node:fs/promises'),
     homeDirectory: () => '/home/test',
     appRoot: '/app',
-    models: createModelsService(sessionModels) as never,
+    models: createModelsService(sessionModels, answeringModels) as never,
     runtime: {
       uptime: () => 0,
       memoryUsage: () => ({ rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 }),
@@ -111,4 +113,21 @@ test('cost and status commands report the same resolved model as /models', async
 
   assert.equal((cost.data as { model: string }).model, 'haiku');
   assert.equal((status.data as { model: string }).model, 'haiku');
+});
+
+test('models and status name the model that wrote the last reply, so "default" is not the whole answer', async () => {
+  const context = { provider: 'claude', sessionId: 'session-1', model: 'default' };
+  const answeringModels = { 'session-1': 'claude-opus-5-5' };
+
+  const models = await executeCommand('/models', context, {}, answeringModels);
+  const status = await executeCommand('/status', context, {}, answeringModels);
+
+  const modelsData = models.data as { current: { model: string; answeringModel: string | null }; message: string };
+  assert.equal(modelsData.current.model, 'default');
+  assert.equal(modelsData.current.answeringModel, 'claude-opus-5-5');
+  assert.equal(modelsData.message, 'Current model: default (last reply: claude-opus-5-5)');
+  assert.equal((status.data as { answeringModel: string | null }).answeringModel, 'claude-opus-5-5');
+
+  const fresh = await executeCommand('/models', { provider: 'claude', model: 'default' });
+  assert.equal((fresh.data as { current: { answeringModel: string | null } }).current.answeringModel, null);
 });

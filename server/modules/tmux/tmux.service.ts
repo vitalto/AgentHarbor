@@ -173,6 +173,17 @@ export function createTmuxService(options: { socketName?: string; session?: stri
       await run(['select-window', '-t', windowId]);
     },
 
+    /** A user option (`@name`) on the window: it lives as long as the window, across app restarts. */
+    async setWindowOption(windowId: string, name: string, value: string): Promise<void> {
+      await run(['set-option', '-w', '-t', windowId, name, value]);
+    },
+
+    /** Null when the option was never set on the window. */
+    async readWindowOption(windowId: string, name: string): Promise<string | null> {
+      const value = (await run(['show-options', '-wqv', '-t', windowId, name])).replace(/\n$/, '');
+      return value === '' ? null : value;
+    },
+
     /** One bracketed paste, so multi-line text reaches the TUI as a single prompt. */
     async pasteText(paneId: string, text: string): Promise<void> {
       const bufferName = `ah-${randomUUID()}`;

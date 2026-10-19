@@ -7,6 +7,15 @@ import { sessionsDb } from '@/modules/database/index.js';
 import { getAgentConfig } from '@/modules/tmux/agent-config.js';
 import { findSessionHolders, forgetWindowsProcessCache, readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
 import { buildAgentLaunch, writeHookSettings } from '@/modules/tmux/agent-launch.js';
+import {
+  keepUserSelectionSettings,
+  LAUNCH_DEFAULT_SELECTION,
+  normalizeSelection,
+  rewritesUserSettings,
+  selectionCommands,
+  selectionLaunch,
+  type AgentSelection,
+} from '@/modules/tmux/agent-selection.js';
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { toLocalPath } from '@/modules/tmux/path-translation.js';
 import { getSessionMonitor } from '@/modules/tmux/session-monitor.service.js';
@@ -99,6 +108,55 @@ export function assertNotOpenElsewhere(holders: ClaudeProcess[]): void {
   );
 }
 
+/** Window options holding what the TUI was last told to run with; they outlive app restarts like the window does. */
+const APPLIED_MODEL_OPTION = '@ah-model';
+const APPLIED_EFFORT_OPTION = '@ah-effort';
+
+async function readAppliedSelection(windowId: string): Promise<AgentSelection> {
+  const [model, effort] = await Promise.all([
+    tmuxService.readWindowOption(windowId, APPLIED_MODEL_OPTION),
+    tmuxService.readWindowOption(windowId, APPLIED_EFFORT_OPTION),
+  ]);
+  // Windows from before these options existed were started without --model and --effort.
+  return { model: model ?? LAUNCH_DEFAULT_SELECTION.model, effort: effort ?? LAUNCH_DEFAULT_SELECTION.effort };
+}
+
+async function recordAppliedSelection(windowId: string, selection: AgentSelection): Promise<void> {
+  await tmuxService.setWindowOption(windowId, APPLIED_MODEL_OPTION, selection.model);
+  await tmuxService.setWindowOption(windowId, APPLIED_EFFORT_OPTION, selection.effort);
+}
+
+/**
+ * Brings the window's model and reasoning effort to what the chat sends with,
+ * typing /model and /effort when they differ. Called while the input box is
+ * ready, before the message itself is typed.
+ */
+export async function applyAgentSelection(
+  appSessionId: string,
+  pane: AgentPane,
+  requested: { model?: unknown; effort?: unknown },
+): Promise<void> {
+  const applied = await readAppliedSelection(pane.windowId);
+  const wanted = normalizeSelection(requested, applied);
+  const commands = selectionCommands(applied, wanted);
+  if (commands.length === 0) {
+    return;
+  }
+  const typeCommands = async () => {
+    for (const command of commands) {
+      await waitForInputReady(appSessionId, pane.paneId);
+      await typeIntoAgent(pane.paneId, command);
+    }
+    await waitForInputReady(appSessionId, pane.paneId);
+  };
+  if (commands.some(rewritesUserSettings)) {
+    await keepUserSelectionSettings(path.join(getAgentConfig().claudeHome, 'settings.json'), typeCommands);
+  } else {
+    await typeCommands();
+  }
+  await recordAppliedSelection(pane.windowId, wanted);
+}
+
 type StartingWindow ={ pane: AgentPane; registration: Promise<PaneSession> };
 
 /** One launch per session at a time: the chat and the terminal tab may both ask for the same window. */
@@ -126,13 +184,18 @@ async function launchAgentWindow(appSessionId: string): Promise<StartingWindow> 
 
   const cwd = toLocalPath(session.project_path ?? '', config) || process.env.HOME || '/';
   writeHookSettings(config);
-  const launch = buildAgentLaunch(config, isNewConversation ? { newSessionId: providerSessionId } : { resumeSessionId: providerSessionId });
+  const selection = selectionLaunch(normalizeSelection(session, LAUNCH_DEFAULT_SELECTION));
+  const launch = buildAgentLaunch(config, {
+    ...(isNewConversation ? { newSessionId: providerSessionId } : { resumeSessionId: providerSessionId }),
+    selectionArgs: selection.args,
+  });
   const pane = await tmuxService.newWindow({
     cwd,
     name: await uniqueWindowName(path.basename(cwd) || 'claude'),
     command: launch.command,
     env: launch.env,
   });
+  await recordAppliedSelection(pane.windowId, selection.applied);
 
   const expectedSessionId = providerSessionId;
   const registration = waitForRegistration(appSessionId, pane.paneId).then((registered) => {

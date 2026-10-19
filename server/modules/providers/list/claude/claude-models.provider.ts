@@ -214,7 +214,8 @@ const extractClaudeModelFromTextContent = (content: string): string | null => {
   const localCommandStdout = extractTaggedContent(content, 'local-command-stdout');
   if (localCommandStdout !== null) {
     const cleanedStdout = stripAnsiSequences(localCommandStdout).replace(/\s+/g, ' ').trim();
-    const changedModel = /(?:set|changed|switched)\s+model\s+to\s+(.+?)\.?$/i.exec(cleanedStdout);
+    // Claude Code 2.1.303 says "Set model to Fable 5.1 and saved as your default for new sessions".
+    const changedModel = /(?:set|changed|switched)\s+model\s+to\s+(.+?)(?:\s+and\s+saved\s.*)?\.?$/i.exec(cleanedStdout);
     const stdoutModel = changedModel?.[1]?.trim();
     // A placeholder stdout hit must not shadow a real <model> tag further down.
     if (stdoutModel && !isPlaceholderProviderModel(stdoutModel)) {
@@ -298,9 +299,10 @@ export class ClaudeProviderModels implements IProviderModels {
     }
 
     try {
-      const jsonlPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
-      const activeModel = jsonlPath
-        ? await readClaudeSessionModelFromJsonl(sessionId, jsonlPath)
+      const session = sessionsDb.getSessionById(sessionId);
+      // Transcript rows carry Claude's own session id, not the app's.
+      const activeModel = session?.jsonl_path
+        ? await readClaudeSessionModelFromJsonl(session.provider_session_id ?? sessionId, session.jsonl_path)
         : null;
       if (activeModel?.model) {
         return activeModel;

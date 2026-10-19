@@ -85,3 +85,11 @@ test('falls back to the message model when every content hit is a placeholder', 
     'claude-sonnet-5',
   );
 });
+
+test('a /model switch names the model without the "saved as your default" tail', () => {
+  const text = '<local-command-stdout>Set model to Fable 5.1 and saved as your default for new sessions</local-command-stdout>';
+  assert.equal(
+    extractClaudeEventModel({ sessionId: SESSION_ID, message: { content: text } }, SESSION_ID),
+    'Fable 5.1',
+  );
+});

@@ -285,7 +285,7 @@ function ModelsContent({
       const result = await onSelectProviderModel(currentProvider, model, currentSessionId);
       if (result.scope === 'session') {
         setPendingSessionModel(result.model);
-        setSelectionNotice(`This session now uses ${result.model}.`);
+        setSelectionNotice(`This session switches to ${result.model} with your next message.`);
         return;
       }
 
@@ -325,6 +325,11 @@ function ModelsContent({
               </span>
             )}
           </p>
+          {data?.current?.answeringModel && (
+            <p className="mt-0.5 break-all text-[11px] text-muted-foreground">
+              Last reply by <span className="font-mono text-foreground">{data.current.answeringModel}</span>
+            </p>
+          )}
         </div>
         <Button
           type="button"
@@ -501,6 +506,7 @@ function StatusContent({ data }: { data: StatusCommandData }) {
     { label: 'Uptime', value: data.uptime || 'Unknown', icon: Timer },
     { label: 'Provider', value: getProviderLabel(data.provider, data.provider || 'Unknown'), icon: Server, tone: 'primary' as const },
     { label: 'Model', value: data.model || 'Unknown', icon: Cpu },
+    ...(data.answeringModel ? [{ label: 'Last reply by', value: data.answeringModel, icon: Cpu }] : []),
     { label: 'Node.js', value: data.nodeVersion || 'Unknown', icon: TerminalSquare },
     { label: 'Platform', value: data.platform || 'Unknown', icon: Activity },
     { label: 'Memory', value: typeof memoryRssMb === 'number' ? `${memoryRssMb} MB RSS` : 'Unknown', icon: Gauge },
