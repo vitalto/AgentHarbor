@@ -95,6 +95,28 @@ For development with hot reload: `npm run dev` (Vite on port 5173 plus the API s
 The package also exposes an `agentharbor` command (`agentharbor status`, `agentharbor --port 8080`,
 `agentharbor help`) when installed with `npm link` or `npm install -g .`.
 
+### Driving sessions from a shell: `ah`
+
+`ah` (`bin/ah.mjs`, plain Node 18+, no dependencies) lets an agent, or you, work with other
+sessions: hand a task over to a project the current one depends on, or continue a long job in a fresh
+session when the context fills up.
+
+```bash
+ah projects                                   # registered projects
+ah ls [--project P] [--recent N]              # live agents with busy/idle, or recent conversations
+ah new [--project P] [--model M --effort E] "task"   # project defaults to the current directory
+ah send <session> [--model M --effort E] "text"      # a busy session queues it
+ah read <session> [--last N]                  # last N messages
+ah usage [session]                            # context use; default: the calling Claude session
+ah models                                     # values for --model / --effort
+```
+
+Without the text argument `new` and `send` read the message from stdin. Create a key in
+Settings -> API keys and save it as `~/.agentharbor/cli.json`:
+`{"url": "http://localhost:3001", "apiKey": "ck_..."}` (`AH_URL` / `AH_API_KEY` override it).
+`skills/agentharbor` is a Claude Code skill that teaches agents these commands; copy or link it into
+`~/.claude/skills/`.
+
 ### Configuration
 
 Set variables in the environment or in a `.env` file in the repository root (see `.env.example`).
@@ -111,6 +133,7 @@ Set variables in the environment or in a `.env` file in the repository root (see
 | `AH_BACKGROUND_REMINDER_MINUTES` | `60` | Type a short reminder into an agent whose turn is over while a background command keeps running: after this many minutes, then 3x, 7x… from the start (`0` = never). Default only, like the ones above |
 | `AH_PROJECTS_DIR` | *(none)* | Folder the New Project wizard lists first, to open a project from it or create one by typing a name (an absolute path; with a Windows Claude also `D:\Develop`). Default only: choosing another folder in the wizard overrides it |
 | `WORKSPACES_ROOT` | home folder | Projects must lie under this folder. With a Windows Claude every mounted drive (`/mnt/c`, `/mnt/d`...) is allowed as well; Windows system folders never are |
+| `CONTEXT_WINDOW` | by model | Context window the token counter measures against. Unset: 1M for Claude 5 models and `[1m]` variants, 200k for older ones |
 | `SERVER_PORT` | `3001` | HTTP / WebSocket port |
 | `HOST` | `0.0.0.0` | Address to bind to |
 | `DATABASE_PATH` | `~/.agentharbor/auth.db` | SQLite database with the login account and app settings |

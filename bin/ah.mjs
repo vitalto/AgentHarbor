@@ -165,7 +165,7 @@ const commands = {
     const firstShown = textIndexes.at(-last) ?? textIndexes[0] ?? messages.length;
     for (const message of messages.slice(firstShown)) {
       if (message.kind === 'text') {
-        console.log(`\n## ${message.role} ${message.timestamp}\n${message.content}`);
+        console.log(`\n## ${message.role}${message.model ? ` (${message.model})` : ''} ${message.timestamp}\n${message.content}`);
       } else if (message.kind === 'tool_use') {
         console.log(`  · ${message.toolName}: ${message.toolInput?.description ?? ''}`);
       }
@@ -176,7 +176,7 @@ const commands = {
     const id = sessionId ?? (await findOwnSessionId(config));
     const usage = await api(config, 'GET', `/providers/sessions/${id}/token-usage`);
     const percent = Math.round((usage.used / usage.total) * 100);
-    console.log(`context: ${usage.used} of ${usage.total} tokens (${percent}%)`);
+    console.log(`session ${id}: context ${usage.used} of ${usage.total} tokens (${percent}%)`);
   },
 
   async models(config) {
