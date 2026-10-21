@@ -8,37 +8,66 @@ import {
   describeLastAssistantTurn,
 } from '../services/agent-activity-notifier.service.js';
 
-function feed(sequence: ClaudeActivity[]) {
-  const tracker = createAgentActivityTracker();
-  return sequence.map((activity, index) => tracker.observe(new Map([['s1', activity]]), index).map((transition) => transition.kind));
+const STARTED_AT = 1000;
+
+/** Feeds one session's readings, one check per entry at STARTED_AT + index; each entry is [activity, statusSince]. */
+function feed(sequence: Array<[ClaudeActivity, number]>) {
+  const tracker = createAgentActivityTracker(STARTED_AT);
+  return sequence.map(([activity, statusSince], index) => tracker
+    .observe(new Map([['s1', { activity, statusSince }]]), STARTED_AT + index)
+    .map((transition) => transition.kind));
 }
 
 test('a turn is reported finished once idle holds for two checks', () => {
-  assert.deepEqual(feed(['busy', 'busy', 'idle', 'idle', 'idle']), [[], [], [], ['finished'], []]);
+  assert.deepEqual(
+    feed([['busy', 1001], ['busy', 1001], ['idle', 1002], ['idle', 1002], ['idle', 1002]]),
+    [[], [], [], ['finished'], []],
+  );
 });
 
 test('a single idle reading inside a turn is not a finish', () => {
-  assert.deepEqual(feed(['busy', 'idle', 'busy', 'idle', 'idle']), [[], [], [], [], ['finished']]);
+  assert.deepEqual(
+    feed([['busy', 1001], ['idle', 1002], ['busy', 1003], ['idle', 1004], ['idle', 1004]]),
+    [[], [], [], [], ['finished']],
+  );
 });
 
-test('a session first seen idle or waiting reports nothing until it works', () => {
-  assert.deepEqual(feed(['idle', 'idle', 'waiting', 'idle', 'idle']), [[], [], [], [], []]);
+test('a turn shorter than one check is seen through its status time', () => {
+  assert.deepEqual(
+    feed([['idle', 500], ['idle', 1001.5], ['idle', 1001.5], ['idle', 1001.5]]),
+    [[], [], ['finished'], []],
+  );
+});
+
+test('a session that first shows up after the start has just worked', () => {
+  assert.deepEqual(feed([['idle', 1000.5], ['idle', 1000.5], ['idle', 1000.5]]), [[], ['finished'], []]);
+});
+
+test('a session resting since before the start reports nothing', () => {
+  assert.deepEqual(feed([['idle', 500], ['idle', 500], ['waiting', 400], ['waiting', 400]]), [[], [], [], []]);
 });
 
 test('a question during a turn is reported, and the turn finishing after the answer is too', () => {
-  assert.deepEqual(feed(['busy', 'waiting', 'waiting', 'busy', 'idle', 'idle']), [[], ['waiting'], [], [], [], ['finished']]);
+  assert.deepEqual(
+    feed([['busy', 1001], ['waiting', 1002], ['waiting', 1002], ['busy', 1004], ['idle', 1005], ['idle', 1005]]),
+    [[], ['waiting'], [], [], [], ['finished']],
+  );
+});
+
+test('a second question asked between two checks is reported again', () => {
+  assert.deepEqual(feed([['busy', 1001], ['waiting', 1002], ['waiting', 1003.5]]), [[], ['waiting'], ['waiting']]);
 });
 
 test('a menu dismissed into idle is not a finish', () => {
-  assert.deepEqual(feed(['busy', 'waiting', 'idle', 'idle']), [[], ['waiting'], [], []]);
+  assert.deepEqual(feed([['busy', 1001], ['waiting', 1002], ['idle', 1003], ['idle', 1003]]), [[], ['waiting'], [], []]);
 });
 
 test('a session that disappears and comes back starts over', () => {
-  const tracker = createAgentActivityTracker();
-  tracker.observe(new Map([['s1', 'busy']]), 0);
-  tracker.observe(new Map(), 1);
-  assert.deepEqual(tracker.observe(new Map([['s1', 'idle']]), 2), []);
-  assert.deepEqual(tracker.observe(new Map([['s1', 'idle']]), 3), []);
+  const tracker = createAgentActivityTracker(STARTED_AT);
+  tracker.observe(new Map([['s1', { activity: 'busy', statusSince: 500 }]]), STARTED_AT);
+  tracker.observe(new Map(), STARTED_AT + 1);
+  assert.deepEqual(tracker.observe(new Map([['s1', { activity: 'idle', statusSince: 600 }]]), STARTED_AT + 2), []);
+  assert.deepEqual(tracker.observe(new Map([['s1', { activity: 'idle', statusSince: 600 }]]), STARTED_AT + 3), []);
 });
 
 const transcript = [
