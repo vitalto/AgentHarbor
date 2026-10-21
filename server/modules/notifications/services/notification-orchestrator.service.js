@@ -199,7 +199,10 @@ function sendWebPushPayload(userId, payload, category) {
       if (result.status === 'rejected') {
         const statusCode = result.reason?.statusCode;
         if (statusCode === 410 || statusCode === 404) {
+          console.warn(`[AgentHarbor] push service answered ${statusCode}: dropping the subscription ${subscriptions[index].endpoint.slice(0, 60)}...`);
           pushSubscriptionsDb.removeSubscription(subscriptions[index].endpoint);
+        } else {
+          console.error('[AgentHarbor] push delivery failed', statusCode ?? '', result.reason?.body ?? result.reason?.message ?? result.reason);
         }
       }
     });
