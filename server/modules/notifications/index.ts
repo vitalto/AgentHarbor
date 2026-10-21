@@ -12,6 +12,8 @@ export {
   // Used by provider runtimes to report background work that finished after its turn ended.
   notifyBackgroundWorkCompleted,
 } from '@/modules/notifications/services/notification-orchestrator.service.js';
+// startAgentActivityNotifications: used by the server entrypoint to push when agents finish or wait on a question.
+export { startAgentActivityNotifications } from '@/modules/notifications/services/agent-activity-notifier.service.js';
 // getPublicKey: used by Settings to expose the Web Push subscription key.
 export { getPublicKey } from './vapid-keys.service.js';
 // configureWebPush: used by the server entrypoint during notification startup.

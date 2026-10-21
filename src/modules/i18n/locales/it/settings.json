@@ -133,12 +133,6 @@
       "description": "Riproduci un breve tono quando termina un'esecuzione della chat.",
       "enabled": "Attivato",
       "test": "Prova suono"
-    },
-    "events": {
-      "title": "Tipi di evento",
-      "actionRequired": "Azione richiesta",
-      "stop": "Esecuzione interrotta",
-      "error": "Esecuzione fallita"
     }
   },
   "appearanceSettings": {

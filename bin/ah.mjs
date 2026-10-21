@@ -14,6 +14,8 @@ const HELP = `Usage: ah <command> [options]
   read <session> [--last N]        Last N messages (default 10)
   usage [session]                  Context use (default: the calling Claude session)
   models                           Models and effort levels for --model / --effort
+  notify [--title T] [text]        Push a notification to the user's subscribed browsers;
+                                   inside a Claude session it opens that session's chat
 
 new and send take --model M --effort E (applied when the session starts its turn;
 a busy session keeps its model for a queued message). Without [text] the message is
@@ -179,6 +181,18 @@ const commands = {
     console.log(`session ${id}: context ${usage.used} of ${usage.total} tokens (${percent}%)`);
   },
 
+  async notify(config, { values, positionals }) {
+    const { devices } = await api(config, 'POST', '/notifications/send', {
+      message: await readMessageText(positionals),
+      title: values.title,
+      sessionId: process.env.CLAUDE_CODE_SESSION_ID,
+    });
+    if (devices === 0) {
+      fail('Not delivered: no browser takes messages from agents (Settings -> Notifications).');
+    }
+    console.log(`sent to ${devices} device${devices === 1 ? '' : 's'}`);
+  },
+
   async models(config) {
     const { models } = await api(config, 'GET', '/providers/claude/models');
     for (const model of models.OPTIONS) {
@@ -202,6 +216,7 @@ const parsed = parseArgs({
     effort: { type: 'string' },
     last: { type: 'string' },
     recent: { type: 'string' },
+    title: { type: 'string' },
   },
 });
 await commands[command](loadConfig(), parsed);

@@ -129,7 +129,14 @@
       "enabled": "Notifications are enabled for this browser",
       "loading": "Updating...",
       "unsupported": "Push notifications are not supported in this browser.",
-      "denied": "Push notifications are blocked. Please allow them in your browser settings."
+      "denied": "Push notifications are blocked. Please allow them in your browser settings.",
+      "insecure": {
+        "reason": "This page is open over plain http on a network address, so Chrome blocks notifications here. Mark the address as secure once on this device:",
+        "openFlag": "Open",
+        "addOrigin": "Enable it and add the address",
+        "relaunch": "Tap Relaunch, then come back here and enable notifications.",
+        "localhost": "On the computer running AgentHarbor, opening it as http://localhost works without the flag."
+      }
     },
     "desktop": {
       "title": "Notify this desktop app",
@@ -144,11 +151,25 @@
       "enabled": "Enabled",
       "test": "Test sound"
     },
-    "events": {
-      "title": "Event Types",
-      "actionRequired": "Action required",
-      "stop": "Run stopped",
-      "error": "Run failed"
+    "categories": {
+      "title": "Notify this device about",
+      "description": "Each browser keeps its own set. Nothing is shown while the chat it is about is open on this screen.",
+      "finished": {
+        "label": "Agent finished",
+        "description": "A turn ended; shows the last thing the agent wrote."
+      },
+      "waiting": {
+        "label": "Agent waits for an answer",
+        "description": "A question or menu stopped the agent."
+      },
+      "agentMessage": {
+        "label": "Messages from agents",
+        "description": "Sent by an agent itself with `ah notify`."
+      },
+      "system": {
+        "label": "System",
+        "description": "Shutdown timer and other AgentHarbor events."
+      }
     }
   },
   "appearanceSettings": {

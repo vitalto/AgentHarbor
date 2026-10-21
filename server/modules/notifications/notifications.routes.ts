@@ -1,8 +1,12 @@
 import express from 'express';
 
 import { notificationChannelEndpointsDb, notificationPreferencesDb } from '@/modules/database/index.js';
+import { createNotificationEvent, notifyUserIfEnabled } from '@/modules/notifications/services/notification-orchestrator.service.js';
 
 const router = express.Router();
+
+const MAX_AGENT_MESSAGE_CHARS = 500;
+const MAX_AGENT_TITLE_CHARS = 80;
 
 function readText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -38,6 +42,39 @@ function updateChannelPreference(userId: number, channel: string): unknown {
     channels: { ...currentPrefs.channels, [channel]: hasEnabledEndpoint },
   });
 }
+
+/**
+ * An agent (or any API key holder) notifies the user's subscribed browsers.
+ * `sessionId` may be the app or the Claude session id; with it the
+ * notification is titled after that chat and opens it.
+ */
+router.post('/send', async (req, res) => {
+  try {
+    const message = readText(req.body?.message).slice(0, MAX_AGENT_MESSAGE_CHARS);
+    if (!message) {
+      return res.status(400).json({ error: 'message is required' });
+    }
+    const title = readText(req.body?.title).slice(0, MAX_AGENT_TITLE_CHARS) || null;
+    const sessionId = readText(req.body?.sessionId) || null;
+
+    const devices = await notifyUserIfEnabled({
+      userId: readUserId(req),
+      event: createNotificationEvent({
+        provider: sessionId ? 'claude' : 'system',
+        sessionId,
+        kind: 'agent_message',
+        code: 'agent.notification',
+        meta: { message, sessionName: title },
+        // Every send is deliberate: a repeat is a new message, not a duplicate to drop.
+        dedupeKey: `agent-message:${sessionId ?? 'none'}:${Date.now()}:${Math.random()}`,
+      }),
+    });
+    return res.json({ success: true, devices });
+  } catch (error) {
+    console.error('Error sending an agent notification:', error);
+    return res.status(500).json({ error: 'Failed to send the notification' });
+  }
+});
 
 router.get('/endpoints', (req, res) => {
   try {

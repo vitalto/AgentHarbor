@@ -134,12 +134,6 @@
       "description": "聊天執行完成時播放短提示音。",
       "enabled": "已啟用",
       "test": "測試聲音"
-    },
-    "events": {
-      "title": "事件類型",
-      "actionRequired": "需要處理",
-      "stop": "執行已停止",
-      "error": "執行失敗"
     }
   },
   "appearanceSettings": {

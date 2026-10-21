@@ -142,12 +142,6 @@
       "description": "Reproduce un tono corto cuando una ejecución del chat termina o necesita aprobación de una herramienta.",
       "enabled": "Activado",
       "test": "Probar sonido"
-    },
-    "events": {
-      "title": "Tipos de evento",
-      "actionRequired": "Acción requerida",
-      "stop": "Ejecución detenida",
-      "error": "Ejecución fallida"
     }
   },
   "appearanceSettings": {

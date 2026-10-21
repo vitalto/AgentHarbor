@@ -142,12 +142,6 @@
       "description": "Tocar um tom curto quando uma execução de chat termina ou precisa de aprovação de ferramenta.",
       "enabled": "Ativado",
       "test": "Testar som"
-    },
-    "events": {
-      "title": "Tipos de evento",
-      "actionRequired": "Ação necessária",
-      "stop": "Execução parada",
-      "error": "Execução falhou"
     }
   },
   "appearanceSettings": {

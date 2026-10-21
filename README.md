@@ -109,6 +109,7 @@ ah send <session> [--model M --effort E] "text"      # a busy session queues it
 ah read <session> [--last N]                  # last N messages
 ah usage [session]                            # context use; default: the calling Claude session
 ah models                                     # values for --model / --effort
+ah notify [--title T] "text"                  # push to subscribed browsers; opens the caller's chat
 ```
 
 Without the text argument `new` and `send` read the message from stdin. Create a key in
@@ -116,6 +117,19 @@ Settings -> API keys and save it as `~/.agentharbor/cli.json`:
 `{"url": "http://localhost:3001", "apiKey": "ck_..."}` (`AH_URL` / `AH_API_KEY` override it).
 `skills/agentharbor` is a Claude Code skill that teaches agents these commands; copy or link it into
 `~/.claude/skills/`.
+
+### Notifications
+
+Settings -> Notifications subscribes the current browser to Web Push. AgentHarbor watches every Claude
+process on the machine, in tmux or not, and pushes when an agent finishes a turn (with the last thing
+it wrote) or stops on a question or menu; agents can push their own messages with `ah notify` or
+`POST /api/notifications/send` (`{"message", "title"?, "sessionId"?}`). Each browser picks its own
+categories: agent finished, agent waits for an answer, messages from agents, system. A push about a
+chat that is open and focused on that device is not shown.
+
+Browsers allow push only on a secure origin: https, or http://localhost. For plain http on a LAN or
+VPN address, mark it as secure in Chrome once per device with
+`chrome://flags/#unsafely-treat-insecure-origin-as-secure` (the settings page shows the steps).
 
 ### Configuration
 

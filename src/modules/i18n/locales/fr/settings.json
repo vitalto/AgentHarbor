@@ -133,12 +133,6 @@
       "description": "Jouer un court son lorsqu'une exécution de chat se termine.",
       "enabled": "Activé",
       "test": "Tester le son"
-    },
-    "events": {
-      "title": "Types d'événements",
-      "actionRequired": "Action requise",
-      "stop": "Exécution arrêtée",
-      "error": "Exécution échouée"
     }
   },
   "appearanceSettings": {

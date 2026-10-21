@@ -37,12 +37,16 @@ const settingsService = createSettingsService({
       provider: 'system', kind: 'info', code: 'push.enabled',
       meta: { message: 'Push notifications are now enabled!' }, severity: 'info',
     }),
-    notifyUser: (userId, event) => notifyUserIfEnabled({ userId, event }),
+    notifyUser: async (userId, event) => {
+      await notifyUserIfEnabled({ userId, event });
+    },
   },
   pushSubscriptions: {
     save: (userId, endpoint, p256dh, auth) =>
       pushSubscriptionsDb.saveSubscription(userId, endpoint, p256dh, auth),
     remove: (endpoint) => pushSubscriptionsDb.removeSubscription(endpoint),
+    getCategories: (userId, endpoint) => pushSubscriptionsDb.getCategories(userId, endpoint),
+    setCategories: (userId, endpoint, categories) => pushSubscriptionsDb.setCategories(userId, endpoint, categories),
   },
   getVapidPublicKey: getPublicKey,
   agentSettings: {

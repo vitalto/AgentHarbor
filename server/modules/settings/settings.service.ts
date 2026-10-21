@@ -1,3 +1,4 @@
+import { normalizeNotificationCategories, type NotificationCategories } from '@/shared/notification-categories.js';
 import { AppError } from '@/shared/utils.js';
 
 type ApiKeyRow = Record<string, unknown> & { api_key: string };
@@ -33,6 +34,8 @@ type SettingsDependencies = {
   pushSubscriptions: {
     save(userId: number, endpoint: string, p256dh: string, auth: string): void;
     remove(endpoint: string): void;
+    getCategories(userId: number, endpoint: string): NotificationCategories | null;
+    setCategories(userId: number, endpoint: string, categories: NotificationCategories): boolean;
   };
   getVapidPublicKey(): string | null;
   agentSettings: {
@@ -181,6 +184,22 @@ export function createSettingsService(dependencies: SettingsDependencies) {
       const event = dependencies.notifications.createEnabledEvent();
       void dependencies.notifications.notifyUser(userId, event);
       return { success: true };
+    },
+    getPushCategories(userId: number, endpointInput: unknown) {
+      const endpoint = requiredString(endpointInput, 'Endpoint', 'PUSH_ENDPOINT_REQUIRED');
+      const categories = dependencies.pushSubscriptions.getCategories(userId, endpoint);
+      assertFound(categories !== null, 'Push subscription', 'PUSH_SUBSCRIPTION_NOT_FOUND');
+      return { success: true, categories };
+    },
+    updatePushCategories(userId: number, input: Record<string, unknown>) {
+      const endpoint = requiredString(input.endpoint, 'Endpoint', 'PUSH_ENDPOINT_REQUIRED');
+      const categories = normalizeNotificationCategories(input.categories);
+      assertFound(
+        dependencies.pushSubscriptions.setCategories(userId, endpoint, categories),
+        'Push subscription',
+        'PUSH_SUBSCRIPTION_NOT_FOUND',
+      );
+      return { success: true, categories };
     },
     unsubscribeFromPush(userId: number, endpointInput: unknown) {
       const endpoint = requiredString(endpointInput, 'Endpoint', 'PUSH_ENDPOINT_REQUIRED');

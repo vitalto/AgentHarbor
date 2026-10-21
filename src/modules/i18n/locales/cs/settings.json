@@ -122,12 +122,6 @@
       "description": "Přehrát krátký tón, když běh chatu skončí nebo čeká na schválení nástroje.",
       "enabled": "Zapnuto",
       "test": "Vyzkoušet zvuk"
-    },
-    "events": {
-      "title": "Typy událostí",
-      "actionRequired": "Vyžadována akce",
-      "stop": "Běh zastaven",
-      "error": "Běh selhal"
     }
   },
   "appearanceSettings": {

@@ -93,6 +93,12 @@ async function findProjectDirectory(config: AgentConfig, claude: ClaudeProcess):
   return null;
 }
 
+/** The session's transcript file, or null when it cannot be found. */
+export async function findTranscriptPath(claude: ClaudeProcess, config: AgentConfig = getAgentConfig()): Promise<string | null> {
+  const projectDirectory = await findProjectDirectory(config, claude);
+  return projectDirectory ? path.join(projectDirectory, `${claude.providerSessionId}.jsonl`) : null;
+}
+
 async function lastSubagentWrite(config: AgentConfig, claude: ClaudeProcess): Promise<number | null> {
   const projectDirectory = await findProjectDirectory(config, claude);
   return projectDirectory

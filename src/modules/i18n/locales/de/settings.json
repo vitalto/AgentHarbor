@@ -133,12 +133,6 @@
       "description": "Spielt einen kurzen Ton ab, wenn ein Chat-Lauf abgeschlossen ist.",
       "enabled": "Aktiviert",
       "test": "Ton testen"
-    },
-    "events": {
-      "title": "Ereignistypen",
-      "actionRequired": "Aktion erforderlich",
-      "stop": "Lauf gestoppt",
-      "error": "Lauf fehlgeschlagen"
     }
   },
   "appearanceSettings": {

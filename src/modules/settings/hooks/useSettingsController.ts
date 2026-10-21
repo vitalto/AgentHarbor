@@ -64,11 +64,6 @@ const createDefaultNotificationPreferences = (): NotificationPreferencesState =>
     desktop: false,
     sound: true,
   },
-  events: {
-    actionRequired: true,
-    stop: true,
-    error: true,
-  },
 });
 
 const normalizeNotificationPreferences = (
@@ -82,11 +77,6 @@ const normalizeNotificationPreferences = (
       webPush: preferences?.channels?.webPush ?? defaults.channels.webPush,
       desktop: preferences?.channels?.desktop ?? defaults.channels.desktop,
       sound: preferences?.channels?.sound ?? defaults.channels.sound,
-    },
-    events: {
-      actionRequired: preferences?.events?.actionRequired ?? defaults.events.actionRequired,
-      stop: preferences?.events?.stop ?? defaults.events.stop,
-      error: preferences?.events?.error ?? defaults.events.error,
     },
   };
 };

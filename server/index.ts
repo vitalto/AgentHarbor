@@ -57,7 +57,7 @@ import { powerRoutes, startShutdownWhenIdle } from './modules/power/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
-import { configureWebPush } from './modules/notifications/index.js';
+import { configureWebPush, startAgentActivityNotifications } from './modules/notifications/index.js';
 
 const __dirname = getModuleDirectory(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
@@ -370,6 +370,7 @@ async function startServer() {
 
         // Configure Web Push (VAPID keys)
         configureWebPush();
+        startAgentActivityNotifications();
 
         // Check if running in production mode (dist folder exists)
         const distIndexPath = path.join(APP_ROOT, 'dist', 'index.html');

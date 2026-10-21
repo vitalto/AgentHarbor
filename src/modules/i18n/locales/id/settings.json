@@ -142,12 +142,6 @@
       "description": "Putar nada singkat saat proses chat selesai atau memerlukan persetujuan tool.",
       "enabled": "Aktif",
       "test": "Uji suara"
-    },
-    "events": {
-      "title": "Jenis Event",
-      "actionRequired": "Tindakan diperlukan",
-      "stop": "Proses dihentikan",
-      "error": "Proses gagal"
     }
   },
   "appearanceSettings": {

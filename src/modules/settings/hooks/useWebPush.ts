@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
+import type { NotificationCategories } from '@/shared/types';
 
 type WebPushState = {
   permission: NotificationPermission | 'unsupported';
+  /** Opened over plain http on a non-localhost address: Chrome hides service workers and push there. */
+  insecureContext: boolean;
   isSubscribed: boolean;
   isLoading: boolean;
+  /** This browser's categories, or null until they are loaded (or when not subscribed). */
+  categories: NotificationCategories | null;
   subscribe: () => Promise<void>;
   unsubscribe: () => Promise<void>;
+  setCategory: (category: keyof NotificationCategories, enabled: boolean) => Promise<void>;
 };
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -21,6 +27,20 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+async function currentSubscription(): Promise<PushSubscription | null> {
+  const registration = await navigator.serviceWorker.ready;
+  return registration.pushManager.getSubscription();
+}
+
+async function loadCategories(endpoint: string): Promise<NotificationCategories | null> {
+  const response = await api.settings.push.categories(endpoint);
+  if (!response.ok) {
+    return null;
+  }
+  const { categories } = await response.json();
+  return categories ?? null;
+}
+
 export function useWebPush(): WebPushState {
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() => {
     if (
@@ -32,17 +52,18 @@ export function useWebPush(): WebPushState {
     }
     return Notification.permission;
   });
+  const insecureContext = typeof window !== 'undefined' && !window.isSecureContext;
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [categories, setCategories] = useState<NotificationCategories | null>(null);
 
   // Check existing subscription on mount
   useEffect(() => {
     if (permission === 'unsupported') return;
 
-    navigator.serviceWorker.ready.then((registration) => {
-      registration.pushManager.getSubscription().then((sub) => {
-        setIsSubscribed(sub !== null);
-      });
+    currentSubscription().then(async (sub) => {
+      setIsSubscribed(sub !== null);
+      setCategories(sub ? await loadCategories(sub.endpoint) : null);
     }).catch(() => {
       // SW not ready yet
     });
@@ -73,6 +94,7 @@ export function useWebPush(): WebPushState {
       });
 
       setIsSubscribed(true);
+      setCategories(await loadCategories(subscription.endpoint));
     } catch (err) {
       console.error('Push subscribe failed:', err);
     } finally {
@@ -83,14 +105,14 @@ export function useWebPush(): WebPushState {
   const unsubscribe = useCallback(async () => {
     setIsLoading(true);
     try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
+      const subscription = await currentSubscription();
       if (subscription) {
         const endpoint = subscription.endpoint;
         await subscription.unsubscribe();
         await api.settings.push.unsubscribe(endpoint);
       }
       setIsSubscribed(false);
+      setCategories(null);
     } catch (err) {
       console.error('Push unsubscribe failed:', err);
     } finally {
@@ -98,5 +120,22 @@ export function useWebPush(): WebPushState {
     }
   }, []);
 
-  return { permission, isSubscribed, isLoading, subscribe, unsubscribe };
+  const setCategory = useCallback(async (category: keyof NotificationCategories, enabled: boolean) => {
+    if (!categories) return;
+    const previous = categories;
+    const next = { ...categories, [category]: enabled };
+    setCategories(next);
+    try {
+      const subscription = await currentSubscription();
+      const response = subscription ? await api.settings.push.saveCategories(subscription.endpoint, next) : null;
+      if (!response?.ok) {
+        setCategories(previous);
+      }
+    } catch (err) {
+      console.error('Saving notification categories failed:', err);
+      setCategories(previous);
+    }
+  }, [categories]);
+
+  return { permission, insecureContext, isSubscribed, isLoading, categories, subscribe, unsubscribe, setCategory };
 }

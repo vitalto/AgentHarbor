@@ -3,27 +3,36 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/shared/ui';
 import { playChatCompletionSound } from '@/shared/utils';
-import type { NotificationPreferencesState } from '@/shared/types';
+import type { NotificationCategories, NotificationPreferencesState } from '@/shared/types';
 
 type NotificationsSettingsTabProps = {
   notificationPreferences: NotificationPreferencesState;
   onNotificationPreferencesChange: (value: NotificationPreferencesState) => void;
   pushPermission: NotificationPermission | 'unsupported';
+  pushInsecureContext: boolean;
   isPushSubscribed: boolean;
   isPushLoading: boolean;
+  pushCategories: NotificationCategories | null;
   onEnablePush: () => void;
   onDisablePush: () => void;
+  onPushCategoryChange: (category: keyof NotificationCategories, enabled: boolean) => void;
 };
+
+const PUSH_CATEGORIES: Array<keyof NotificationCategories> = ['finished', 'waiting', 'agentMessage', 'system'];
+const INSECURE_ORIGIN_FLAG = 'chrome://flags/#unsafely-treat-insecure-origin-as-secure';
 
 /** Rendered by Settings for the "notifications" tab, covering notification channels and events. */
 export default function NotificationsSettingsTab({
   notificationPreferences,
   onNotificationPreferencesChange,
   pushPermission,
+  pushInsecureContext,
   isPushSubscribed,
   isPushLoading,
+  pushCategories,
   onEnablePush,
   onDisablePush,
+  onPushCategoryChange,
 }: NotificationsSettingsTabProps) {
   const { t } = useTranslation('settings');
 
@@ -42,7 +51,23 @@ export default function NotificationsSettingsTab({
 
       <div className="space-y-4 rounded-lg border border-border bg-card p-4">
         <h4 className="font-medium text-foreground">{t('notifications.webPush.title')}</h4>
-        {!pushSupported ? (
+        {pushInsecureContext ? (
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>{t('notifications.webPush.insecure.reason')}</p>
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>
+                {t('notifications.webPush.insecure.openFlag')}{' '}
+                <code className="select-all break-all rounded bg-muted px-1 text-foreground">{INSECURE_ORIGIN_FLAG}</code>
+              </li>
+              <li>
+                {t('notifications.webPush.insecure.addOrigin')}{' '}
+                <code className="select-all break-all rounded bg-muted px-1 text-foreground">{window.location.origin}</code>
+              </li>
+              <li>{t('notifications.webPush.insecure.relaunch')}</li>
+            </ol>
+            <p>{t('notifications.webPush.insecure.localhost')}</p>
+          </div>
+        ) : !pushSupported ? (
           <p className="text-sm text-muted-foreground">{t('notifications.webPush.unsupported')}</p>
         ) : pushDenied ? (
           <p className="text-sm text-muted-foreground">{t('notifications.webPush.denied')}</p>
@@ -134,64 +159,32 @@ export default function NotificationsSettingsTab({
         </Button>
       </div>
 
-      <div className="space-y-4 rounded-lg border border-border bg-card p-4">
-        <h4 className="font-medium text-foreground">{t('notifications.events.title')}</h4>
-        <div className="space-y-3">
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={notificationPreferences.events.actionRequired}
-              onChange={(event) =>
-                onNotificationPreferencesChange({
-                  ...notificationPreferences,
-                  events: {
-                    ...notificationPreferences.events,
-                    actionRequired: event.target.checked,
-                  },
-                })
-              }
-              className="h-4 w-4"
-            />
-            {t('notifications.events.actionRequired')}
-          </label>
-
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={notificationPreferences.events.stop}
-              onChange={(event) =>
-                onNotificationPreferencesChange({
-                  ...notificationPreferences,
-                  events: {
-                    ...notificationPreferences.events,
-                    stop: event.target.checked,
-                  },
-                })
-              }
-              className="h-4 w-4"
-            />
-            {t('notifications.events.stop')}
-          </label>
-
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={notificationPreferences.events.error}
-              onChange={(event) =>
-                onNotificationPreferencesChange({
-                  ...notificationPreferences,
-                  events: {
-                    ...notificationPreferences.events,
-                    error: event.target.checked,
-                  },
-                })
-              }
-              className="h-4 w-4"
-            />
-            {t('notifications.events.error')}
-          </label>
+      {isPushSubscribed && pushCategories && (
+        <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+          <div className="space-y-1">
+            <h4 className="font-medium text-foreground">{t('notifications.categories.title')}</h4>
+            <p className="text-sm text-muted-foreground">{t('notifications.categories.description')}</p>
+          </div>
+          <div className="space-y-3">
+            {PUSH_CATEGORIES.map((category) => (
+              <label key={category} className="flex items-start gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={pushCategories[category]}
+                  onChange={(event) => onPushCategoryChange(category, event.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                />
+                <span>
+                  {t(`notifications.categories.${category}.label`)}
+                  <span className="block text-xs text-muted-foreground">
+                    {t(`notifications.categories.${category}.description`)}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

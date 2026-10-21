@@ -14,11 +14,6 @@ type NotificationPreferences = {
     sound: boolean;
     [key: string]: boolean;
   };
-  events: {
-    actionRequired: boolean;
-    stop: boolean;
-    error: boolean;
-  };
 };
 
 const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -27,11 +22,6 @@ const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
     webPush: false,
     desktop: false,
     sound: true,
-  },
-  events: {
-    actionRequired: true,
-    stop: true,
-    error: true,
   },
 };
 
@@ -52,11 +42,6 @@ function normalizeNotificationPreferences(value: unknown): NotificationPreferenc
       webPush: source.channels?.webPush === true,
       desktop: source.channels?.desktop === true,
       sound: source.channels?.sound !== false,
-    },
-    events: {
-      actionRequired: source.events?.actionRequired !== false,
-      stop: source.events?.stop !== false,
-      error: source.events?.error !== false,
     },
   };
 }

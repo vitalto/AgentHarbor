@@ -3,6 +3,7 @@ import {
   getStoredAuthToken,
   storeAuthToken,
 } from '@/shared/authToken';
+import type { NotificationCategories } from '@/shared/types';
 import { IS_PLATFORM } from '@/shared/utils';
 
 // Headers are a plain record rather than the full `HeadersInit` union so the
@@ -567,6 +568,10 @@ export const api = {
       subscribe: (subscription: { endpoint?: string; keys?: unknown }) =>
         post('/api/settings/push/subscribe', subscription),
       unsubscribe: (endpoint: string) => post('/api/settings/push/unsubscribe', { endpoint }),
+      categories: (endpoint: string) =>
+        get(`/api/settings/push/categories?endpoint=${encodeURIComponent(endpoint)}`),
+      saveCategories: (endpoint: string, categories: NotificationCategories) =>
+        put('/api/settings/push/categories', { endpoint, categories }),
     },
   },
 

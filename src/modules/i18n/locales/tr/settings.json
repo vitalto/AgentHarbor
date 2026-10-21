@@ -134,12 +134,6 @@
       "description": "Sohbet çalışması tamamlandığında kısa bir ton çal.",
       "enabled": "Etkin",
       "test": "Sesi test et"
-    },
-    "events": {
-      "title": "Etkinlik Türleri",
-      "actionRequired": "Aksiyon gerekli",
-      "stop": "Çalıştırma durduruldu",
-      "error": "Çalıştırma başarısız"
     }
   },
   "appearanceSettings": {

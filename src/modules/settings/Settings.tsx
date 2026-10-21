@@ -51,10 +51,13 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
 
   const {
     permission: pushPermission,
+    insecureContext: pushInsecureContext,
     isSubscribed: isPushSubscribed,
     isLoading: isPushLoading,
+    categories: pushCategories,
     subscribe: pushSubscribe,
     unsubscribe: pushUnsubscribe,
+    setCategory: setPushCategory,
   } = useWebPush();
 
   const handleEnablePush = async () => {
@@ -189,10 +192,13 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   notificationPreferences={notificationPreferences}
                   onNotificationPreferencesChange={setNotificationPreferences}
                   pushPermission={pushPermission}
+                  pushInsecureContext={pushInsecureContext}
                   isPushSubscribed={isPushSubscribed}
                   isPushLoading={isPushLoading}
+                  pushCategories={pushCategories}
                   onEnablePush={handleEnablePush}
                   onDisablePush={handleDisablePush}
+                  onPushCategoryChange={(category, enabled) => void setPushCategory(category, enabled)}
                 />
               )}
 

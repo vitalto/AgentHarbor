@@ -5,12 +5,24 @@
  */
 
 import { getConnection } from '@/modules/database/connection.js';
+import {
+  normalizeNotificationCategories,
+  type NotificationCategories,
+} from '@/shared/notification-categories.js';
 
 type PushSubscriptionLookupRow = {
   endpoint: string;
   keys_p256dh: string;
   keys_auth: string;
+  categories: NotificationCategories;
 };
+
+type PushSubscriptionRow = Omit<PushSubscriptionLookupRow, 'categories'> & { categories_json: string | null };
+
+const withCategories = ({ categories_json, ...row }: PushSubscriptionRow): PushSubscriptionLookupRow => ({
+  ...row,
+  categories: normalizeNotificationCategories(categories_json),
+});
 
 export const pushSubscriptionsDb = {
   /** Upserts a push subscription endpoint for a user. */
@@ -34,11 +46,37 @@ export const pushSubscriptionsDb = {
   /** Returns all subscriptions for a user. */
   getPushSubscriptions(userId: number): PushSubscriptionLookupRow[] {
     const db = getConnection();
-    return db
+    const rows = db
       .prepare(
-        'SELECT endpoint, keys_p256dh, keys_auth FROM push_subscriptions WHERE user_id = ?'
+        'SELECT endpoint, keys_p256dh, keys_auth, categories_json FROM push_subscriptions WHERE user_id = ?'
       )
-      .all(userId) as PushSubscriptionLookupRow[];
+      .all(userId) as PushSubscriptionRow[];
+    return rows.map(withCategories);
+  },
+
+  /** Users with at least one subscribed browser: whom agent activity is reported to. */
+  getSubscribedUserIds(): number[] {
+    const db = getConnection();
+    const rows = db.prepare('SELECT DISTINCT user_id FROM push_subscriptions').all() as { user_id: number }[];
+    return rows.map((row) => row.user_id);
+  },
+
+  /** The categories one browser receives, or null when that browser is not subscribed for the user. */
+  getCategories(userId: number, endpoint: string): NotificationCategories | null {
+    const db = getConnection();
+    const row = db
+      .prepare('SELECT categories_json FROM push_subscriptions WHERE user_id = ? AND endpoint = ?')
+      .get(userId, endpoint) as { categories_json: string | null } | undefined;
+    return row ? normalizeNotificationCategories(row.categories_json) : null;
+  },
+
+  /** Stores one browser's categories; false when that browser is not subscribed for the user. */
+  setCategories(userId: number, endpoint: string, categories: NotificationCategories): boolean {
+    const db = getConnection();
+    const result = db
+      .prepare('UPDATE push_subscriptions SET categories_json = ? WHERE user_id = ? AND endpoint = ?')
+      .run(JSON.stringify(categories), userId, endpoint);
+    return result.changes > 0;
   },
 
   /** Deletes one subscription by endpoint. */

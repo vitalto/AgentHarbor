@@ -1359,7 +1359,7 @@ export type ClaudeSettingsPermissionSource = {
   ask: string[];
 };
 
-/** The user's notification settings, grouped into delivery channels (in-app, web push, desktop, sound) and the events that trigger them; mirrors the payload of the notification preferences API. */
+/** The user's notification delivery channels (in-app, web push, desktop, sound); mirrors the payload of the notification preferences API. */
 export type NotificationPreferencesState = {
   channels: {
     inApp: boolean;
@@ -1367,11 +1367,14 @@ export type NotificationPreferencesState = {
     desktop: boolean;
     sound: boolean;
   };
-  events: {
-    actionRequired: boolean;
-    stop: boolean;
-    error: boolean;
-  };
+};
+
+/** What one subscribed browser is pushed about; each device keeps its own set. */
+export type NotificationCategories = {
+  finished: boolean;
+  waiting: boolean;
+  agentMessage: boolean;
+  system: boolean;
 };
 
 /** The code editor display preferences shown in the appearance tab (word wrap, minimap, line numbers and font size), stored together as one server-backed `codeEditorSettings` preference. */

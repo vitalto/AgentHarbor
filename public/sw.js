@@ -92,9 +92,24 @@ self.addEventListener('push', event => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(payload.title || 'AgentHarbor', options)
+    isChatOnScreen(options.data.sessionId).then(onScreen => {
+      if (onScreen) return;
+      return self.registration.showNotification(payload.title || 'AgentHarbor', options);
+    })
   );
 });
+
+// The user is looking at that chat right now on this device: the push would only repeat what the page shows.
+// Chrome shows no fallback notification for a skipped push while a page of the origin is visible.
+async function isChatOnScreen(sessionId) {
+  if (!sessionId) return false;
+  const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  return clientList.some(client =>
+    client.visibilityState === 'visible'
+    && client.focused
+    && new URL(client.url).pathname === `/session/${sessionId}`
+  );
+}
 
 // Notification click event
 self.addEventListener('notificationclick', event => {

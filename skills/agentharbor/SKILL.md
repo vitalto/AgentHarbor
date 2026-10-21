@@ -1,6 +1,6 @@
 ---
 name: agentharbor
-description: Use when work should continue in another project or session run by AgentHarbor, when asked to start, message or read another Claude session, to check how full your own context is, or to hand a long task over to a fresh session as the context fills up.
+description: Use when work should continue in another project or session run by AgentHarbor, when asked to start, message or read another Claude session, to check how full your own context is, to hand a long task over to a fresh session as the context fills up, or to send the user a push notification to their phone or browser.
 ---
 
 # Other sessions through AgentHarbor (`ah`)
@@ -17,10 +17,18 @@ ah send <session> "text"             # a busy session queues it
 ah read <session> --last 10          # last messages (default 10)
 ah usage                             # your own session id and context: used of total tokens, percent
 ah models                            # values for --model / --effort on new and send
+ah notify [--title T] "text"         # push to the user's subscribed browsers; tapping opens your chat
 ```
 
 For long or multi-line text pass it on stdin with a quoted heredoc: `ah new --project P <<'EOF'`.
 Use `--model` / `--effort` only when the user asked for them; otherwise the session's defaults apply.
+
+## Notifying the user
+
+The end of every turn and every question you stop on already reach the user's devices on their own,
+so never notify just to say you are done. `ah notify` is for news inside a turn the user asked to
+hear about, e.g. a long job reaching a milestone or failing while you keep working. One short line
+(up to 500 characters) with the fact itself. It exits non-zero when no device takes agent messages.
 
 ## Continuing in a related project
 

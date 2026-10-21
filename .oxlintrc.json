@@ -70,7 +70,8 @@
           "server/shared/utils.{js,ts}",
           "server/shared/frontmatter.ts",
           "server/shared/image-attachments.ts",
-          "server/shared/message-unification.ts"
+          "server/shared/message-unification.ts",
+          "server/shared/notification-categories.ts"
         ],
         "mode": "file"
       },

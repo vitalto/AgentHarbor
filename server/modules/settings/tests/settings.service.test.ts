@@ -15,7 +15,7 @@ function dependencies(overrides: Partial<Dependencies> = {}): Dependencies {
       createEnabledEvent: () => ({}),
       notifyUser: () => undefined,
     },
-    pushSubscriptions: { save: () => undefined, remove: () => undefined },
+    pushSubscriptions: { save: () => undefined, remove: () => undefined, getCategories: () => null, setCategories: () => false },
     getVapidPublicKey: () => null,
     agentSettings: { describe: () => ({}), save: () => undefined },
     ...overrides,
@@ -38,6 +38,8 @@ test('subscribeToPush persists the subscription and enables Web Push', () => {
     pushSubscriptions: {
       save: (_id, endpoint) => operations.push(`save:${endpoint}`),
       remove: () => undefined,
+      getCategories: () => null,
+      setCategories: () => false,
     },
     notifications: {
       getPreferences: () => ({ channels: { webPush: false } }),
@@ -52,6 +54,30 @@ test('subscribeToPush persists the subscription and enables Web Push', () => {
     keys: { p256dh: 'key', auth: 'auth' },
   });
   assert.deepEqual(operations, ['save:https://push.example.test', 'preferences', 'notify']);
+});
+
+test('updatePushCategories stores a full category set for the browser and refuses an unknown one', () => {
+  const stored: unknown[] = [];
+  const service = createSettingsService(dependencies({
+    pushSubscriptions: {
+      save: () => undefined,
+      remove: () => undefined,
+      getCategories: () => null,
+      setCategories: (_id, endpoint, categories) => {
+        stored.push(categories);
+        return endpoint === 'https://push.example.test';
+      },
+    },
+  }));
+
+  const result = service.updatePushCategories(1, {
+    endpoint: 'https://push.example.test',
+    categories: { finished: false },
+  });
+  assert.deepEqual(result.categories, { finished: false, waiting: true, agentMessage: true, system: true });
+  assert.deepEqual(stored, [result.categories]);
+  assert.throws(() => service.updatePushCategories(1, { endpoint: 'https://other.example.test', categories: {} }), /not found/);
+  assert.throws(() => service.getPushCategories(1, 'https://other.example.test'), /not found/);
 });
 
 test('updateAgentSettings saves the update and answers with the settings as they are now', () => {

@@ -46,6 +46,10 @@ export function createSettingsRouter(
   router.put('/agent-settings', respond((req) => service.updateAgentSettings(req.body ?? {})));
   router.get('/push/vapid-public-key', respond(() => service.getVapidPublicKey()));
   router.post('/push/subscribe', respond((req) => service.subscribeToPush(userId(req), req.body ?? {})));
+  router.get('/push/categories', respond((req) => service.getPushCategories(
+    userId(req), queryString(req.query.endpoint),
+  )));
+  router.put('/push/categories', respond((req) => service.updatePushCategories(userId(req), req.body ?? {})));
   router.post('/push/unsubscribe', respond((req) => service.unsubscribeFromPush(
     userId(req), req.body?.endpoint,
   )));

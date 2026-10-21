@@ -1,17 +1,7 @@
 import webPush from 'web-push';
 
 import { notificationPreferencesDb, pushSubscriptionsDb, sessionsDb } from '@/modules/database/index.js';
-
-const KIND_TO_PREF_KEY = {
-  action_required: 'actionRequired',
-  stop: 'stop',
-  error: 'error'
-};
-
-const PROVIDER_LABELS = {
-  claude: 'Claude',
-  system: 'System'
-};
+import { categoryOfEventKind } from '@/shared/notification-categories.js';
 
 const recentEventKeys = new Map();
 const DEDUPE_WINDOW_MS = 20000;
@@ -25,13 +15,6 @@ const cleanupOldEventKeys = () => {
   }
 };
 
-function isNotificationEventEnabled(preferences, event) {
-  const prefEventKey = KIND_TO_PREF_KEY[event.kind];
-  const eventEnabled = prefEventKey ? Boolean(preferences?.events?.[prefEventKey]) : true;
-
-  return eventEnabled;
-}
-
 function isDuplicate(event) {
   cleanupOldEventKeys();
   const key = event.dedupeKey || `${event.provider}:${event.kind || 'info'}:${event.code || 'generic'}:${event.sessionId || 'none'}`;
@@ -42,6 +25,18 @@ function isDuplicate(event) {
   return false;
 }
 
+/**
+ * @param {{
+ *   provider: string,
+ *   sessionId?: string | null,
+ *   kind?: string,
+ *   code?: string,
+ *   meta?: Record<string, unknown>,
+ *   severity?: string,
+ *   dedupeKey?: string | null,
+ *   requiresUserAction?: boolean,
+ * }} options
+ */
 function createNotificationEvent({
   provider,
   sessionId = null,
@@ -122,7 +117,11 @@ function normalizeNotificationSession(event) {
   }
 
   const row = resolveSessionRow(event.sessionId, event.provider);
-  if (!row || row.session_id === event.sessionId) {
+  if (!row) {
+    // No chat to open: e.g. an agent in a Windows console that AgentHarbor never registered.
+    return { ...event, sessionId: null };
+  }
+  if (row.session_id === event.sessionId) {
     return event;
   }
 
@@ -155,15 +154,16 @@ function buildNotificationPayload(event) {
     'run.background_completed': 'Background work finished',
     'run.failed': normalizedEvent.meta?.error ? `Run Failed: ${normalizedEvent.meta.error}` : 'Run Failed: The run encountered an error',
     'agent.notification': normalizedEvent.meta?.message ? String(normalizedEvent.meta.message) : 'You have a new notification',
+    'agent.finished': normalizedEvent.meta?.summary || 'Finished',
+    'agent.waiting': normalizedEvent.meta?.question || 'Waiting for your answer',
     'push.enabled': 'Push notifications are now enabled!'
   };
-  const providerLabel = PROVIDER_LABELS[normalizedEvent.provider] || 'Assistant';
   const sessionName = resolveSessionName(normalizedEvent);
   const message = CODE_MAP[normalizedEvent.code] || 'You have a new notification';
 
   return {
     title: sessionName || 'AgentHarbor',
-    body: `${providerLabel}: ${message}`,
+    body: message,
     data: {
       sessionId: normalizedEvent.sessionId || null,
       code: normalizedEvent.code,
@@ -174,9 +174,11 @@ function buildNotificationPayload(event) {
   };
 }
 
-function sendWebPushPayload(userId, payload) {
-  const subscriptions = pushSubscriptionsDb.getSubscriptions(userId);
-  if (!subscriptions.length) return Promise.resolve();
+/** Sends to the user's browsers that take this category; resolves to how many were addressed. */
+function sendWebPushPayload(userId, payload, category) {
+  const subscriptions = pushSubscriptionsDb.getSubscriptions(userId)
+    .filter((subscription) => subscription.categories[category]);
+  if (!subscriptions.length) return Promise.resolve(0);
 
   const serializedPayload = JSON.stringify(payload);
   return Promise.allSettled(
@@ -201,6 +203,7 @@ function sendWebPushPayload(userId, payload) {
         }
       }
     });
+    return subscriptions.length;
   });
 }
 
@@ -210,33 +213,38 @@ const notificationChannels = [
     // TODO: Web push still uses push_subscriptions. Do not remove that table until
     // browser push subscriptions are migrated into notification_channel_endpoints.
     isEnabled: (preferences) => Boolean(preferences?.channels?.webPush),
-    send: ({ userId, payload }) => sendWebPushPayload(userId, payload)
+    send: ({ userId, payload, category }) => sendWebPushPayload(userId, payload, category)
   }
 ];
 
-function notifyUserIfEnabled({ userId, event }) {
+/**
+ * Delivers an event to every enabled channel; each subscribed browser filters
+ * by its own categories. Resolves to how many devices were addressed.
+ */
+async function notifyUserIfEnabled({ userId, event }) {
   if (!userId || !event) {
-    return;
+    return 0;
   }
 
   const normalizedEvent = normalizeNotificationSession(event);
-  const preferences = notificationPreferencesDb.getPreferences(userId);
-  if (!isNotificationEventEnabled(preferences, normalizedEvent)) {
-    return;
-  }
   if (isDuplicate(normalizedEvent)) {
-    return;
+    return 0;
   }
 
+  const preferences = notificationPreferencesDb.getPreferences(userId);
   const payload = buildNotificationPayload(normalizedEvent);
+  const category = categoryOfEventKind(normalizedEvent.kind);
+  let addressed = 0;
   for (const channel of notificationChannels) {
     if (!channel.isEnabled(preferences)) {
       continue;
     }
-    Promise.resolve(channel.send({ userId, event: normalizedEvent, payload })).catch((err) => {
+    addressed += await Promise.resolve(channel.send({ userId, event: normalizedEvent, payload, category })).catch((err) => {
       console.error(`Notification channel "${channel.id}" send error:`, err);
+      return 0;
     });
   }
+  return addressed;
 }
 
 function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed', sessionName = null }) {
