@@ -8,9 +8,12 @@ const urlsToCache = [
 
 // Install event
 self.addEventListener('install', event => {
+  // A failed pre-cache must not fail the install: Chrome sometimes rejects addAll with
+  // "Entry already exists", and a worker that never installs means no push at all.
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(urlsToCache))
+      .catch(err => console.warn('Pre-caching failed:', err))
   );
   self.skipWaiting();
 });
