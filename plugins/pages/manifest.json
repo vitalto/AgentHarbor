@@ -1,0 +1,12 @@
+{
+  "name": "pages",
+  "displayName": "Pages",
+  "version": "0.1.0",
+  "description": "Browse a folder of HTML pages (reports, dashboards) as live thumbnails and open them inside AgentHarbor.",
+  "author": "vitalto",
+  "icon": "icon.svg",
+  "type": "module",
+  "slot": "tab",
+  "entry": "index.js",
+  "server": "server.mjs"
+}

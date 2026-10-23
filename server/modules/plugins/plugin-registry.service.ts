@@ -25,6 +25,14 @@ function sanitizeRepoUrl(raw) {
 const ALLOWED_TYPES = ['react', 'module'];
 const ALLOWED_SLOTS = ['tab'];
 
+function isDirectory(candidate) {
+  try {
+    return fs.statSync(candidate).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export function getPluginsDir() {
   if (!fs.existsSync(PLUGINS_DIR)) {
     fs.mkdirSync(PLUGINS_DIR, { recursive: true });
@@ -159,7 +167,9 @@ export function scanPlugins() {
   const seenNames = new Set();
 
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    // A symlink lets a plugin bundled in this repo (plugins/<name>) be installed
+    // without a copy, so every deploy updates it.
+    if (!entry.isDirectory() && !(entry.isSymbolicLink() && isDirectory(path.join(pluginsDir, entry.name)))) continue;
     // Skip transient temp directories from in-progress installs
     if (entry.name.startsWith('.tmp-')) continue;
 

@@ -49,7 +49,8 @@ chat UI on top of it:
   times out), with a 60 s OS countdown that can be cancelled from the same page. It is not kept across
   a server restart.
 - **File tree and editor**, **git panel** (stage, commit, branches, worktrees), MCP server and skills
-  management, plugins.
+  management, plugins. A bundled optional plugin, [Pages](plugins/pages/README.md), adds a tab that
+  shows a folder of HTML reports and dashboards as live thumbnails and opens them in place.
 - **Responsive / PWA** - usable from a phone; the chat composer, menus and terminal all work on a
   small touch screen.
 - **Login required** - single-user account stored in a local SQLite database.
