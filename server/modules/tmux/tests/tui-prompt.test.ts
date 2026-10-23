@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { isInputReady, keysForOption, parseTuiPrompt, readInputBox } from '@/modules/tmux/tui-prompt.js';
+import { isInputReady, keysForOption, parseTuiPrompt, readInputBox, unreadablePrompt } from '@/modules/tmux/tui-prompt.js';
 
 const fixturesDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const screen = (name: string) => readFileSync(path.join(fixturesDirectory, `${name}.txt`), 'utf8').split('\n');
@@ -45,6 +45,61 @@ test('AskUserQuestion: descriptions become details, options after a rule are kep
   assert.deepEqual(prompt.options.map((option) => option.label), ['Red', 'Green', 'Blue', 'Type something.', 'Chat about this']);
   assert.equal(prompt.options[0].detail, 'The color red');
   assert.equal(prompt.options[0].selected, true);
+});
+
+test('AskUserQuestion with previews: the box beside the options becomes the preview, not part of the labels', () => {
+  const prompt = parseTuiPrompt(screen('ask-question-preview'));
+  assert.ok(prompt);
+  assert.equal(prompt.question, 'Which layout?');
+  assert.equal(prompt.questionTabs, true);
+  assert.deepEqual(prompt.options.map((option) => option.label), ['Alpha one', 'Beta two', 'Chat about this']);
+  assert.deepEqual(prompt.options.map((option) => option.selected), [true, false, false]);
+  assert.deepEqual(prompt.options.map((option) => option.freeText), [false, false, false], 'this layout has no "Type something." slot');
+  assert.deepEqual(prompt.options.map((option) => option.detail), [null, null, null]);
+  assert.deepEqual(prompt.preview, ['A line 1', 'A line 2', 'A line 3']);
+  assert.deepEqual(keysForOption(prompt, 2), ['Down', 'Down', 'Enter']);
+});
+
+test('AskUserQuestion with previews in a narrow window: wrapped footer, cursor on "Chat about this"', () => {
+  const prompt = parseTuiPrompt(screen('ask-question-preview-narrow-chat'));
+  assert.ok(prompt);
+  assert.deepEqual(prompt.options.map((option) => option.label), ['Alpha one', 'Beta two', 'Chat about this']);
+  assert.deepEqual(
+    prompt.options.map((option) => option.selected),
+    [false, false, true],
+    'the previewed option keeps its marker, but the cursor is on the last row',
+  );
+  assert.deepEqual(prompt.preview, ['B line 1', 'B line 2']);
+  assert.deepEqual(keysForOption(prompt, 0), ['Up', 'Up', 'Enter']);
+});
+
+test('a preview option label wrapped in the narrow left column is joined back', () => {
+  const lines = [
+    '─'.repeat(100),
+    'Pick one?',
+    '> 1. A rather long first        ┌──────────┐',
+    '     option label               │ preview  │',
+    '  2. Short                      └──────────┘',
+    '─'.repeat(100),
+    '  Chat about this',
+    'Enter to select · ↑/↓ to navigate · n to add notes · Esc to cancel',
+  ];
+  const prompt = parseTuiPrompt(lines);
+  assert.deepEqual(prompt?.options.map((option) => option.label), ['A rather long first option label', 'Short', 'Chat about this']);
+  assert.deepEqual(prompt?.preview, ['preview']);
+});
+
+test('plain menus carry no preview and are never unreadable', () => {
+  const prompt = parseTuiPrompt(screen('ask-question'));
+  assert.deepEqual(prompt?.preview, []);
+  assert.equal(prompt?.unreadable, false);
+});
+
+test('unreadablePrompt keeps the screen below the last dialog rule', () => {
+  const prompt = unreadablePrompt(['old output', '─'.repeat(40), 'Some dialog', '  1) a choice   ', '', '']);
+  assert.equal(prompt.unreadable, true);
+  assert.deepEqual(prompt.body, ['Some dialog', '  1) a choice']);
+  assert.deepEqual(prompt.options, []);
 });
 
 test('AskUserQuestion: the "Type something." slot is a free-text option, also once text is typed into it', () => {

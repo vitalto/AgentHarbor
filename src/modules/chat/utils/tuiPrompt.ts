@@ -19,6 +19,10 @@ export type TuiPrompt = {
   questionTabs?: boolean;
   /** The model-safeguard "Session paused" dialog, which the server answers on a timer unless the user picks first. */
   safeguardPause?: boolean;
+  /** The preview box an AskUserQuestion draws for the option under its marker. */
+  preview?: string[];
+  /** Claude waits on a dialog the server cannot read: `body` is the raw screen, answered with keys. */
+  unreadable?: boolean;
 };
 
 /** Which way to switch an AskUserQuestion set's questions. */
@@ -44,4 +48,4 @@ export function extractTuiActivity(lines: string[]): string | null {
 }
 
 /** tmux key names the key bar can send to the agent's window. */
-export type TuiKey = 'Escape' | 'Enter' | 'Up' | 'Down' | 'BTab' | 'C-c';
+export type TuiKey = 'Escape' | 'Enter' | 'Up' | 'Down' | 'Left' | 'Right' | 'Tab' | 'BTab' | 'C-c';

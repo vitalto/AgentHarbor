@@ -3,7 +3,7 @@ import { ArrowUpIcon, CheckSquareIcon, ChevronLeftIcon, ChevronRightIcon, Messag
 
 import { cn } from '@/shared/utils';
 import { Confirmation, ConfirmationTitle } from '@/modules/chat/composer/Confirmation';
-import type { QuestionStep, TuiPrompt, TuiPromptOption } from '@/modules/chat/utils/tuiPrompt';
+import type { QuestionStep, TuiKey, TuiPrompt, TuiPromptOption } from '@/modules/chat/utils/tuiPrompt';
 
 type TuiPromptPanelProps = {
   prompt: TuiPrompt;
@@ -12,7 +12,48 @@ type TuiPromptPanelProps = {
   onChoose: (optionIndex: number, freeText?: string) => void;
   onCancel: () => void;
   onQuestionStep?: (step: QuestionStep) => void;
+  /** Presses one key in the agent's window; answers a dialog the server could not read. */
+  onKey?: (key: TuiKey) => void;
 };
+
+const RAW_KEYS: Array<{ key: TuiKey; label: string }> = [
+  { key: 'Up', label: '↑' },
+  { key: 'Down', label: '↓' },
+  { key: 'Left', label: '←' },
+  { key: 'Right', label: '→' },
+  { key: 'Tab', label: 'Tab' },
+  { key: 'Enter', label: 'Enter' },
+  { key: 'Escape', label: 'Esc' },
+];
+
+/** A dialog the server could not turn into options: the screen as is, and the keys that answer it. */
+function UnreadablePrompt({ prompt, onKey }: { prompt: TuiPrompt; onKey?: (key: TuiKey) => void }) {
+  return (
+    <Confirmation approval="pending" className="mb-3" data-testid="tui-prompt">
+      <ConfirmationTitle className="flex items-start gap-3">
+        <MessageSquareMoreIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="font-medium text-foreground">Claude is waiting for an answer in a menu AgentHarbor cannot read</span>
+      </ConfirmationTitle>
+      <pre className="max-h-72 w-full overflow-auto whitespace-pre rounded-md border bg-muted/50 p-2 font-mono text-xs text-foreground">
+        {prompt.body.join('\n')}
+      </pre>
+      {onKey && (
+        <div className="flex flex-wrap gap-1.5">
+          {RAW_KEYS.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onKey(key)}
+              className="min-w-10 rounded-md border border-border px-2.5 py-1.5 text-sm text-foreground transition-colors hover:bg-accent"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </Confirmation>
+  );
+}
 
 /** Seconds left until `deadline`, re-rendering once a second; null when there is no deadline. */
 function useCountdown(deadline: number | null | undefined): number | null {
@@ -89,7 +130,7 @@ function FreeTextOption({ option, number, onSubmit }: FreeTextOptionProps) {
  * Enter in the real terminal; in a multi-select question that toggles the
  * option, and the confirm row ("Next"/"Submit") moves on.
  */
-export default function TuiPromptPanel({ prompt, autoAnswerAt, onChoose, onCancel, onQuestionStep }: TuiPromptPanelProps) {
+export default function TuiPromptPanel({ prompt, autoAnswerAt, onChoose, onCancel, onQuestionStep, onKey }: TuiPromptPanelProps) {
   const context = prompt.body.filter((line) => line !== prompt.question);
   const isMultiSelect = prompt.options.some((option) => typeof option.checked === 'boolean');
   const secondsLeft = useCountdown(prompt.safeguardPause ? autoAnswerAt : null);
@@ -97,6 +138,10 @@ export default function TuiPromptPanel({ prompt, autoAnswerAt, onChoose, onCance
   // The TUI does not number the confirm row, so the options after it keep their own numbers.
   const optionNumbers = prompt.options.map((_, index) =>
     prompt.options.slice(0, index + 1).filter((option) => !option.confirmsSelection).length);
+
+  if (prompt.unreadable) {
+    return <UnreadablePrompt prompt={prompt} onKey={onKey} />;
+  }
 
   return (
     <Confirmation approval="pending" className="mb-3" data-testid="tui-prompt">
@@ -118,6 +163,12 @@ export default function TuiPromptPanel({ prompt, autoAnswerAt, onChoose, onCance
             {context.join('\n')}
           </pre>
         </details>
+      )}
+
+      {prompt.preview && prompt.preview.length > 0 && (
+        <pre className="max-h-64 w-full overflow-auto whitespace-pre rounded-md border bg-muted/50 p-2 font-mono text-xs text-foreground" data-testid="tui-preview">
+          {prompt.preview.join('\n')}
+        </pre>
       )}
 
       {isMultiSelect && (

@@ -138,3 +138,31 @@ test('menus outside a question set offer no question switching', () => {
   render(<TuiPromptPanel prompt={bashPermission} onChoose={vi.fn()} onCancel={vi.fn()} onQuestionStep={vi.fn()} />);
   assert.equal(screen.queryByRole('button', { name: /Previous question/ }), null);
 });
+
+test('a question with previews shows the previewed option as preformatted text', () => {
+  const withPreview: TuiPrompt = {
+    question: 'Which layout?',
+    body: ['Which layout?'],
+    options: [
+      { label: 'Alpha one', detail: null, selected: true, freeText: false },
+      { label: 'Beta two', detail: null, selected: false, freeText: false },
+    ],
+    preview: ['root', '├─ skills', '└─ README.md'],
+  };
+  render(<TuiPromptPanel prompt={withPreview} onChoose={vi.fn()} onCancel={vi.fn()} />);
+  assert.equal(screen.getByTestId('tui-preview').textContent, 'root\n├─ skills\n└─ README.md');
+});
+
+test('a dialog the server could not read shows the screen and answers with raw keys', () => {
+  const onKey = vi.fn();
+  const onChoose = vi.fn();
+  const unreadable: TuiPrompt = { question: '', body: ['A new kind of dialog', '  Press space'], options: [], unreadable: true };
+  render(<TuiPromptPanel prompt={unreadable} onChoose={onChoose} onCancel={vi.fn()} onKey={onKey} />);
+
+  assert.ok(screen.getByText('A new kind of dialog', { exact: false }));
+  fireEvent.click(screen.getByText('↓'));
+  fireEvent.click(screen.getByText('Enter'));
+  fireEvent.click(screen.getByText('Esc'));
+  assert.deepEqual(onKey.mock.calls, [['Down'], ['Enter'], ['Escape']]);
+  assert.equal(onChoose.mock.calls.length, 0);
+});

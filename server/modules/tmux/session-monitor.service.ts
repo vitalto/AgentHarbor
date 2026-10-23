@@ -15,6 +15,7 @@ import {
   parseTuiPrompt,
   type QuestionStep,
   type TuiPrompt,
+  unreadablePrompt,
 } from '@/modules/tmux/tui-prompt.js';
 
 /** A websocket (or anything with the same surface) watching a session. */
@@ -58,6 +59,8 @@ type Watch = {
   promptKey: string | null;
   /** When the open safeguard pause will be auto-answered (epoch ms), or null when no such dialog is up. */
   safeguardDeadline: number | null;
+  /** Ticks in a row that Claude waited on a dialog the parser could not read. */
+  unreadableTicks: number;
   screenKey: string | null;
   lastScreenAt: number;
   subagentsCheckedAt: number;
@@ -82,6 +85,8 @@ const FREE_TEXT_POLL_MS = 100;
 const SAFEGUARD_AUTO_MS = 60_000;
 /** If the auto-answer did not close the dialog (keys lost), try again this soon rather than every tick. */
 const SAFEGUARD_RETRY_MS = 5_000;
+/** Claude reports `waiting` a moment before its menu is drawn; only a dialog still unreadable after this many ticks is shown raw. */
+const UNREADABLE_GRACE_TICKS = 3;
 
 const withoutWhitespace = (text: string) => text.replace(/\s+/g, '');
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -162,7 +167,7 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
     if (!watch) {
       watch = {
         appSessionId, sockets: new Set(), tail: null, tailPath: null, prompt: null, promptKey: null, safeguardDeadline: null,
-        screenKey: null, lastScreenAt: 0, subagentsCheckedAt: 0, subagentsWrittenAt: null, turn: null, turnWaiters: [],
+        unreadableTicks: 0, screenKey: null, lastScreenAt: 0, subagentsCheckedAt: 0, subagentsWrittenAt: null, turn: null, turnWaiters: [],
       };
       watches.set(appSessionId, watch);
     }
@@ -199,6 +204,27 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
     broadcast(watch, prompt
       ? { kind: 'tui_prompt', prompt, autoAnswerAt: watch.safeguardDeadline ?? undefined }
       : { kind: 'tui_prompt_cleared' });
+  }
+
+  /**
+   * The menu on screen. When Claude waits on a dialog whose layout the parser
+   * does not know, the raw screen stands in for it, so the session never sits
+   * blocked with nothing to answer in the chat.
+   */
+  function readScreenPrompt(watch: Watch, screen: string[], waiting: boolean): TuiPrompt | null {
+    const prompt = parseTuiPrompt(screen);
+    if (prompt || !waiting) {
+      watch.unreadableTicks = 0;
+      return prompt;
+    }
+    watch.unreadableTicks += 1;
+    if (watch.unreadableTicks < UNREADABLE_GRACE_TICKS) {
+      return null;
+    }
+    if (watch.unreadableTicks === UNREADABLE_GRACE_TICKS) {
+      console.warn('[AgentHarbor] Claude waits on a dialog the menu parser does not recognise; showing the raw screen', watch.appSessionId);
+    }
+    return unreadablePrompt(screen);
   }
 
   function emitScreen(watch: Watch, lines: string[]): void {
@@ -292,7 +318,7 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
     // An unregistered window (started without our hook, or stuck before it fires) may sit on a dialog with no status file.
     if (pane && (activity === 'waiting' || watch.prompt || !pane.registered)) {
       await deps.tmux.restoreShrunkWindow(pane.pane.windowId).catch(() => false);
-      emitPrompt(watch, parseTuiPrompt(await deps.tmux.capturePane(pane.pane.paneId)));
+      emitPrompt(watch, readScreenPrompt(watch, await deps.tmux.capturePane(pane.pane.paneId), activity === 'waiting'));
     } else if (watch.prompt) {
       emitPrompt(watch, null);
     }

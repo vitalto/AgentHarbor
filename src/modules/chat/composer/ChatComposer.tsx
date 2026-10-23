@@ -233,6 +233,7 @@ export default function ChatComposer({
             onChoose={onTuiChoose}
             onCancel={() => onTuiKey('Escape')}
             onQuestionStep={onTuiQuestionStep}
+            onKey={onTuiKey}
           />
         </div>
       )}

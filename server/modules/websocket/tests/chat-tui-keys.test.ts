@@ -47,7 +47,7 @@ test('chat.tui-keys with a questionStep switches the question; an unknown step f
 
     socket.emit('message', JSON.stringify({ type: 'chat.tui-keys', sessionId: SESSION_ID, questionStep: 'previous' }));
     socket.emit('message', JSON.stringify({ type: 'chat.tui-keys', sessionId: SESSION_ID, questionStep: 'next' }));
-    socket.emit('message', JSON.stringify({ type: 'chat.tui-keys', sessionId: SESSION_ID, questionStep: 'sideways', keys: ['Left', 'Escape'] }));
+    socket.emit('message', JSON.stringify({ type: 'chat.tui-keys', sessionId: SESSION_ID, questionStep: 'sideways', keys: ['C-d', 'Escape'] }));
     await settle();
 
     assert.deepEqual(switched, [[SESSION_ID, 'previous'], [SESSION_ID, 'next']]);

@@ -25,6 +25,16 @@ export type TuiPrompt = {
    * is not blocked invisibly.
    */
   safeguardPause: boolean;
+  /**
+   * The preview box AskUserQuestion draws beside its options when they carry a
+   * `preview`; it shows the option under the preview marker. Empty otherwise.
+   */
+  preview: string[];
+  /**
+   * Claude waits on a dialog this parser does not recognise. `body` then holds
+   * the bottom of the screen and there are no options: the user answers with raw keys.
+   */
+  unreadable: boolean;
 };
 
 const MENU_FOOTER = /Esc to cancel|Enter to confirm|Enter to select/;
@@ -39,6 +49,11 @@ const CHECKBOX_LABEL = /^\[([ √✓])\]\s+(.*)$/;
 const CHECKBOX_OPTION_LINE = /^\s*(?:[>❯›]\s*)?\d+\.\s+\[[ √✓]\]\s/;
 /** Unnumbered; "Next" while more questions follow, "Submit" on the last one. */
 const CONFIRM_ROW = /^\s*(?:([>❯›])\s*)?(Submit|Next)\s*$/;
+/** The preview layout leaves "Chat about this" unnumbered (the plain layout numbers it). */
+const UNNUMBERED_CHAT_ROW = /^\s*(?:([>❯›])\s*)?(Chat about this)\s*$/;
+const PREVIEW_BOX_TOP = /┌─+┐\s*$/;
+const PREVIEW_BOX_EDGE = /^[┌│└]/;
+const PREVIEW_BOX_CONTENT = /^│ ?(.*?)\s*│\s*$/;
 
 function leadingSpaces(line: string): number {
   return line.length - line.trimStart().length;
@@ -53,11 +68,16 @@ function lastNonEmptyIndex(lines: string[]): number {
   return -1;
 }
 
+/** The footer's first line: a narrow window wraps the preview layout's long footer onto a second line. */
 function findFooter(lines: string[]): number {
   const last = lastNonEmptyIndex(lines);
   for (let index = last; index >= 0 && index >= last - FOOTER_SEARCH_DEPTH; index -= 1) {
     if (MENU_FOOTER.test(lines[index])) {
-      return index;
+      let first = index;
+      while (first > 0 && MENU_FOOTER.test(lines[first - 1])) {
+        first -= 1;
+      }
+      return first;
     }
   }
   return -1;
@@ -132,6 +152,49 @@ function appendWrapped(text: string, previousLine: string, continuation: string,
   return `${text}${separator}${continuation.trim()}`;
 }
 
+type PreviewSplit = {
+  /** The screen with the preview column cut off, so the options read as in the plain layout. */
+  lines: string[];
+  preview: string[];
+};
+
+/**
+ * AskUserQuestion with `preview`s draws the options in a narrow left column and
+ * the focused option's preview in a box to their right, on the same rows; the
+ * options then show no descriptions and no "Type something." slot. Null when
+ * the menu has no such box.
+ */
+function splitPreviewColumn(lines: string[], footerIndex: number): PreviewSplit | null {
+  let boxTop = -1;
+  // The dialog's own rules: one over "Chat about this", one on top of the dialog.
+  let rulesLeft = 2;
+  for (let index = footerIndex - 1; index >= 0 && rulesLeft > 0; index -= 1) {
+    if (DIALOG_BORDER.test(lines[index])) {
+      rulesLeft -= 1;
+    } else if (PREVIEW_BOX_TOP.test(lines[index]) && NUMBERED_OPTION.test(lines[index])) {
+      boxTop = index;
+      break;
+    }
+  }
+  if (boxTop < 0) {
+    return null;
+  }
+  const column = lines[boxTop].indexOf('┌');
+  const preview: string[] = [];
+  const split = lines.map((line, index) => {
+    if (index < boxTop || index >= footerIndex || line.length <= column || ANY_RULE.test(line)) {
+      return line;
+    }
+    const content = PREVIEW_BOX_EDGE.test(line.slice(column)) ? PREVIEW_BOX_CONTENT.exec(line.slice(column)) : null;
+    if (content) {
+      preview.push(content[1]);
+    }
+    // Rows that only continue the right column (the "Notes: press n" hint) fall away with it.
+    return line.slice(0, column).trimEnd();
+  });
+  return { lines: split, preview };
+}
+
 type OptionBlock = {
   options: TuiPromptOption[];
   topIndex: number;
@@ -142,7 +205,7 @@ type OptionBlock = {
   freeTextSlotIndex: number;
 };
 
-function readNumberedOptions(lines: string[], footerIndex: number, screenWidth: number): OptionBlock | null {
+function readNumberedOptions(lines: string[], footerIndex: number, screenWidth: number, previewLayout: boolean): OptionBlock | null {
   type RawOption = {
     number: number;
     lines: string[];
@@ -151,6 +214,7 @@ function readNumberedOptions(lines: string[], footerIndex: number, screenWidth: 
     index: number;
     aboveRule: boolean;
     confirmLabel: string | null;
+    chatLabel: string | null;
   };
   const found: RawOption[] = [];
   let continuation: string[] = [];
@@ -168,14 +232,23 @@ function readNumberedOptions(lines: string[], footerIndex: number, screenWidth: 
     }
     const confirm = hasCheckboxes ? CONFIRM_ROW.exec(line) : null;
     if (confirm) {
-      found.unshift({ number: -1, lines: [], selected: Boolean(confirm[1]), firstLine: line, index, aboveRule: crossedRule, confirmLabel: confirm[2] });
+      found.unshift({
+        number: -1, lines: [], selected: Boolean(confirm[1]), firstLine: line, index, aboveRule: crossedRule, confirmLabel: confirm[2], chatLabel: null,
+      });
       continuation = [];
+      continue;
+    }
+    const chat = previewLayout && found.length === 0 ? UNNUMBERED_CHAT_ROW.exec(line) : null;
+    if (chat) {
+      found.unshift({
+        number: -1, lines: [], selected: Boolean(chat[1]), firstLine: line, index, aboveRule: false, confirmLabel: null, chatLabel: chat[2],
+      });
       continue;
     }
     const match = NUMBERED_OPTION.exec(line);
     if (match) {
       found.unshift({
-        number: Number(match[3]), lines: continuation, selected: Boolean(match[2]), firstLine: line, index, aboveRule: crossedRule, confirmLabel: null,
+        number: Number(match[3]), lines: continuation, selected: Boolean(match[2]), firstLine: line, index, aboveRule: crossedRule, confirmLabel: null, chatLabel: null,
       });
       continuation = [];
       if (match[3] === '1') {
@@ -196,10 +269,17 @@ function readNumberedOptions(lines: string[], footerIndex: number, screenWidth: 
   if (found.length < 2 || found[0].number !== 1) {
     return null;
   }
+  // The preview layout keeps its marker on the previewed option while the cursor sits on "Chat about this".
+  found.filter((raw) => raw.selected).slice(0, -1).forEach((raw) => {
+    raw.selected = false;
+  });
 
   const options = found.map((raw): TuiPromptOption => {
     if (raw.confirmLabel) {
       return { label: raw.confirmLabel, detail: null, selected: raw.selected, freeText: false, checked: null, confirmsSelection: true };
+    }
+    if (raw.chatLabel) {
+      return { label: raw.chatLabel, detail: null, selected: raw.selected, freeText: false, checked: null, confirmsSelection: false };
     }
     const numberedLabel = NUMBERED_OPTION.exec(raw.firstLine)?.[4]?.trim() ?? '';
     const checkbox = CHECKBOX_LABEL.exec(numberedLabel);
@@ -208,7 +288,8 @@ function readNumberedOptions(lines: string[], footerIndex: number, screenWidth: 
     let previousLine = raw.firstLine;
     let labelText = label;
     for (const continuationLine of raw.lines) {
-      if (detail === null && previousLine.length >= screenWidth - 12) {
+      // The preview layout's left column has no descriptions: every continuation is the wrapped label.
+      if (previewLayout || (detail === null && previousLine.length >= screenWidth - 12)) {
         labelText = appendWrapped(labelText, previousLine, continuationLine, screenWidth);
       } else {
         detail = detail === null ? continuationLine.trim() : appendWrapped(detail, previousLine, continuationLine, screenWidth);
@@ -219,7 +300,7 @@ function readNumberedOptions(lines: string[], footerIndex: number, screenWidth: 
       label: labelText, detail, selected: raw.selected, freeText: false, checked: checkbox ? checkbox[1] !== ' ' : null, confirmsSelection: false,
     };
   });
-  let freeTextSlotIndex = found.length - 1;
+  let freeTextSlotIndex = previewLayout ? -1 : found.length - 1;
   while (freeTextSlotIndex >= 0 && (!found[freeTextSlotIndex].aboveRule || found[freeTextSlotIndex].confirmLabel)) {
     freeTextSlotIndex -= 1;
   }
@@ -283,13 +364,15 @@ function readBody(lines: string[], optionsTopIndex: number): string[] {
 }
 
 /** Recognises a Claude Code selection menu (permission, question, trust dialog) at the bottom of a pane. */
-export function parseTuiPrompt(lines: string[]): TuiPrompt | null {
-  const footerIndex = findMenuEnd(lines);
+export function parseTuiPrompt(screen: string[]): TuiPrompt | null {
+  const footerIndex = findMenuEnd(screen);
   if (footerIndex < 0) {
     return null;
   }
-  const screenWidth = Math.max(...lines.map((line) => line.length));
-  const block = readNumberedOptions(lines, footerIndex, screenWidth) ?? readCursorOptions(lines, footerIndex);
+  const screenWidth = Math.max(...screen.map((line) => line.length));
+  const previewSplit = splitPreviewColumn(screen, footerIndex);
+  const lines = previewSplit?.lines ?? screen;
+  const block = readNumberedOptions(lines, footerIndex, screenWidth, previewSplit !== null) ?? readCursorOptions(lines, footerIndex);
   if (!block) {
     return null;
   }
@@ -305,7 +388,29 @@ export function parseTuiPrompt(lines: string[]): TuiPrompt | null {
   const question = safeguardPause
     ? 'Session paused'
     : [...body].reverse().find((line) => line.endsWith('?')) ?? body.join(' ');
-  return { question, body, options, questionTabs: body.length < dialogText.length, safeguardPause };
+  return {
+    question, body, options, questionTabs: body.length < dialogText.length, safeguardPause, preview: previewSplit?.preview ?? [], unreadable: false,
+  };
+}
+
+const UNREADABLE_SCREEN_LINES = 30;
+
+/**
+ * Stands in for a dialog Claude waits on but `parseTuiPrompt` cannot read (a
+ * layout it does not know yet): the bottom of the screen, from the dialog's top
+ * rule when one is visible, so the user can still answer it with raw keys.
+ */
+export function unreadablePrompt(screen: string[]): TuiPrompt {
+  const last = lastNonEmptyIndex(screen);
+  let top = Math.max(0, last - UNREADABLE_SCREEN_LINES + 1);
+  for (let index = last - 1; index >= top; index -= 1) {
+    if (DIALOG_BORDER.test(screen[index])) {
+      top = index + 1;
+      break;
+    }
+  }
+  const body = screen.slice(top, last + 1).map((line) => line.trimEnd());
+  return { question: '', body, options: [], questionTabs: false, safeguardPause: false, preview: [], unreadable: true };
 }
 
 /** Which way to switch an AskUserQuestion set's tabs. */

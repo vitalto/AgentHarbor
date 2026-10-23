@@ -229,6 +229,47 @@ test('an ordinary waiting menu is never auto-answered, however long it stays ope
   assert.deepEqual(state.sentKeys, [], 'a real permission prompt keeps waiting for the human');
 });
 
+test('a question whose options carry previews is surfaced and answered by key like any other', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  const socket = new FakeSocket();
+  monitor.watch('app1', socket);
+  state.activity = 'waiting';
+  state.screen = fixture('ask-question-preview');
+  await monitor.tick();
+  const prompt = socket.frames.find((frame) => frame.kind === 'tui_prompt')?.prompt as { options: Array<{ label: string }>; preview: string[] };
+  assert.deepEqual(prompt.options.map((option) => option.label), ['Alpha one', 'Beta two', 'Chat about this']);
+  assert.deepEqual(prompt.preview, ['A line 1', 'A line 2', 'A line 3']);
+
+  assert.equal(await monitor.chooseOption('app1', 1), true);
+  assert.deepEqual(state.sentKeys.at(-1), ['Down', 'Enter']);
+});
+
+test('a dialog Claude waits on but the parser cannot read is shown raw after a grace period', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  const socket = new FakeSocket();
+  monitor.watch('app1', socket);
+  t.mock.method(console, 'warn', () => {});
+  state.activity = 'waiting';
+  state.screen = ['● Working on it', '─'.repeat(60), 'A dialog of a kind nobody has seen yet', '  Press space to go on', ''];
+
+  await monitor.tick();
+  await monitor.tick();
+  assert.equal(socket.frames.some((frame) => frame.kind === 'tui_prompt'), false, 'a menu still being drawn is not shown raw');
+
+  await monitor.tick();
+  const prompt = socket.frames.find((frame) => frame.kind === 'tui_prompt')?.prompt as { unreadable: boolean; body: string[]; options: unknown[] };
+  assert.equal(prompt.unreadable, true);
+  assert.deepEqual(prompt.body, ['A dialog of a kind nobody has seen yet', '  Press space to go on']);
+  assert.deepEqual(prompt.options, []);
+  assert.equal(await monitor.chooseOption('app1', 0), false, 'there is no option to pick, only keys');
+
+  state.activity = 'idle';
+  await monitor.tick();
+  assert.equal(socket.frames.at(-1)?.kind, 'tui_prompt_cleared');
+});
+
 test('a free-text answer is typed into the "Type something." slot before Enter; an empty one is refused', async (t) => {
   const { monitor, state, cleanup } = await harness();
   t.after(cleanup);

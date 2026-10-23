@@ -1,0 +1,30 @@
+ ▐▛███▛█   Claude Code v2.1.309
+▝▜██████▀  Haiku 5.5 · Claude Max
+ ▝▝   ▝▝   ~\SampleProject
+
+
+> Call the AskUserQuestion tool once with exactly two questions and do nothing
+  else. Question 1: header "Layout", question "Which layout?", multiSelect
+  false, options: label "Alpha one" description "first" preview "A line 1\nA
+  line 2\nA line 3"; label "Beta two" description "second" preview "B line 1\nB
+  line 2". Question 2: header "Parts", question "Which parts?", multiSelect
+  true, options "X" (description "x") and "Y" (description "y"). After the
+  answer, repeat my answers verbatim.
+
+────────────────────────────────────────────────────────────────────────────────
+←  [ ] Layout  [ ] Parts  √ Submit  →
+
+Which layout?
+
+  1. Alpha one                    ┌──────────────────────────────────────────┐
+> 2. Beta two                     │ B line 1                                 │
+                                  │ B line 2                                 │
+                                  └──────────────────────────────────────────┘
+
+                                  Notes: press n to add notes
+
+────────────────────────────────────────────────────────────────────────────────
+> Chat about this
+
+Enter to select · ↑/↓ to navigate · n to add notes · Tab to switch questions ·
+Esc to cancel

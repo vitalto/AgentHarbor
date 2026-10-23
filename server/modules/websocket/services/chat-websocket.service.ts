@@ -385,7 +385,7 @@ async function dispatchRun(
   return { started: true, error: failure };
 }
 
-const TUI_KEYS = new Set(['Escape', 'Enter', 'Up', 'Down', 'BTab', 'C-c', 'Tab']);
+const TUI_KEYS = new Set(['Escape', 'Enter', 'Up', 'Down', 'Left', 'Right', 'BTab', 'C-c', 'Tab']);
 
 /**
  * Handles `chat.tui-keys`: answers a menu the Claude TUI shows (`optionIndex`),
