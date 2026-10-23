@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import fs from 'node:fs';
+import fs, { type Dirent, type Stats } from 'node:fs';
 import {
   access,
   lstat,
@@ -1117,42 +1117,59 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
  * home directories. Pass `lastScanAt` to include only files created after the
  * previous scan, or pass `null` to perform a full rescan. Missing directories
  * are treated as empty because not every provider exists on every machine.
+ *
+ * Entries are stat'ed concurrently: over a WSL /mnt/<drive> 9p mount each stat
+ * is a round trip, and one-at-a-time stats of ~1000 transcripts took ~4.5 s.
  */
 export async function findFilesRecursivelyCreatedAfter(
   rootDir: string,
   extension: string,
   lastScanAt: Date | null,
-  fileList: string[] = []
+  options: { skipDirectoryNames?: ReadonlySet<string> } = {}
 ): Promise<string[]> {
+  let entries: Dirent[];
   try {
-    const entries = await readdir(rootDir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(rootDir, entry.name);
-
-      if (entry.isDirectory()) {
-        await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, fileList);
-        continue;
-      }
-
-      if (!entry.isFile() || !entry.name.endsWith(extension)) {
-        continue;
-      }
-
-      if (!lastScanAt) {
-        fileList.push(fullPath);
-        continue;
-      }
-
-      const fileStat = await stat(fullPath);
-      if (fileStat.birthtime > lastScanAt) {
-        fileList.push(fullPath);
-      }
-    }
+    entries = await readdir(rootDir, { withFileTypes: true });
   } catch {
     // Missing provider folders are expected in first-run or partial setups.
+    return [];
   }
 
-  return fileList;
+  const filesPerEntry = await Promise.all(entries.map(async (entry): Promise<string[]> => {
+    const fullPath = path.join(rootDir, entry.name);
+
+    if (entry.isDirectory()) {
+      return options.skipDirectoryNames?.has(entry.name)
+        ? []
+        : findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, options);
+    }
+
+    if (!entry.isFile() || !entry.name.endsWith(extension)) {
+      return [];
+    }
+
+    if (!lastScanAt) {
+      return [fullPath];
+    }
+
+    try {
+      return wasCreatedAfter(await stat(fullPath), lastScanAt) ? [fullPath] : [];
+    } catch {
+      return [];
+    }
+  }));
+
+  return filesPerEntry.flat();
+}
+
+/**
+ * WSL's 9p /mnt/<drive> mounts report no creation time (birthtime is the
+ * epoch), so there a file counts as new once it was modified after `since`;
+ * comparing the epoch birthtime instead never found a single new file there.
+ */
+export function wasCreatedAfter(fileStat: Pick<Stats, 'birthtimeMs' | 'mtimeMs'>, since: Date): boolean {
+  const createdAtMs = fileStat.birthtimeMs > 0 ? fileStat.birthtimeMs : fileStat.mtimeMs;
+  return createdAtMs > since.getTime();
 }
 
 /**

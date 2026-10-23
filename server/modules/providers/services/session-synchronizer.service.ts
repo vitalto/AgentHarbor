@@ -37,11 +37,12 @@ const pruneOrphanedSessions = async (): Promise<number> => {
   const knownDirectoryExists = new Map<string, boolean>();
   let pruned = 0;
 
-  for (const { session_id: sessionId, jsonl_path: jsonlPath } of sessionsDb.getSessionsWithTranscriptPath()) {
-    if (await pathExists(jsonlPath)) {
-      continue;
-    }
+  // Checked concurrently: each check is a 9p round trip on WSL /mnt/<drive>.
+  const indexedTranscripts = sessionsDb.getSessionsWithTranscriptPath();
+  const transcriptExists = await Promise.all(indexedTranscripts.map(({ jsonl_path }) => pathExists(jsonl_path)));
+  const missingTranscripts = indexedTranscripts.filter((_, index) => !transcriptExists[index]);
 
+  for (const { session_id: sessionId, jsonl_path: jsonlPath } of missingTranscripts) {
     const directory = path.dirname(jsonlPath);
     let directoryExists = knownDirectoryExists.get(directory);
     if (directoryExists === undefined) {

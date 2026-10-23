@@ -15,6 +15,8 @@ import {
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
+const NON_SESSION_TRANSCRIPT_DIRECTORIES: ReadonlySet<string> = new Set(['subagents', 'tool-results']);
+
 type ParsedSession = {
   sessionId: string;
   projectPath: string;
@@ -42,19 +44,24 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   private isSubagentTranscript(filePath: string): boolean {
     const pathParts = path.normalize(filePath).split(path.sep);
-    return pathParts.includes('subagents') || pathParts.includes('tool-results');
+    return pathParts.some((part) => NON_SESSION_TRANSCRIPT_DIRECTORIES.has(part));
   }
 
   /**
    * Scans ~/.claude/projects and upserts discovered sessions into DB.
    */
   async synchronize(since?: Date): Promise<number> {
-    const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
     const files = await findFilesRecursivelyCreatedAfter(
       path.join(this.claudeHome, 'projects'),
       '.jsonl',
-      since ?? null
+      since ?? null,
+      { skipDirectoryNames: NON_SESSION_TRANSCRIPT_DIRECTORIES }
     );
+    if (files.length === 0) {
+      return 0;
+    }
+
+    const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
 
     let processed = 0;
     for (const filePath of files) {
