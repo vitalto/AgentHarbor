@@ -1,4 +1,7 @@
 const THUMBNAIL_VIEWPORT = { width: 1280, height: 800 };
+// A cross-origin page's scrollbar cannot be styled away, so the thumbnail
+// frame is this much wider than the clipped area and the scrollbar falls outside.
+const THUMBNAIL_SCROLLBAR_ALLOWANCE = 24;
 const REFRESH_INTERVAL_MS = 30_000;
 const SELECTED_PAGE_KEY = 'agentharbor-pages:selected';
 const SANDBOX_FOR_INLINE_PAGES = 'allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads';
@@ -6,6 +9,7 @@ const SANDBOX_FOR_INLINE_PAGES = 'allow-scripts allow-popups allow-popups-to-esc
 const STRINGS = {
   en: {
     title: 'Pages',
+    pageCount: (count) => `${count} ${count === 1 ? 'page' : 'pages'}`,
     search: 'Search pages',
     refresh: 'Refresh',
     settings: 'Settings',
@@ -29,6 +33,10 @@ const STRINGS = {
   },
   ru: {
     title: 'Страницы',
+    pageCount: (count) => {
+      const form = new Intl.PluralRules('ru').select(count);
+      return `${count} ${{ one: 'страница', few: 'страницы' }[form] ?? 'страниц'}`;
+    },
     search: 'Поиск по страницам',
     refresh: 'Обновить',
     settings: 'Настройки',
@@ -85,16 +93,7 @@ const STYLES = `
   border-bottom: 1px solid hsl(var(--border));
   min-height: 3.25rem;
 }
-.ahp-heading {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.ahp-count { font-weight: 400; color: hsl(var(--muted-foreground)); font-variant-numeric: tabular-nums; }
+.ahp-count { color: hsl(var(--muted-foreground)); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ahp-spacer { flex: 1; }
 .ahp-viewer-title {
   flex: 1;
@@ -182,7 +181,7 @@ const STYLES = `
 .ahp-thumb iframe {
   position: absolute;
   inset: 0 auto auto 0;
-  width: ${THUMBNAIL_VIEWPORT.width}px;
+  width: ${THUMBNAIL_VIEWPORT.width + THUMBNAIL_SCROLLBAR_ALLOWANCE}px;
   height: ${THUMBNAIL_VIEWPORT.height}px;
   border: 0;
   transform: scale(var(--ahp-thumb-scale, 0.2));
@@ -249,6 +248,7 @@ const STYLES = `
 @container (max-width: 56rem) { .ahp-rail { display: none; } }
 @container (max-width: 34rem) {
   .ahp-search { width: auto; flex: 1; }
+  .ahp-count, .ahp-spacer { display: none; }
   .ahp-gallery { grid-template-columns: 1fr; }
   .ahp-icon-button .ahp-label { display: none; }
 }
@@ -429,7 +429,7 @@ export function mount(container, host) {
   });
   const refreshButton = iconButton('refresh', strings.refresh, () => loadPages({ userAsked: true }));
   const galleryBar = element('div', { class: 'ahp-bar' }, [
-    element('h1', { class: 'ahp-heading' }, [element('span', { text: strings.title }), count]),
+    count,
     element('div', { class: 'ahp-spacer' }),
     element('div', { class: 'ahp-search' }, [icon('search'), searchInput]),
     refreshButton,
@@ -553,7 +553,7 @@ export function mount(container, host) {
   // replacing or moving an iframe reloads it, and a periodic refresh must not
   // reload every live thumbnail. Search hides cards instead of removing them.
   function renderGallery() {
-    count.textContent = state.loaded ? String(state.pages.length) : '';
+    count.textContent = state.loaded ? strings.pageCount(state.pages.length) : '';
     const pageIds = new Set(state.pages.map((page) => page.id));
     for (const [id, entry] of cardsById) {
       if (!pageIds.has(id)) {

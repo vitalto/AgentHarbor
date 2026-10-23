@@ -302,9 +302,13 @@ git: enGit,
     },
   });
 
+// <html lang> is how screen readers and plugin tabs learn the UI language.
+document.documentElement.lang = i18n.language;
+
 // Save language preference when it changes
 i18n.on('languageChanged', (lng: string) => {
   writeUserPreference('userLanguage', lng);
+  document.documentElement.lang = lng;
 });
 
 // A language chosen on another device arrives with the hydrated preferences,
