@@ -18,9 +18,9 @@ type BashCommandDisplayProps = {
 };
 
 /**
- * Compact command row: a single-line command with a
- * chevron on the left. When the command produced output, the row becomes a
- * dropdown that expands to reveal the output inline. Theme-integrated surfaces
+ * Compact command row: the command clamped to a few lines with a chevron on
+ * the left. The row expands to the full command and, once the command has
+ * produced output, the output inline. Theme-integrated surfaces
  * keep it clean in both light and dark mode; consecutive commands stack tightly
  * into a clean list.
  *
@@ -45,6 +45,22 @@ export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
   const [openState, setOpen] = useState(false);
   const open = openState || isExporting;
   const [copied, setCopied] = useState(false);
+  const commandRef = useRef<HTMLSpanElement>(null);
+  const [isCommandClamped, setIsCommandClamped] = useState(false);
+  // A running command has no output yet, so it must still expand when its
+  // text is cut off, or there is no way to read what is being run.
+  const isExpandable = hasOutput || isCommandClamped || openState;
+
+  useEffect(() => {
+    const element = commandRef.current;
+    if (!element || open) return;
+    const measure = () => setIsCommandClamped(element.scrollHeight > element.clientHeight + 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [command, open]);
 
   // Output often arrives after this component first mounts, so apply the
   // auto-open intent once when there is finally something to show. After that
@@ -60,7 +76,7 @@ export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
   }, [hasOutput, defaultOpen]);
 
   const toggle = () => {
-    if (hasOutput) {
+    if (isExpandable) {
       setOpen((prev) => !prev);
     }
   };
@@ -78,51 +94,48 @@ export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
       className={cn(
         'group/cmd overflow-hidden rounded-lg border bg-muted/40 backdrop-blur-sm transition-all duration-200',
         isError ? 'border-red-500/30' : 'border-border/60',
-        hasOutput && !open && 'hover:border-border hover:bg-muted/60',
+        isExpandable && !open && 'hover:border-border hover:bg-muted/60',
         open && 'bg-muted/50 shadow-sm',
       )}
     >
-      {/* Command header — clickable when there is output to expand */}
       <div
-        role={hasOutput ? 'button' : undefined}
-        tabIndex={hasOutput ? 0 : undefined}
-        aria-expanded={hasOutput ? open : undefined}
+        role={isExpandable ? 'button' : undefined}
+        tabIndex={isExpandable ? 0 : undefined}
+        aria-expanded={isExpandable ? open : undefined}
         onClick={toggle}
         onKeyDown={(event) => {
-          if (hasOutput && (event.key === 'Enter' || event.key === ' ')) {
+          if (isExpandable && (event.key === 'Enter' || event.key === ' ')) {
             event.preventDefault();
             toggle();
           }
         }}
         className={cn(
-          'flex items-center gap-2 px-2.5 py-1.5 outline-none',
-          hasOutput && 'cursor-pointer focus-visible:ring-1 focus-visible:ring-ring',
+          'flex items-start gap-2 px-2.5 py-1.5 outline-none',
+          isExpandable && 'cursor-pointer focus-visible:ring-1 focus-visible:ring-ring',
         )}
       >
         <ChevronRight
           className={cn(
-            'h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/70 transition-transform duration-200',
+            'mt-px h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/70 transition-transform duration-200',
             open && 'rotate-90',
-            !hasOutput && 'opacity-0',
+            !isExpandable && 'opacity-0',
           )}
         />
         <span className="flex-shrink-0 select-none font-mono text-xs font-semibold text-emerald-500 dark:text-emerald-400">
           $
         </span>
-        {/* Not a <code> tag: the global `.chat-message code` rule forces
-            `white-space: pre-wrap !important`, which would defeat `truncate`
-            and render collapsed multi-line commands in full. */}
         <span
+          ref={commandRef}
           className={cn(
-            'min-w-0 flex-1 font-mono text-xs text-foreground',
-            open ? 'whitespace-pre-wrap break-all' : 'truncate',
+            'min-w-0 flex-1 whitespace-pre-wrap break-all font-mono text-xs text-foreground',
+            !open && 'line-clamp-3',
           )}
         >
           {command}
         </span>
 
         {isRunning && (
-          <span className="h-2.5 w-2.5 flex-shrink-0 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-emerald-400" />
+          <span className="mt-0.5 h-2.5 w-2.5 flex-shrink-0 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-emerald-400" />
         )}
         {status && status !== 'running' && <ToolStatusBadge status={status} className="flex-shrink-0" />}
         {!open && hasOutput && !isRunning && (
@@ -142,7 +155,7 @@ export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
         </button>
       </div>
 
-      {description && !open && (
+      {description && !(open && hasOutput) && (
         <div className="truncate px-2.5 pb-1.5 pl-[2.4rem] text-[11px] italic text-muted-foreground/70">
           {description}
         </div>
