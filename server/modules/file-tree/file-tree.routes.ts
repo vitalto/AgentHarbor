@@ -7,6 +7,7 @@ import type {
   FileTreeUploadedFile,
 } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
+import { decodeMultipartFilename } from '@/shared/upload-filename.js';
 
 type FileTreeUploadLimits = {
   maximumFileSizeMegabytes: number;
@@ -74,7 +75,7 @@ function readRequestedFileCount(value: unknown, fallbackCount: number): number {
 function normalizeUploadedFiles(request: UploadedRequest): FileTreeUploadedFile[] {
   return Array.isArray(request.files)
     ? request.files.map((file) => ({
-        originalName: file.originalname,
+        originalName: decodeMultipartFilename(file.originalname),
         temporaryPath: file.path,
         size: file.size,
         mimeType: file.mimetype,

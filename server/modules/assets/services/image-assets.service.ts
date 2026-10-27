@@ -4,6 +4,7 @@ import path from 'node:path';
 import mime from 'mime-types';
 
 import { getGlobalImageAssetsDir, toPosixPath } from '@/shared/image-attachments.js';
+import { decodeMultipartFilename } from '@/shared/upload-filename.js';
 
 /**
  * Image mime types accepted for chat attachment uploads. SVG is allowed for
@@ -42,6 +43,17 @@ export function isAllowedImageMimeType(mimeType: string): boolean {
   return ALLOWED_IMAGE_MIME_TYPES.has(mimeType);
 }
 
+/**
+ * Builds the on-disk name for a stored upload from its (already UTF-8 decoded)
+ * original name. Unicode letters and digits are kept so a Cyrillic or other
+ * non-ASCII name stays readable and findable; everything else (spaces, path
+ * separators, punctuation) collapses to `_`, and a unique prefix supplied by
+ * the caller guarantees uniqueness and blocks traversal.
+ */
+export function sanitizeStoredFileName(name: string): string {
+  return name.replace(/[^\p{L}\p{N}._-]/gu, '_');
+}
+
 /** Creates the global `~/.agentharbor/assets` folder if needed and returns it. */
 export async function ensureImageAssetsDir(): Promise<string> {
   const assetsDir = getGlobalImageAssetsDir();
@@ -57,7 +69,7 @@ export async function ensureImageAssetsDir(): Promise<string> {
 export function buildStoredImageRecords(files: UploadedImageFile[]): StoredImageAsset[] {
   const assetsDir = getGlobalImageAssetsDir();
   return files.map((file) => ({
-    name: file.originalname,
+    name: decodeMultipartFilename(file.originalname),
     path: toPosixPath(path.join(assetsDir, file.filename)),
     size: file.size,
     mimeType: file.mimetype,

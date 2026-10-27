@@ -9,6 +9,7 @@ import {
   isAllowedImageMimeType,
   resolveAttachmentAssetFile,
   resolveImageAssetFile,
+  sanitizeStoredFileName,
 } from '@/modules/assets/services/image-assets.service.js';
 
 const ASSETS_DIR = path.join(os.homedir(), '.agentharbor', 'assets');
@@ -48,6 +49,22 @@ test('buildStoredAttachmentRecords preserves metadata for non-image files', () =
     size: 2048,
     mimeType: 'application/pdf',
   });
+});
+
+test('buildStoredImageRecords decodes a Cyrillic name from multer latin1 mojibake', () => {
+  const mojibake = Buffer.from('Снимок.png', 'utf8').toString('latin1');
+  const records = buildStoredImageRecords([
+    { originalname: mojibake, filename: '123-456-Снимок.png', size: 10, mimetype: 'image/png' },
+  ]);
+
+  assert.equal(records[0].name, 'Снимок.png');
+  assert.equal(records[0].path, `${ASSETS_DIR.replace(/\\/g, '/')}/123-456-Снимок.png`);
+});
+
+test('sanitizeStoredFileName keeps Unicode letters and digits but drops spaces and punctuation', () => {
+  assert.equal(sanitizeStoredFileName('Отчёт за март.pdf'), 'Отчёт_за_март.pdf');
+  assert.equal(sanitizeStoredFileName('shot.png'), 'shot.png');
+  assert.equal(sanitizeStoredFileName('a (1)/b.txt'), 'a__1__b.txt');
 });
 
 test('resolveImageAssetFile resolves plain filenames inside the assets dir', () => {
