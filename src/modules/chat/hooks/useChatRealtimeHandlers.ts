@@ -239,8 +239,26 @@ export function useChatRealtimeHandlers({
           }
           return;
 
+        case 'session_upserted': {
+          // The sidebar row is owned by useProjectsState, but the open
+          // conversation only learns of new rows through the live transcript
+          // tail — and a tail restarted on resubscribe (reconnect, session
+          // switch, a brief socket drop) begins at end-of-file, so rows Claude
+          // appended during the gap are never pushed and stay missing from the
+          // view until it is reopened. When this is the visible session and no
+          // response is streaming, reconcile against the transcript (the
+          // authoritative source) so those trailing rows appear.
+          if (sid && sid === activeViewSessionId) {
+            const activity = getSessionActivity?.(sid);
+            const responseInFlight = !!activity && activity.background !== true;
+            if (!responseInFlight) {
+              void requestLatestMessages(sid, isActiveRef.current);
+            }
+          }
+          return;
+        }
+
         // Sidebar/global events — owned by useProjectsState.
-        case 'session_upserted':
         case 'loading_progress':
           return;
 
