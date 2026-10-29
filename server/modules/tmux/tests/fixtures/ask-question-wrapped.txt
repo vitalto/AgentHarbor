@@ -1,0 +1,22 @@
+> Call the AskUserQuestion tool once with two questions, copy the texts verbatim. Question 1 (header "Long"): "When the
+  nightly export runs against the archive server, the old snapshots are kept for thirty days, but the storage team
+  asked us to cut that to fourteen days because the shared volume is almost full and the next disk order arrives only
+  in December. Which retention should we use?" options "Fourteen days" (description "Frees about half of the volume
+  right away, older restores are no longer possible after two weeks.") and "Thirty days" (description "Keeps the
+  current behaviour."). Question 2 (header "Short"): "Ship it?" options "Yes" and "No". Do nothing else.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  [ ] Long  [ ] Short  √ Submit  →
+
+│ When the nightly export runs against the archive server, the old snapshots are kept for thirty days, but the storage
+│ team asked us to cut that to fourteen days because the shared volume is almost full and the next disk order arrives
+│ only in December. Which retention should we use?
+
+> 1. Fourteen days
+     Frees about half of the volume right away, older restores are no longer possible after two weeks.
+  2. Thirty days
+     Keeps the current behaviour.
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel

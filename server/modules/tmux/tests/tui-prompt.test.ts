@@ -47,6 +47,18 @@ test('AskUserQuestion: descriptions become details, options after a rule are kep
   assert.equal(prompt.options[0].selected, true);
 });
 
+test('AskUserQuestion: a question wrapped into a quote is read whole, without its bar', () => {
+  const prompt = parseTuiPrompt(screen('ask-question-wrapped'));
+  assert.ok(prompt);
+  const question = 'When the nightly export runs against the archive server, the old snapshots are kept for thirty days, '
+    + 'but the storage team asked us to cut that to fourteen days because the shared volume is almost full and the next '
+    + 'disk order arrives only in December. Which retention should we use?';
+  assert.equal(prompt.question, question);
+  assert.deepEqual(prompt.body, [question]);
+  assert.equal(prompt.questionTabs, true);
+  assert.deepEqual(prompt.options.map((option) => option.label), ['Fourteen days', 'Thirty days', 'Type something.', 'Chat about this']);
+});
+
 test('AskUserQuestion with previews: the box beside the options becomes the preview, not part of the labels', () => {
   const prompt = parseTuiPrompt(screen('ask-question-preview'));
   assert.ok(prompt);

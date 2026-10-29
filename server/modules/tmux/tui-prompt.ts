@@ -349,16 +349,40 @@ function readCursorOptions(lines: string[], footerIndex: number): OptionBlock | 
   return { options, topIndex: top, freeTextSlotIndex: -1 };
 }
 
-function readBody(lines: string[], optionsTopIndex: number): string[] {
+/**
+ * Claude Code 2.1.312 draws a long AskUserQuestion question as a quote: every
+ * line it wraps onto starts with this bar. A preview box's rows also start with
+ * `│` but close with one too.
+ */
+const QUOTED_LINE = /^\s*│ ?(.*?)\s*$/;
+const BOXED_LINE = /│\s*$/;
+
+function readQuotedText(line: string): string | null {
+  if (BOXED_LINE.test(line)) {
+    return null;
+  }
+  return QUOTED_LINE.exec(line)?.[1] ?? null;
+}
+
+function readBody(lines: string[], optionsTopIndex: number, screenWidth: number): string[] {
+  let top = optionsTopIndex;
+  while (top > 0 && !DIALOG_BORDER.test(lines[top - 1])) {
+    top -= 1;
+  }
   const body: string[] = [];
-  for (let index = optionsTopIndex - 1; index >= 0; index -= 1) {
-    const line = lines[index];
-    if (DIALOG_BORDER.test(line)) {
-      break;
+  let quoteEndsLine: string | null = null;
+  for (const line of lines.slice(top, optionsTopIndex)) {
+    if (!line.trim() || ANY_RULE.test(line)) {
+      quoteEndsLine = null;
+      continue;
     }
-    if (line.trim() && !ANY_RULE.test(line)) {
-      body.unshift(line.trim());
+    const quoted = readQuotedText(line);
+    if (quoted !== null && quoteEndsLine !== null) {
+      body[body.length - 1] = appendWrapped(body[body.length - 1], quoteEndsLine, quoted, screenWidth);
+    } else {
+      body.push(quoted ?? line.trim());
     }
+    quoteEndsLine = quoted !== null ? line : null;
   }
   return body;
 }
@@ -382,7 +406,7 @@ export function parseTuiPrompt(screen: string[]): TuiPrompt | null {
     freeText: !option.confirmsSelection && (FREE_TEXT_PLACEHOLDER.test(option.label) || index === block.freeTextSlotIndex),
   }));
 
-  const dialogText = readBody(lines, block.topIndex);
+  const dialogText = readBody(lines, block.topIndex, screenWidth);
   const body = dialogText.filter((line) => !QUESTION_SET_TABS.test(line));
   const safeguardPause = body.some((line) => SAFEGUARD_TITLE.test(line));
   const question = safeguardPause

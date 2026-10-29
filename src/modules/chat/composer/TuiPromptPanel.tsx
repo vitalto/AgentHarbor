@@ -218,7 +218,7 @@ export default function TuiPromptPanel({ prompt, autoAnswerAt, onChoose, onCance
                 {isCheckbox && <Tick checked={Boolean(option.checked)} />}
                 <span className="text-foreground">{option.label}</span>
               </span>
-              {option.detail && <span className="mt-0.5 block break-all text-xs text-muted-foreground">{option.detail}</span>}
+              {option.detail && <span className="mt-0.5 block break-words text-xs text-muted-foreground">{option.detail}</span>}
             </button>
           );
         })}
