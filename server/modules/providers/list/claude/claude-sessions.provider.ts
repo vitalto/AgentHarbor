@@ -62,9 +62,10 @@ const formatDuration = (milliseconds: number): string => {
 const MAX_TRANSMITTED_SUBAGENT_ACTIVITIES = 200;
 
 /**
- * A subagent whose transcript changed this recently counts as running. Claude
- * records no explicit end for a background agent, so the write rhythm (a row
- * per step, steps rarely longer than this) is the signal.
+ * For an agent no launch row in the parent transcript names: it counts as
+ * running while its own transcript changed this recently. A launched agent is
+ * settled by its report and the parent process instead — it writes nothing
+ * while a long tool call runs.
  */
 const SUBAGENT_RUNNING_WINDOW_MS = 90_000;
 
@@ -667,6 +668,79 @@ export async function listBackgroundCommands(
   return commands;
 }
 
+function wasLaunchedByLiveRun(row: AnyRecord, liveRunStartedAt: number | null): boolean {
+  return liveRunStartedAt !== null && Date.parse(String(row.timestamp ?? '')) >= liveRunStartedAt;
+}
+
+/**
+ * Where the agent a launch row started stands. A resume restarts the question
+ * of how the agent ends, and it is answered the way a launch's is: by a later
+ * report, or by whether the process the run lives in is still up.
+ */
+function settleAgentStatus(
+  launchRow: AnyRecord,
+  notification: ClaudeTaskNotification | undefined,
+  latestWord: ClaudeAgentLatestWord | undefined,
+  liveRunStartedAt: number | null,
+): SubagentInfo['status'] {
+  if (latestWord?.kind === 'resume') {
+    return wasLaunchedByLiveRun(latestWord.resumeRow, liveRunStartedAt) ? 'running' : 'stopped';
+  }
+  const reportedStatus = latestWord?.kind === 'report' ? latestWord.status : notification?.status;
+  if (reportedStatus) {
+    return reportedStatus === 'completed' ? 'completed' : 'failed';
+  }
+  if (launchRow.toolUseResult?.isAsync !== true) {
+    return 'completed';
+  }
+  return wasLaunchedByLiveRun(launchRow, liveRunStartedAt) ? 'running' : 'stopped';
+}
+
+/** Every agent a transcript launched, keyed by agent id, with where it stands. */
+export function settleAgentStatuses(rows: AnyRecord[], liveRunStartedAt: number | null): Map<string, SubagentInfo['status']> {
+  const notifications = collectTaskNotifications(rows);
+  const latestWords = collectLatestAgentWords(rows);
+  const statuses = new Map<string, SubagentInfo['status']>();
+  for (const row of rows) {
+    if (readBackgroundLaunch(row.toolUseResult) !== 'agent') {
+      continue;
+    }
+    const agentId = String(row.toolUseResult.agentId);
+    const toolUseId = readLaunchToolUseId(row);
+    statuses.set(agentId, settleAgentStatus(row, toolUseId ? notifications.get(toolUseId) : undefined, latestWords.get(agentId), liveRunStartedAt));
+  }
+  return statuses;
+}
+
+/** The only rows `settleAgentStatuses` reads: launches, reports and resumes. */
+const AGENT_STATUS_ROW_MARKERS = ['"agentId"', 'task-notification', '"resumedAgentId"'];
+
+const agentStatusesByTranscript = new Map<string, { key: string; liveRunStartedAt: number | null; statuses: Map<string, SubagentInfo['status']> }>();
+
+/** `settleAgentStatuses` for a session's transcript, re-read only when the transcript changed. */
+async function listAgentStatuses(
+  jsonlPath: string,
+  providerSessionId: string,
+  liveRunStartedAt: number | null,
+): Promise<Map<string, SubagentInfo['status']>> {
+  let key: string;
+  try {
+    const { size, mtimeMs } = await fsp.stat(jsonlPath);
+    key = `${providerSessionId}:${size}:${mtimeMs}`;
+  } catch {
+    return new Map();
+  }
+  const cached = agentStatusesByTranscript.get(jsonlPath);
+  if (cached?.key === key && cached.liveRunStartedAt === liveRunStartedAt) {
+    return cached.statuses;
+  }
+  const rows = await readTranscriptRows(jsonlPath, providerSessionId, (line) =>
+    AGENT_STATUS_ROW_MARKERS.some((marker) => line.includes(marker)));
+  const statuses = settleAgentStatuses(rows, liveRunStartedAt);
+  agentStatusesByTranscript.set(jsonlPath, { key, liveRunStartedAt, statuses });
+  return statuses;
+}
+
 /** The backgrounded commands a session's live Claude still runs, for the running-sessions poll. */
 export async function listRunningBackgroundCommands(
   jsonlPath: string,
@@ -984,8 +1058,6 @@ async function getSessionMessages(
     // starts a run and by the provider-native id when the agent API does, so
     // both are asked.
     const liveRunStartedAt = getLiveRunStartTime(sessionId) ?? getLiveRunStartTime(providerSessionId);
-    const launchedByLiveRun = (message: AnyRecord): boolean =>
-      liveRunStartedAt !== null && Date.parse(String(message.timestamp ?? '')) >= liveRunStartedAt;
 
     const backgroundCommands = settleBackgroundCommands(messages, liveRunStartedAt);
 
@@ -1027,22 +1099,13 @@ async function getSessionMessages(
       // A synchronous agent hands its answer back inline on its own tool
       // result, so its status never depends on a notification or the process.
       const unreportedStatus = isAsyncLaunch
-        ? launchedByLiveRun(message) ? 'running' : 'stopped'
+        ? wasLaunchedByLiveRun(message, liveRunStartedAt) ? 'running' : 'stopped'
         : 'completed';
 
       if (launch === 'agent') {
         const agentId = String(message.toolUseResult.agentId);
         const subagent = subagentsById.get(agentId);
-        const latestWord = latestAgentWords.get(agentId);
-        // A resume restarts the question of how the agent ends, and it is
-        // answered the way a launch's is: by a later report, or by whether the
-        // process the resumed run lives in is still up.
-        const reportedStatus = latestWord?.kind === 'report' ? latestWord.status : notification?.status;
-        const status: SubagentInfo['status'] = latestWord?.kind === 'resume'
-          ? launchedByLiveRun(latestWord.resumeRow) ? 'running' : 'stopped'
-          : reportedStatus
-            ? reportedStatus === 'completed' ? 'completed' : 'failed'
-            : unreportedStatus;
+        const status = settleAgentStatus(message, notification, latestAgentWords.get(agentId), liveRunStartedAt);
 
         if (subagent && subagent.activity.length > 0) {
           message.subagentTools = subagent.activity;
@@ -1882,16 +1945,20 @@ export class ClaudeSessionsProvider implements IProviderSessions {
   }
 
   /**
-   * Reads one workflow agent's timeline from the transcript the run wrote for
-   * it, under `<projectDir>/<providerSessionId>/subagents/workflows/<runId>/`
-   * — the only place it exists, since the SDK never streams a workflow agent's
-   * rows to the parent session.
-   *
-   * The journal beside it settles the agent when it has; short of that the
-   * agent is running only while the process that spawned it is — the same
-   * rule history applies to a launch row, keyed here on the agent's first row
-   * rather than the launch's.
+   * Where each agent of the session stands, by the same word history gives
+   * its launch card: a report, else whether the process that launched it is
+   * still up. An agent sits silent through a long tool call, so a quiet
+   * transcript says nothing about it having finished.
    */
+  private async readSessionAgentStatuses(sessionId: string): Promise<Map<string, SubagentInfo['status']>> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session?.jsonl_path || !session.provider_session_id) {
+      return new Map();
+    }
+    const liveRunStartedAt = this.getLiveRunStartTime(sessionId) ?? this.getLiveRunStartTime(session.provider_session_id);
+    return listAgentStatuses(session.jsonl_path, session.provider_session_id, liveRunStartedAt);
+  }
+
   async listSubagents(sessionId: string): Promise<SessionSubagent[]> {
     const directory = this.subagentsDirectory(sessionId);
     if (!directory) {
@@ -1903,6 +1970,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     } catch {
       return [];
     }
+    const statuses = await this.readSessionAgentStatuses(sessionId);
     const now = Date.now();
     const subagents = await Promise.all(names.map(async (name): Promise<SessionSubagent | null> => {
       const transcriptPath = path.join(directory, name);
@@ -1916,12 +1984,15 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       if (!stats) {
         return null;
       }
+      const agentId = name.slice('agent-'.length, -'.jsonl'.length);
+      const status = statuses.get(agentId);
       return {
-        agentId: name.slice('agent-'.length, -'.jsonl'.length),
+        agentId,
         description: meta.description,
         agentType: meta.agentType,
         background: rawMeta.requestShape === 'background',
-        running: now - stats.mtimeMs < SUBAGENT_RUNNING_WINDOW_MS,
+        // An agent no launch row names falls back on the write rhythm.
+        running: status ? status === 'running' : now - stats.mtimeMs < SUBAGENT_RUNNING_WINDOW_MS,
         startedAt: metaStats ? new Date(metaStats.mtimeMs).toISOString() : null,
         updatedAt: new Date(stats.mtimeMs).toISOString(),
       };
@@ -1941,16 +2012,17 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     if (!stats) {
       return null;
     }
-    const [transcript, meta] = await Promise.all([
+    const [transcript, meta, statuses] = await Promise.all([
       readClaudeSubagentTranscript(transcriptPath),
       readClaudeSubagentMeta(transcriptPath.replace(/\.jsonl$/, '.meta.json')),
+      this.readSessionAgentStatuses(sessionId),
     ]);
     return {
       agent: {
         id: agentId,
         label: meta.description,
         model: transcript.model,
-        status: Date.now() - stats.mtimeMs < SUBAGENT_RUNNING_WINDOW_MS ? 'running' : 'completed',
+        status: statuses.get(agentId) ?? (Date.now() - stats.mtimeMs < SUBAGENT_RUNNING_WINDOW_MS ? 'running' : 'completed'),
       },
       activity: transcript.activity.slice(-MAX_TRANSMITTED_SUBAGENT_ACTIVITIES),
       activityCount: transcript.activity.length,

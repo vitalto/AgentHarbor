@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -593,6 +593,36 @@ test('Claude history reports a background agent stopped when a later run of the 
       );
 
       assert.equal(agentRow?.subagent?.status, 'stopped');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('the agents panel keeps a silent background agent running until it reports', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-silent-agent-'));
+
+  try {
+    const parentPath = await writeClaudeSubagentSession(tempRoot);
+    const reportedParent = await readFile(parentPath, 'utf8');
+    await dropTaskNotification(parentPath);
+    // Ten minutes inside one long tool call: the agent writes nothing meanwhile.
+    const quietSince = new Date(Date.now() - 10 * 60_000);
+    await utimes(path.join(tempRoot, SESSION_ID, 'subagents', `agent-${AGENT_ID}.jsonl`), quietSince, quietSince);
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      const appSessionId = sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+      const provider = new ClaudeSessionsProvider({ getLiveRunStartTime: () => Date.parse('2026-08-21T09:59:00.000Z') });
+
+      const [silent] = await provider.listSubagents(appSessionId);
+      assert.equal(silent?.running, true);
+      assert.equal((await provider.readSubagentActivity(appSessionId, AGENT_ID))?.agent.status, 'running');
+
+      await writeFile(parentPath, reportedParent, 'utf8');
+      const [reported] = await provider.listSubagents(appSessionId);
+      assert.equal(reported?.running, false);
+      assert.equal((await provider.readSubagentActivity(appSessionId, AGENT_ID))?.agent.status, 'completed');
     });
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
