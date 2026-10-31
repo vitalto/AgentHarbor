@@ -13,6 +13,7 @@ ah projects                          # project names and paths
 ah ls [--project P]                  # live agents: session id, busy/idle, title
 ah ls --recent 20                    # recent conversations, live or not
 ah new --project P "task"            # new session; prints its id. Project defaults to the cwd
+ah new --trust-folder --project P "task"   # same, answering Claude's folder-trust dialog (see below)
 ah send <session> "text"             # a busy session queues it
 ah read <session> --last 10          # last messages (default 10)
 ah usage                             # your own session id and context: used of total tokens, percent
@@ -22,6 +23,13 @@ ah notify [--title T] "text"         # push to the user's subscribed browsers; t
 
 For long or multi-line text pass it on stdin with a quoted heredoc: `ah new --project P <<'EOF'`.
 Use `--model` / `--effort` only when the user asked for them; otherwise the session's defaults apply.
+
+The first start in a folder Claude has not opened before stops on "Do you trust this folder?". Without
+`--trust-folder` nobody answers it: the user gets a push, and if they do not answer within 2 minutes
+the session fails with "Claude is waiting for you to trust the folder". Trusting runs the folder's
+`.claude/settings.json` hooks and `.mcp.json` servers, so pass `--trust-folder` only for a folder you
+know: one of the user's own projects, or one you have read those files in. Never for a freshly cloned
+repository you have not checked.
 
 ## Notifying the user
 

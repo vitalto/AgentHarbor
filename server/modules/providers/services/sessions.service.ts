@@ -5,7 +5,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { AgentBusyElsewhereError, AgentWindowError, clearAgentConversation, closeAgentWindow, ensureAgentWindow, getLiveProcessStartTime, moveSessionToTmux, paneRegistry, readClaudeProcesses, readClaudeStatuses, toLocalPath } from '@/modules/tmux/index.js';
+import { AgentBusyElsewhereError, AgentWindowError, clearAgentConversation, closeAgentWindow, ensureAgentWindow, getLiveProcessStartTime, moveSessionToTmux, paneRegistry, readClaudeProcesses, readClaudeStatuses, toLocalPath, trustFolderOnNextStart } from '@/modules/tmux/index.js';
 import { listBackgroundCommands, listRunningBackgroundCommands, type SessionBackgroundCommand } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
@@ -332,12 +332,15 @@ export const sessionsService = {
    * for the lifetime of the conversation. The provider-native id is mapped to
    * this row later, when the provider runtime announces it mid-run. Its title
    * comes directly from the first visible AgentHarbor message and is limited to
-   * four whole words before any provider-owned storage exists.
+   * four whole words before any provider-owned storage exists. `trustFolder`
+   * lets the session's first window answer Claude's folder-trust dialog: the
+   * caller (`ah new --trust-folder`) has checked the project folder.
    */
   createAppSession(
     provider: LLMProvider,
     projectPath: string,
     initialMessage: string,
+    options: { trustFolder?: boolean } = {},
   ): CreateAppSessionResult {
     const normalizedProjectPath = projectPath.trim();
     if (!normalizedProjectPath) {
@@ -350,6 +353,9 @@ export const sessionsService = {
     const sessionId = randomUUID();
     const sessionName = buildSessionNameFromMessage(initialMessage);
     sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath, sessionName);
+    if (options.trustFolder) {
+      trustFolderOnNextStart(sessionId);
+    }
 
     return {
       sessionId,

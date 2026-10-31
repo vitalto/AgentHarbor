@@ -11,7 +11,9 @@ import {
   sessionsDb,
   userDb,
 } from '@/modules/database/index.js';
+import { categoryOfEventKind } from '@/shared/notification-categories.js';
 
+import { folderTrustNotificationEvent } from '../services/agent-activity-notifier.service.js';
 import {
   buildNotificationPayload,
 } from '../services/notification-orchestrator.service.js';
@@ -93,5 +95,30 @@ test('a notification for a session AgentHarbor does not know opens no chat', asy
     assert.equal(payload.data.sessionId, null);
     assert.equal(payload.title, 'nightly');
     assert.equal(payload.body, 'Build is green');
+  });
+});
+
+test('a start waiting on the folder-trust dialog pushes a question that opens its chat', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('starting-session', 'claude', '/mnt/d/Develop/Cloned', 'Fix the build');
+
+    const event = folderTrustNotificationEvent({ appSessionId: 'starting-session', folder: 'D:\\Develop\\Cloned' }, 'Fix the build');
+    const payload = buildNotificationPayload(event);
+
+    assert.equal(categoryOfEventKind(event.kind), 'waiting', 'rides the "waiting on a question" preference');
+    assert.equal(payload.data.sessionId, 'starting-session');
+    assert.equal(payload.title, 'Fix the build');
+    assert.equal(payload.body, 'Claude in Cloned waits for you to trust the folder');
+  });
+});
+
+test('an untitled start waiting on the folder-trust dialog is named by its folder', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('untitled-session', 'claude', '/work/cloned');
+
+    const payload = buildNotificationPayload(folderTrustNotificationEvent({ appSessionId: 'untitled-session', folder: '/work/cloned/' }, null));
+
+    assert.equal(payload.title, 'cloned');
+    assert.equal(payload.body, 'Claude in cloned waits for you to trust the folder');
   });
 });

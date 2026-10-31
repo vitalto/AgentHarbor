@@ -3,7 +3,14 @@ import path from 'node:path';
 
 import { pushSubscriptionsDb, sessionsDb } from '@/modules/database/index.js';
 import { createNotificationEvent, notifyUserIfEnabled } from '@/modules/notifications/services/notification-orchestrator.service.js';
-import { findTranscriptPath, readClaudeProcesses, type ClaudeActivity, type ClaudeProcess } from '@/modules/tmux/index.js';
+import {
+  findTranscriptPath,
+  onFolderTrustRequested,
+  readClaudeProcesses,
+  type ClaudeActivity,
+  type ClaudeProcess,
+  type FolderTrustRequest,
+} from '@/modules/tmux/index.js';
 
 const CHECK_INTERVAL_MS = 3000;
 /** Idle must hold this many checks in a row before a turn counts as over, so rows written at the very end are in the transcript. */
@@ -165,8 +172,33 @@ async function notifyTransition(transition: AgentTransition, claude: ClaudeProce
   await Promise.all(userIds.map((userId) => notifyUserIfEnabled({ userId, event })));
 }
 
-/** Watches every Claude process on the machine (in tmux or not) and pushes when one finishes a turn or stops on a question. */
+/** The push for a starting window that waits on the folder-trust dialog; it opens that session's chat, where the dialog is shown. */
+export function folderTrustNotificationEvent(request: FolderTrustRequest, sessionName: string | null) {
+  const folderName = request.folder.split(/[\\/]+/).filter(Boolean).at(-1) ?? request.folder;
+  return createNotificationEvent({
+    provider: 'claude',
+    sessionId: request.appSessionId,
+    kind: 'action_required',
+    code: 'agent.trust_folder',
+    meta: { folder: request.folder, folderName, sessionName: sessionName || folderName },
+    requiresUserAction: true,
+    dedupeKey: `trust_folder:${request.appSessionId}`,
+  });
+}
+
+async function notifyFolderTrustRequested(request: FolderTrustRequest): Promise<void> {
+  const event = folderTrustNotificationEvent(request, sessionsDb.getSessionName(request.appSessionId, 'claude'));
+  await Promise.all(pushSubscriptionsDb.getSubscribedUserIds().map((userId) => notifyUserIfEnabled({ userId, event })));
+}
+
+/**
+ * Watches every Claude process on the machine (in tmux or not) and pushes when one finishes a turn
+ * or stops on a question, and when a window being started waits for the user to trust its folder.
+ */
 export function startAgentActivityNotifications(): void {
+  onFolderTrustRequested((request) => notifyFolderTrustRequested(request).catch((error) => {
+    console.error('[AgentHarbor] could not send a folder trust notification', error);
+  }));
   const tracker = createAgentActivityTracker(Date.now());
   let checking = false;
   const check = async () => {

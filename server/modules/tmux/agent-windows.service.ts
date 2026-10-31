@@ -18,10 +18,16 @@ import {
   type AgentSelection,
 } from '@/modules/tmux/agent-selection.js';
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
-import { toLocalPath } from '@/modules/tmux/path-translation.js';
+import { toClaudePath, toLocalPath } from '@/modules/tmux/path-translation.js';
+import {
+  createFolderTrustWatch,
+  folderTrustTimeoutMessage,
+  takeFolderTrustForStart,
+  type FolderTrustWatch,
+} from '@/modules/tmux/folder-trust.js';
 import { getSessionMonitor } from '@/modules/tmux/session-monitor.service.js';
 import { tmuxService, TmuxError, type AgentPane } from '@/modules/tmux/tmux.service.js';
-import { keysForOption, parseTuiPrompt, readInputBox, trustFolderOptionIndex, type InputBox } from '@/modules/tmux/tui-prompt.js';
+import { readInputBox, type InputBox } from '@/modules/tmux/tui-prompt.js';
 
 const REGISTRATION_TIMEOUT_MS = 120_000;
 const INPUT_READY_TIMEOUT_MS = 60_000;
@@ -64,46 +70,76 @@ async function uniqueWindowName(base: string): Promise<string> {
 }
 
 /**
- * Claude asks to trust the home directory on every start there and never stores the answer (a
- * stored trust would extend to every folder under it), so it cannot be answered once and for all,
- * and a session started without anyone watching (`ah new`) would wait on it until the start times
- * out. The answer covers only this Claude process.
+ * Raised when a start timed out on a folder-trust dialog that is left to the user. The window
+ * stays open on the dialog, which the chat keeps showing, and `laterRegistration` settles once
+ * the user answers it (or the window closes).
  */
-async function answerHomeFolderTrust(paneId: string): Promise<void> {
-  const prompt = parseTuiPrompt(await tmuxService.capturePane(paneId));
-  const trustIndex = trustFolderOptionIndex(prompt);
-  if (prompt && trustIndex >= 0) {
-    await tmuxService.sendKeys(paneId, keysForOption(prompt, trustIndex));
+class FolderTrustTimeoutError extends AgentWindowError {
+  constructor(folder: string, readonly laterRegistration: Promise<PaneSession>) {
+    super(folderTrustTimeoutMessage(folder));
   }
 }
 
-/**
- * Waits until the pane's SessionStart hook has reported. Menus that appear first
- * (the folder-trust dialog of a folder other than home) are surfaced to the web
- * so the user can answer them.
- */
-async function waitForRegistration(appSessionId: string, paneId: string, options: { inHomeFolder: boolean }): Promise<PaneSession> {
-  const monitor = getSessionMonitor();
-  monitor.setStartingPane(appSessionId, paneId);
-  try {
-    const deadline = Date.now() + REGISTRATION_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      const registered = await paneRegistry.waitForRegistration(paneId, POLL_MS * 3);
-      if (registered) {
-        return registered;
-      }
-      const alive = (await tmuxService.listPanes()).some((pane) => pane.paneId === paneId && !pane.dead);
-      if (!alive) {
-        throw new AgentWindowError('Claude exited right after starting. Open the terminal tab to see why.');
-      }
-      if (options.inHomeFolder) {
-        await answerHomeFolderTrust(paneId);
-      }
+/** Polls until the pane registers (null once `deadline` passes), answering or reporting the trust dialog on the way. */
+async function pollRegistration(paneId: string, folderTrust: FolderTrustWatch, deadline: number): Promise<PaneSession | null> {
+  while (Date.now() < deadline) {
+    const registered = await paneRegistry.waitForRegistration(paneId, POLL_MS * 3);
+    if (registered) {
+      return registered;
     }
-    throw new AgentWindowError('Claude did not finish starting within 2 minutes.');
-  } finally {
-    monitor.setStartingPane(appSessionId, null);
+    const alive = (await tmuxService.listPanes()).some((pane) => pane.paneId === paneId && !pane.dead);
+    if (!alive) {
+      throw new AgentWindowError('Claude exited right after starting. Open the terminal tab to see why.');
+    }
+    const trustKeys = folderTrust.observe(await tmuxService.capturePane(paneId));
+    if (trustKeys.length > 0) {
+      await tmuxService.sendKeys(paneId, trustKeys);
+    }
   }
+  return null;
+}
+
+type RegistrationWait = {
+  appSessionId: string;
+  paneId: string;
+  /** The folder as Claude's trust dialog names it. */
+  folder: string;
+  /** The home folder, or a start whose caller vouched for the folder (see createFolderTrustWatch). */
+  answerTrustDialog: boolean;
+  /** Applied to the registration before anyone waiting on it sees it. */
+  adopt: (registered: PaneSession) => PaneSession;
+};
+
+/**
+ * Waits until the pane's SessionStart hook has reported. Menus that appear first are surfaced to
+ * the web so the user can answer them; see createFolderTrustWatch for the folder-trust dialog.
+ */
+async function waitForRegistration(wait: RegistrationWait): Promise<PaneSession> {
+  const monitor = getSessionMonitor();
+  monitor.setStartingPane(wait.appSessionId, wait.paneId);
+  const stopSurfacing = () => monitor.setStartingPane(wait.appSessionId, null);
+  const folderTrust = createFolderTrustWatch({ appSessionId: wait.appSessionId, folder: wait.folder, answerForUser: wait.answerTrustDialog });
+  let registered: PaneSession | null;
+  try {
+    registered = await pollRegistration(wait.paneId, folderTrust, Date.now() + REGISTRATION_TIMEOUT_MS);
+  } catch (error) {
+    stopSurfacing();
+    throw error;
+  }
+  if (registered) {
+    stopSurfacing();
+    return wait.adopt(registered);
+  }
+  if (!folderTrust.isAwaitingUser()) {
+    stopSurfacing();
+    throw new AgentWindowError('Claude did not finish starting within 2 minutes.');
+  }
+  // The timeout message sends the user to the session, so the dialog must stay answerable there.
+  const laterRegistration = pollRegistration(wait.paneId, folderTrust, Number.POSITIVE_INFINITY)
+    .then((later) => wait.adopt(later as PaneSession))
+    .finally(stopSurfacing);
+  laterRegistration.catch(() => undefined);
+  throw new FolderTrustTimeoutError(wait.folder, laterRegistration);
 }
 
 export async function findAgentWindow(appSessionId: string): Promise<PaneSession | null> {
@@ -210,6 +246,27 @@ type StartingWindow ={ pane: AgentPane; registration: Promise<PaneSession> };
 /** One launch per session at a time: the chat and the terminal tab may both ask for the same window. */
 const startingWindows = new Map<string, Promise<StartingWindow>>();
 
+/**
+ * Keeps the window listed as starting until it registers or fails. A start that timed out on the
+ * trust dialog stays listed with its later registration, so a message sent before the user answers
+ * waits for this window instead of opening a second one on the same dialog.
+ */
+function trackStartingWindow(appSessionId: string, window: StartingWindow): void {
+  const listed = Promise.resolve(window);
+  startingWindows.set(appSessionId, listed);
+  const forget = () => {
+    if (startingWindows.get(appSessionId) === listed) {
+      startingWindows.delete(appSessionId);
+    }
+  };
+  window.registration.then(forget, (error: unknown) => {
+    forget();
+    if (error instanceof FolderTrustTimeoutError) {
+      trackStartingWindow(appSessionId, { pane: window.pane, registration: error.laterRegistration });
+    }
+  });
+}
+
 async function launchAgentWindow(appSessionId: string): Promise<StartingWindow> {
   const session = sessionsDb.getSessionById(appSessionId);
   if (!session) {
@@ -246,12 +303,19 @@ async function launchAgentWindow(appSessionId: string): Promise<StartingWindow> 
   await recordAppliedSelection(pane.windowId, selection.applied);
 
   const expectedSessionId = providerSessionId;
-  const registration = waitForRegistration(appSessionId, pane.paneId, { inHomeFolder: isClaudeUserHome(cwd, config) }).then((registered) => {
-    if (registered.providerSessionId && registered.providerSessionId !== expectedSessionId) {
-      // Claude may start a new transcript on resume; follow it so the chat keeps tracking this window.
-      sessionsDb.assignProviderSessionId(appSessionId, registered.providerSessionId);
-    }
-    return registered;
+  const registration = waitForRegistration({
+    appSessionId,
+    paneId: pane.paneId,
+    // As Claude's dialog names it (a Windows path for a Windows Claude).
+    folder: toClaudePath(cwd, config),
+    answerTrustDialog: takeFolderTrustForStart(appSessionId) || isClaudeUserHome(cwd, config),
+    adopt: (registered) => {
+      if (registered.providerSessionId && registered.providerSessionId !== expectedSessionId) {
+        // Claude may start a new transcript on resume; follow it so the chat keeps tracking this window.
+        sessionsDb.assignProviderSessionId(appSessionId, registered.providerSessionId);
+      }
+      return registered;
+    },
   });
   return { pane, registration };
 }
@@ -272,10 +336,8 @@ export async function startAgentWindow(appSessionId: string): Promise<StartingWi
   let starting = startingWindows.get(appSessionId);
   if (!starting) {
     starting = launchAgentWindow(appSessionId).then((window) => {
-      const registration = window.registration.finally(() => startingWindows.delete(appSessionId));
-      // Callers that only want the pane must not see an unhandled rejection from a failed start.
-      registration.catch(() => undefined);
-      return { pane: window.pane, registration };
+      trackStartingWindow(appSessionId, window);
+      return window;
     });
     starting.catch(() => startingWindows.delete(appSessionId));
     startingWindows.set(appSessionId, starting);

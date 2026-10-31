@@ -156,6 +156,7 @@ function buildNotificationPayload(event) {
     'agent.notification': normalizedEvent.meta?.message ? String(normalizedEvent.meta.message) : 'You have a new notification',
     'agent.finished': normalizedEvent.meta?.summary || 'Finished',
     'agent.waiting': normalizedEvent.meta?.question || 'Waiting for your answer',
+    'agent.trust_folder': `Claude in ${normalizedEvent.meta?.folderName || 'this folder'} waits for you to trust the folder`,
     'push.enabled': 'Push notifications are now enabled!'
   };
   const sessionName = resolveSessionName(normalizedEvent);

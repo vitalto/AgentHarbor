@@ -81,6 +81,26 @@ test('session creation route names a AgentHarbor session from the initial messag
   });
 });
 
+test('session creation route takes trustFolder only as a JSON boolean', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    const createSession = (trustFolder: unknown) => fetch(`${baseUrl}/api/providers/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'claude', projectPath: workspacePath, initialMessage: 'task', trustFolder }),
+    });
+
+    for (const loose of ['true', 1, 'yes', null]) {
+      const response = await createSession(loose);
+      const payload = await response.json() as { error: { code: string } };
+      assert.equal(response.status, 400, JSON.stringify(loose));
+      assert.equal(payload.error.code, 'INVALID_REQUEST_BODY');
+    }
+    for (const strict of [true, false, undefined]) {
+      assert.equal((await createSession(strict)).status, 201, String(strict));
+    }
+  });
+});
+
 test('conversation search streams title matches before transcript results', async () => {
   await withProviderServer(async (baseUrl, workspacePath) => {
     sessionsDb.createAppSession(

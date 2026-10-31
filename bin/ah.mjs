@@ -9,7 +9,8 @@ const HELP = `Usage: ah <command> [options]
 
   projects                         Registered projects
   ls [--project P] [--recent N]    Live agent windows (or the N most recent conversations)
-  new [--project P] [text]         Start a session (project defaults to the current directory)
+  new [--project P] [--trust-folder] [text]
+                                   Start a session (project defaults to the current directory)
   send <session> [text]            Send a message; a busy session queues it
   read <session> [--last N]        Last N messages (default 10)
   usage [session]                  Context use (default: the calling Claude session)
@@ -20,6 +21,12 @@ const HELP = `Usage: ah <command> [options]
 new and send take --model M --effort E (applied when the session starts its turn;
 a busy session keeps its model for a queued message). Without [text] the message is
 read from stdin.
+
+Claude asks to trust a project folder it has not opened before; nobody answers that
+for a session started with \`ah new\`, so the user gets a push and the start fails
+after 2 minutes. --trust-folder answers "Yes, I trust this folder" for this start:
+pass it only after checking the folder (its .claude/settings.json hooks and .mcp.json
+servers run once it is trusted).
 
 Config: ~/.agentharbor/cli.json {"url": "http://localhost:3001", "apiKey": "ck_..."}
 (create the key in Settings -> API keys); AH_URL / AH_API_KEY override it.`;
@@ -143,6 +150,7 @@ const commands = {
       provider: 'claude',
       projectPath: project.fullPath,
       initialMessage: content,
+      ...(values['trust-folder'] ? { trustFolder: true } : {}),
     });
     const { delivery } = await api(config, 'POST', `/chat/sessions/${sessionId}/messages`, sendBody(content, values));
     console.log(`${sessionId} ${delivery} in ${project.displayName}`);
@@ -217,6 +225,7 @@ const parsed = parseArgs({
     last: { type: 'string' },
     recent: { type: 'string' },
     title: { type: 'string' },
+    'trust-folder': { type: 'boolean' },
   },
 });
 await commands[command](loadConfig(), parsed);

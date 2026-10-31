@@ -337,6 +337,21 @@ const parseProvider = (value: unknown): LLMProvider => {
   });
 };
 
+/** Strictly a JSON boolean when present: "true" or 1 would vouch for a folder by accident. */
+const parseOptionalBodyBoolean = (value: unknown, name: string): boolean => {
+  if (value === undefined) {
+    return false;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  throw new AppError(`${name} must be true or false.`, {
+    code: 'INVALID_REQUEST_BODY',
+    statusCode: 400,
+  });
+};
+
 /** Both fields are optional: an empty body forks the whole conversation. */
 const parseSessionForkPayload = (payload: unknown): { upToAnchorId?: string; title?: string } => {
   if (payload === undefined || payload === null) {
@@ -853,7 +868,8 @@ router.post(
     const provider = parseProvider(body.provider);
     const projectPath = typeof body.projectPath === 'string' ? body.projectPath : '';
     const initialMessage = typeof body.initialMessage === 'string' ? body.initialMessage : '';
-    const result = sessionsService.createAppSession(provider, projectPath, initialMessage);
+    const trustFolder = parseOptionalBodyBoolean(body.trustFolder, 'trustFolder');
+    const result = sessionsService.createAppSession(provider, projectPath, initialMessage, { trustFolder });
     res.status(201).json(createApiSuccessResponse(result));
   }),
 );

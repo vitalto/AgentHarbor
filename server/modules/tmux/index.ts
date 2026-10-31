@@ -19,6 +19,8 @@ export {
   typeIntoAgent,
   waitForInputReady,
 } from '@/modules/tmux/agent-windows.service.js';
+export { onFolderTrustRequested, trustFolderOnNextStart } from '@/modules/tmux/folder-trust.js';
+export type { FolderTrustRequest } from '@/modules/tmux/folder-trust.js';
 export { findSessionHolders, getLiveProcessStartTime, readClaudeProcesses, readClaudeStatuses } from '@/modules/tmux/claude-status.js';
 export type { ClaudeActivity, ClaudeProcess, ClaudeStatus } from '@/modules/tmux/claude-status.js';
 export { paneRegistry } from '@/modules/tmux/pane-registry.service.js';

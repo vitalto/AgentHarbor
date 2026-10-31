@@ -380,6 +380,20 @@ test('a starting window guessed by its folder (not yet registered) still has its
   assert.deepEqual(socket.kinds(), ['tui_prompt']);
 });
 
+test('a chat opened after the trust dialog appeared (from its push) still shows the dialog', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  state.paneAlive = false;
+  state.screen = fixture('trust-folder');
+  monitor.setStartingPane('app1', '%9');
+  await monitor.tick();
+
+  const socket = new FakeSocket();
+  monitor.watch('app1', socket);
+  await monitor.tick();
+  assert.deepEqual(socket.kinds(), ['tui_prompt']);
+});
+
 test('a session running outside tmux is mirrored read-only and its turns complete', async (t) => {
   const { monitor, state, append, cleanup } = await harness();
   t.after(cleanup);
