@@ -29,7 +29,8 @@ The first start in a folder Claude has not opened before stops on "Do you trust 
 the session fails with "Claude is waiting for you to trust the folder". Trusting runs the folder's
 `.claude/settings.json` hooks and `.mcp.json` servers, so pass `--trust-folder` only for a folder you
 know: one of the user's own projects, or one you have read those files in. Never for a freshly cloned
-repository you have not checked.
+repository you have not checked. If a foreign folder has hooks or MCP servers whose purpose you cannot
+tell from the files, start without the flag and tell the user what they run, so the user decides.
 
 ## Notifying the user
 
