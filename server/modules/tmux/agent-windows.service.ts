@@ -4,7 +4,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { getAgentConfig } from '@/modules/tmux/agent-config.js';
+import { getAgentConfig, isClaudeUserHome } from '@/modules/tmux/agent-config.js';
 import { findSessionHolders, forgetWindowsProcessCache, readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
 import { buildAgentLaunch, writeHookSettings } from '@/modules/tmux/agent-launch.js';
 import {
@@ -21,7 +21,7 @@ import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.ser
 import { toLocalPath } from '@/modules/tmux/path-translation.js';
 import { getSessionMonitor } from '@/modules/tmux/session-monitor.service.js';
 import { tmuxService, TmuxError, type AgentPane } from '@/modules/tmux/tmux.service.js';
-import { readInputBox, type InputBox } from '@/modules/tmux/tui-prompt.js';
+import { keysForOption, parseTuiPrompt, readInputBox, trustFolderOptionIndex, type InputBox } from '@/modules/tmux/tui-prompt.js';
 
 const REGISTRATION_TIMEOUT_MS = 120_000;
 const INPUT_READY_TIMEOUT_MS = 60_000;
@@ -64,10 +64,25 @@ async function uniqueWindowName(base: string): Promise<string> {
 }
 
 /**
- * Waits until the pane's SessionStart hook has reported. Menus that appear first
- * (the folder-trust dialog) are surfaced to the web so the user can answer them.
+ * Claude asks to trust the home directory on every start there and never stores the answer (a
+ * stored trust would extend to every folder under it), so it cannot be answered once and for all,
+ * and a session started without anyone watching (`ah new`) would wait on it until the start times
+ * out. The answer covers only this Claude process.
  */
-async function waitForRegistration(appSessionId: string, paneId: string): Promise<PaneSession> {
+async function answerHomeFolderTrust(paneId: string): Promise<void> {
+  const prompt = parseTuiPrompt(await tmuxService.capturePane(paneId));
+  const trustIndex = trustFolderOptionIndex(prompt);
+  if (prompt && trustIndex >= 0) {
+    await tmuxService.sendKeys(paneId, keysForOption(prompt, trustIndex));
+  }
+}
+
+/**
+ * Waits until the pane's SessionStart hook has reported. Menus that appear first
+ * (the folder-trust dialog of a folder other than home) are surfaced to the web
+ * so the user can answer them.
+ */
+async function waitForRegistration(appSessionId: string, paneId: string, options: { inHomeFolder: boolean }): Promise<PaneSession> {
   const monitor = getSessionMonitor();
   monitor.setStartingPane(appSessionId, paneId);
   try {
@@ -80,6 +95,9 @@ async function waitForRegistration(appSessionId: string, paneId: string): Promis
       const alive = (await tmuxService.listPanes()).some((pane) => pane.paneId === paneId && !pane.dead);
       if (!alive) {
         throw new AgentWindowError('Claude exited right after starting. Open the terminal tab to see why.');
+      }
+      if (options.inHomeFolder) {
+        await answerHomeFolderTrust(paneId);
       }
     }
     throw new AgentWindowError('Claude did not finish starting within 2 minutes.');
@@ -228,7 +246,7 @@ async function launchAgentWindow(appSessionId: string): Promise<StartingWindow> 
   await recordAppliedSelection(pane.windowId, selection.applied);
 
   const expectedSessionId = providerSessionId;
-  const registration = waitForRegistration(appSessionId, pane.paneId).then((registered) => {
+  const registration = waitForRegistration(appSessionId, pane.paneId, { inHomeFolder: isClaudeUserHome(cwd, config) }).then((registered) => {
     if (registered.providerSessionId && registered.providerSessionId !== expectedSessionId) {
       // Claude may start a new transcript on resume; follow it so the chat keeps tracking this window.
       sessionsDb.assignProviderSessionId(appSessionId, registered.providerSessionId);

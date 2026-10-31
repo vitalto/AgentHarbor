@@ -43,6 +43,29 @@ export function readAgentConfig(env: NodeJS.ProcessEnv = process.env): AgentConf
   };
 }
 
+/**
+ * The home directory of the user Claude runs as, as this server sees it. A Windows Claude's home is
+ * known only through its config directory (`/mnt/c/Users/<name>/.claude`); null when that is custom.
+ */
+export function claudeUserHome(config: Pick<AgentConfig, 'claudeHome' | 'windowsClaude'>): string | null {
+  if (path.posix.basename(config.claudeHome) === '.claude') {
+    return path.posix.dirname(config.claudeHome);
+  }
+  return config.windowsClaude ? null : os.homedir();
+}
+
+export function isClaudeUserHome(folder: string, config: Pick<AgentConfig, 'claudeHome' | 'windowsClaude'>): boolean {
+  const home = claudeUserHome(config);
+  if (!home || !folder) {
+    return false;
+  }
+  const comparable = (value: string) => {
+    const trimmed = value.replace(/\/+$/, '') || '/';
+    return config.windowsClaude ? trimmed.toLowerCase() : trimmed;
+  };
+  return comparable(folder) === comparable(home);
+}
+
 /** Read on every call (it is cheap) so env and home-directory overrides in tests apply; saved settings win over env. */
 export function getAgentConfig(): AgentConfig {
   return { ...readAgentConfig(), ...getStoredAgentSettings() };

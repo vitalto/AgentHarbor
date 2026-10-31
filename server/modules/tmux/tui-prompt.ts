@@ -417,6 +417,17 @@ export function parseTuiPrompt(screen: string[]): TuiPrompt | null {
   };
 }
 
+const TRUST_DIALOG_TITLE = 'Accessing workspace:';
+const TRUST_FOLDER_OPTION = 'Yes, I trust this folder';
+
+/** Index of "Yes, I trust this folder" when the prompt is Claude's folder-trust dialog, else -1. */
+export function trustFolderOptionIndex(prompt: TuiPrompt | null): number {
+  if (!prompt?.body.includes(TRUST_DIALOG_TITLE)) {
+    return -1;
+  }
+  return prompt.options.findIndex((option) => option.label === TRUST_FOLDER_OPTION);
+}
+
 const UNREADABLE_SCREEN_LINES = 30;
 
 /**

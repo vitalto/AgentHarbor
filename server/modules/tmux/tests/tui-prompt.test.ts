@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { isInputReady, keysForOption, parseTuiPrompt, readInputBox, unreadablePrompt } from '@/modules/tmux/tui-prompt.js';
+import { isInputReady, keysForOption, parseTuiPrompt, readInputBox, trustFolderOptionIndex, unreadablePrompt } from '@/modules/tmux/tui-prompt.js';
 
 const fixturesDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const screen = (name: string) => readFileSync(path.join(fixturesDirectory, `${name}.txt`), 'utf8').split('\n');
@@ -180,6 +180,15 @@ test('trust dialog: unnumbered options follow the cursor', () => {
   const moved = parseTuiPrompt(screen('trust-folder-moved'));
   assert.equal(moved?.options[1].selected, true);
   assert.deepEqual(keysForOption(moved!, 0), ['Up', 'Enter']);
+});
+
+test('the trust dialog is told apart from other menus by its title and its trusting option', () => {
+  assert.equal(trustFolderOptionIndex(parseTuiPrompt(screen('trust-folder'))), 1);
+  assert.equal(trustFolderOptionIndex(parseTuiPrompt(screen('trust-folder-moved'))), 1);
+  for (const name of ['bash-permission', 'write-permission', 'ask-question', 'multi-select']) {
+    assert.equal(trustFolderOptionIndex(parseTuiPrompt(screen(name))), -1, name);
+  }
+  assert.equal(trustFolderOptionIndex(null), -1);
 });
 
 test('screens without a menu yield no prompt', () => {
