@@ -13,6 +13,7 @@ import {
   keysForOption,
   keysToReachOption,
   parseTuiPrompt,
+  trustFolderOptionIndex,
   type QuestionStep,
   type TuiPrompt,
   unreadablePrompt,
@@ -144,11 +145,13 @@ export function screenTail(lines: string[]): string[] {
   return lines.slice(0, end).filter(isOutput).slice(-SCREEN_TAIL_LINES);
 }
 
+type StartingPane = { paneId: string; answersTrustDialog: boolean };
+
 export function createSessionMonitor(deps: SessionMonitorDependencies) {
   const now = deps.now ?? Date.now;
   const watches = new Map<string, Watch>();
   /** Windows opened for a session whose SessionStart hook has not reported yet (e.g. stuck on the trust dialog). */
-  const startingPanes = new Map<string, string>();
+  const startingPanes = new Map<string, StartingPane>();
   let timer: NodeJS.Timeout | null = null;
   let ticking = false;
 
@@ -291,12 +294,15 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
       return;
     }
     const pane = panesBySession.get(providerSessionId);
-    const startingPaneId = startingPanes.get(watch.appSessionId);
+    const starting = startingPanes.get(watch.appSessionId);
     // Still starting (the registry may already guess its session from the newest transcript in its folder):
-    // only menus on its screen matter, e.g. the folder-trust dialog Claude shows on every start in the home
-    // directory, and the turn must not be failed as "window closed".
-    if (startingPaneId && (!pane || !pane.registered)) {
-      emitPrompt(watch, parseTuiPrompt(await deps.tmux.capturePane(startingPaneId).catch(() => [])));
+    // only menus on its screen matter, e.g. the folder-trust dialog of a folder nobody vouched for, and the
+    // turn must not be failed as "window closed".
+    if (starting && (!pane || !pane.registered)) {
+      const prompt = parseTuiPrompt(await deps.tmux.capturePane(starting.paneId).catch(() => []));
+      // The start answers this dialog itself a moment later; shown meanwhile it would only flash in the chat.
+      const answeredByStart = starting.answersTrustDialog && trustFolderOptionIndex(prompt) >= 0;
+      emitPrompt(watch, answeredByStart ? null : prompt);
       return;
     }
     // A session open outside tmux (e.g. a Windows console) is mirrored read-only from its status file and transcript.
@@ -433,9 +439,10 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
       return providerSessionId ? deps.registry.findPaneForSession(providerSessionId) : null;
     },
 
-    setStartingPane(appSessionId: string, paneId: string | null): void {
+    /** `answersTrustDialog`: the start answers Claude's folder-trust dialog itself, so it is not shown to the user. */
+    setStartingPane(appSessionId: string, paneId: string | null, options: { answersTrustDialog?: boolean } = {}): void {
       if (paneId) {
-        startingPanes.set(appSessionId, paneId);
+        startingPanes.set(appSessionId, { paneId, answersTrustDialog: options.answersTrustDialog ?? false });
       } else {
         startingPanes.delete(appSessionId);
       }
@@ -443,7 +450,7 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
 
     /** The session's pane: its registered window, or the one still starting up. */
     async resolvePaneId(appSessionId: string): Promise<string | null> {
-      return (await monitor.findPane(appSessionId))?.pane.paneId ?? startingPanes.get(appSessionId) ?? null;
+      return (await monitor.findPane(appSessionId))?.pane.paneId ?? startingPanes.get(appSessionId)?.paneId ?? null;
     },
 
     async sendKeys(appSessionId: string, keys: string[]): Promise<boolean> {

@@ -116,7 +116,7 @@ type RegistrationWait = {
  */
 async function waitForRegistration(wait: RegistrationWait): Promise<PaneSession> {
   const monitor = getSessionMonitor();
-  monitor.setStartingPane(wait.appSessionId, wait.paneId);
+  monitor.setStartingPane(wait.appSessionId, wait.paneId, { answersTrustDialog: wait.answerTrustDialog });
   const stopSurfacing = () => monitor.setStartingPane(wait.appSessionId, null);
   const folderTrust = createFolderTrustWatch({ appSessionId: wait.appSessionId, folder: wait.folder, answerForUser: wait.answerTrustDialog });
   let registered: PaneSession | null;

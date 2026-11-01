@@ -380,6 +380,37 @@ test('a starting window guessed by its folder (not yet registered) still has its
   assert.deepEqual(socket.kinds(), ['tui_prompt']);
 });
 
+test('a start that answers the trust dialog itself (home folder, --trust-folder) never shows it in the chat', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  const socket = new FakeSocket();
+  monitor.watch('app1', socket);
+  state.paneAlive = false;
+  state.screen = fixture('trust-folder');
+  monitor.setStartingPane('app1', '%9', { answersTrustDialog: true });
+  state.running = true;
+  void monitor.beginTurn('app1');
+
+  await monitor.tick();
+  await monitor.tick();
+  assert.deepEqual(socket.kinds(), [], 'no flash of a dialog nobody has to answer');
+  assert.equal(monitor.currentPrompt('app1'), null);
+  assert.deepEqual(state.completed, []);
+});
+
+test('a start that answers the trust dialog still shows the other menus of its window', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  const socket = new FakeSocket();
+  monitor.watch('app1', socket);
+  state.paneAlive = false;
+  state.screen = fixture('bash-permission');
+  monitor.setStartingPane('app1', '%9', { answersTrustDialog: true });
+
+  await monitor.tick();
+  assert.deepEqual(socket.kinds(), ['tui_prompt']);
+});
+
 test('a chat opened after the trust dialog appeared (from its push) still shows the dialog', async (t) => {
   const { monitor, state, cleanup } = await harness();
   t.after(cleanup);
