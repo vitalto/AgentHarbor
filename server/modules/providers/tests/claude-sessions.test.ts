@@ -2176,10 +2176,46 @@ test('synchronizeFile falls back to Untitled Claude Session when all sources are
 });
 
 // ---------------------------------------------------------------------------
-// Priority: DB custom_name > JSONL title > history.jsonl
+// Priority: user rename > JSONL title > automatic DB name > last prompt > history.jsonl
 // ---------------------------------------------------------------------------
 
-test('synchronizeFile preserves existing DB custom_name regardless of JSONL and history.jsonl', { concurrency: false }, async () => {
+test('synchronizeFile replaces an automatic DB name with the ai-title Claude wrote later', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-auto-name-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+
+  try {
+    await mkdir(path.join(tmp, '.claude'), { recursive: true });
+    await writeFile(path.join(tmp, '.claude', 'history.jsonl'), '', 'utf8');
+    const transcriptPath = path.join(workspacePath, 'test-session-1.jsonl');
+    await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', [
+      JSON.stringify({ type: 'last-prompt', lastPrompt: 'first prompt', sessionId: 'test-session-1' }),
+    ]);
+
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-session', 'claude', workspacePath, 'first words of prompt');
+      sessionsDb.assignProviderSessionId('app-session', 'test-session-1');
+      const synchronizer = new ClaudeSessionSynchronizer();
+
+      await synchronizer.synchronizeFile(transcriptPath);
+      assert.equal(sessionsDb.getSessionById('app-session')?.custom_name, 'first words of prompt');
+
+      await writeFile(
+        transcriptPath,
+        `${await readFile(transcriptPath, 'utf8')}${JSON.stringify({ type: 'ai-title', aiTitle: 'Claude title', sessionId: 'test-session-1' })}
+`,
+      );
+      await synchronizer.synchronizeFile(transcriptPath);
+      assert.equal(sessionsDb.getSessionById('app-session')?.custom_name, 'Claude title');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test('synchronizeFile preserves a user rename regardless of JSONL and history.jsonl', { concurrency: false }, async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-dbwins-'));
   const workspacePath = path.join(tmp, 'workspace');
   await mkdir(workspacePath, { recursive: true });
@@ -2201,13 +2237,8 @@ test('synchronizeFile preserves existing DB custom_name regardless of JSONL and 
     ]);
 
     await withIsolatedDatabase(async () => {
-      // Pre-seed the DB with a custom_name set via AgentHarbor sidebar rename.
-      sessionsDb.createSession(
-        'test-session-1',
-        'claude',
-        workspacePath,
-        'Sidebar custom name',
-      );
+      sessionsDb.createSession('test-session-1', 'claude', workspacePath, 'first prompt');
+      sessionsDb.updateSessionCustomName('test-session-1', 'Sidebar custom name');
 
       const synchronizer = new ClaudeSessionSynchronizer();
       const result = await synchronizer.synchronizeFile(

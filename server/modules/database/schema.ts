@@ -108,6 +108,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- id mid-run, or equals \`session_id\` for sessions discovered on disk.
     provider_session_id TEXT,
     custom_name TEXT,
+    -- 1 once the user renamed the session in AgentHarbor (or it is a fork
+    -- named after its source). Claude's own title then no longer replaces it.
+    custom_name_is_manual BOOLEAN DEFAULT 0,
     project_path TEXT,
     jsonl_path TEXT,
     -- Model and reasoning effort this session runs with. Written when the user

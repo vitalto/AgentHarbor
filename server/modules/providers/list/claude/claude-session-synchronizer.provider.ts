@@ -21,7 +21,21 @@ type ParsedSession = {
   sessionId: string;
   projectPath: string;
   sessionName?: string;
+  /** The name is a title Claude wrote (`ai-title` or a `/rename`), not a prompt. */
+  sessionNameIsProviderTitle: boolean;
 };
+
+type TranscriptTitles = {
+  /** A `/rename` title, else Claude's generated `ai-title`. */
+  providerTitle?: string;
+  lastPrompt?: string;
+};
+
+const UNTITLED_SESSION_NAME = 'Untitled Claude Session';
+
+// Title rows are a tiny share of a transcript; testing for these markers
+// first spares parsing every line of a multi-megabyte file as JSON.
+const TITLE_ROW_MARKERS = ['"custom-title"', '"ai-title"', '"last-prompt"'] as const;
 
 /**
  * Session indexer for Claude transcript artifacts.
@@ -82,7 +96,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         parsed.sessionName,
         timestamps.createdAt,
         timestamps.updatedAt,
-        filePath
+        filePath,
+        parsed.sessionNameIsProviderTitle
       );
       processed += 1;
     }
@@ -124,7 +139,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       parsed.sessionName,
       timestamps.createdAt,
       timestamps.updatedAt,
-      filePath
+      filePath,
+      parsed.sessionNameIsProviderTitle
     );
   }
 
@@ -135,7 +151,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     filePath: string,
     nameMap: Map<string, string>
   ): Promise<ParsedSession | null> {
-    const parsed = await extractFirstValidJsonlData(filePath, (rawData) => {
+    const parsed = await extractFirstValidJsonlData<{ sessionId: string; projectPath: string }>(filePath, (rawData) => {
       const data = rawData as Record<string, unknown>;
       const sessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
       // Stored as a path this server can open; Claude may report a Windows path.
@@ -160,38 +176,48 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
       ?? sessionsDb.getSessionById(parsed.sessionId);
     const existingSessionName = existingSession?.custom_name;
-    if (existingSessionName && existingSessionName !== 'Untitled Claude Session') {
+    if (existingSession?.custom_name_is_manual) {
       return {
         ...parsed,
-        sessionName: normalizeSessionName(existingSessionName, 'Untitled Claude Session'),
+        sessionName: normalizeSessionName(existingSessionName ?? undefined, UNTITLED_SESSION_NAME),
+        sessionNameIsProviderTitle: false,
       };
     }
 
-    let sessionName = await this.extractSessionTitle(filePath, parsed.sessionId);
-    if (!sessionName) {
-      sessionName = nameMap.get(parsed.sessionId);
+    const titles = await this.extractSessionTitles(filePath, parsed.sessionId);
+    if (titles.providerTitle) {
+      return {
+        ...parsed,
+        sessionName: normalizeSessionName(titles.providerTitle, UNTITLED_SESSION_NAME),
+        sessionNameIsProviderTitle: true,
+      };
     }
+
+    const sessionName = existingSessionName && existingSessionName !== UNTITLED_SESSION_NAME
+      ? existingSessionName
+      : titles.lastPrompt ?? nameMap.get(parsed.sessionId);
 
     return {
       ...parsed,
-      sessionName: normalizeSessionName(sessionName, 'Untitled Claude Session'),
+      sessionName: normalizeSessionName(sessionName, UNTITLED_SESSION_NAME),
+      sessionNameIsProviderTitle: false,
     };
   }
 
   /**
-   * Returns the best available title for one session from its transcript.
+   * Reads the titles of one session from its transcript.
    *
    * Scans forward keeping the last match of each event type, then prefers
-   * `custom-title` (a manual `/rename`) over `ai-title` over `last-prompt`.
-   * Claude writes `custom-title` immediately before `ai-title`, so a reverse
-   * scan that returns its first hit would always lose the manual rename.
+   * `custom-title` (a manual `/rename`) over `ai-title`. Claude writes
+   * `custom-title` immediately before `ai-title`, so a reverse scan that
+   * returns its first hit would always lose the manual rename.
    *
-   * Returns undefined on a missing or unreadable file so sync can continue.
+   * Returns no titles on a missing or unreadable file so sync can continue.
    */
-  private async extractSessionTitle(
+  private async extractSessionTitles(
     filePath: string,
     sessionId: string
-  ): Promise<string | undefined> {
+  ): Promise<TranscriptTitles> {
     try {
       const content = await readFile(filePath, 'utf8');
       const lines = content.split(/\r?\n/);
@@ -202,7 +228,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
       for (let index = 0; index < lines.length; index += 1) {
         const line = lines[index]?.trim();
-        if (!line) {
+        if (!line || !TITLE_ROW_MARKERS.some((marker) => line.includes(marker))) {
           continue;
         }
 
@@ -239,11 +265,11 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         }
       }
 
-      return foundCustomTitle || foundAiTitle || foundLastPrompt;
+      return { providerTitle: foundCustomTitle || foundAiTitle, lastPrompt: foundLastPrompt };
     } catch {
       // Ignore missing/unreadable files so sync can continue.
     }
 
-    return undefined;
+    return {};
   }
 }

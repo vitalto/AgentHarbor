@@ -9,6 +9,8 @@ type SessionRow = {
   project_path: string | null;
   jsonl_path: string | null;
   custom_name: string | null;
+  /** 1 when the user chose the name; Claude's titles then leave it alone. */
+  custom_name_is_manual: number;
   /** Model this session runs with; NULL until the app records one for it. */
   model: string | null;
   /** Reasoning effort this session runs with; NULL until the app records one. */
@@ -26,7 +28,7 @@ type RecentSessionsPage = {
 };
 
 const SESSION_ROW_COLUMNS =
-  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, forked_from_session_id, isArchived, created_at, updated_at';
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, custom_name_is_manual, model, effort, forked_from_session_id, isArchived, created_at, updated_at';
 
 const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -76,9 +78,13 @@ export const sessionsDb = {
    * The given id is the provider-native session id. Rows are keyed by
    * `provider_session_id` so a session that was first created by the app
    * (with an app-allocated `session_id`) is updated in place once its
-   * transcript shows up on disk, instead of producing a duplicate row. An
-   * app-created row keeps its existing name; synchronizer names only update
-   * rows that were themselves created by indexing provider storage.
+   * transcript shows up on disk, instead of producing a duplicate row.
+   *
+   * Naming: a name the user chose is never replaced. A title Claude wrote
+   * into the transcript (`customNameIsProviderTitle`) replaces any automatic
+   * name. Any other synced name (a last prompt) updates only rows created by
+   * indexing provider storage; an app-created row keeps the first words of
+   * its first message until Claude titles it.
    */
   createSession(
     providerSessionId: string,
@@ -87,7 +93,8 @@ export const sessionsDb = {
     customName?: string,
     createdAt?: string,
     updatedAt?: string,
-    jsonlPath?: string | null
+    jsonlPath?: string | null,
+    customNameIsProviderTitle = false
   ): string {
     const db = getConnection();
     const createdAtValue = normalizeTimestamp(createdAt);
@@ -115,6 +122,8 @@ export const sessionsDb = {
            jsonl_path = ?,
            isArchived = CASE WHEN ? IS NULL OR julianday(?) > julianday(updated_at) THEN 0 ELSE isArchived END,
            custom_name = CASE
+             WHEN custom_name_is_manual = 1 THEN custom_name
+             WHEN ? = 1 THEN COALESCE(?, custom_name)
              WHEN session_id <> provider_session_id AND custom_name IS NOT NULL THEN custom_name
              ELSE COALESCE(?, custom_name)
            END
@@ -126,6 +135,8 @@ export const sessionsDb = {
         jsonlPath ?? null,
         updatedAtValue,
         updatedAtValue,
+        customNameIsProviderTitle ? 1 : 0,
+        customName ?? null,
         customName ?? null,
         existing.session_id
       );
@@ -147,6 +158,8 @@ export const sessionsDb = {
          jsonl_path = excluded.jsonl_path,
          isArchived = CASE WHEN ? IS NULL OR julianday(excluded.updated_at) > julianday(sessions.updated_at) THEN 0 ELSE sessions.isArchived END,
          custom_name = CASE
+           WHEN sessions.custom_name_is_manual = 1 THEN sessions.custom_name
+           WHEN ? = 1 THEN COALESCE(excluded.custom_name, sessions.custom_name)
            WHEN sessions.session_id <> sessions.provider_session_id AND sessions.custom_name IS NOT NULL
              THEN sessions.custom_name
            ELSE COALESCE(excluded.custom_name, sessions.custom_name)
@@ -160,7 +173,8 @@ export const sessionsDb = {
       jsonlPath ?? null,
       createdAtValue,
       updatedAtValue,
-      updatedAtValue
+      updatedAtValue,
+      customNameIsProviderTitle ? 1 : 0
     );
 
     return providerSessionId;
@@ -225,8 +239,8 @@ export const sessionsDb = {
       db.prepare('DELETE FROM sessions WHERE session_id = ? AND session_id <> ?')
         .run(input.providerSessionId, input.sessionId);
       db.prepare(
-        `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, model, effort, forked_from_session_id, isArchived, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+        `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, custom_name_is_manual, project_path, jsonl_path, model, effort, forked_from_session_id, isArchived, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
       ).run(
         input.sessionId,
         input.provider,
@@ -368,7 +382,7 @@ export const sessionsDb = {
     const db = getConnection();
     db.prepare(
       `UPDATE sessions
-       SET custom_name = ?
+       SET custom_name = ?, custom_name_is_manual = 1
        WHERE session_id = ?`
     ).run(customName, sessionId);
   },

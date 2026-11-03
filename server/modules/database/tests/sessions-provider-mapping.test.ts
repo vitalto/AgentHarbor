@@ -70,6 +70,30 @@ test('app sessions get the provider id assigned without creating a duplicate row
   });
 });
 
+test('a title Claude wrote replaces the automatic name, but never a rename by the user', async () => {
+  await withIsolatedDatabase(() => {
+    const syncTitle = (providerSessionId: string, title: string) => sessionsDb.createSession(
+      providerSessionId, 'claude', '/workspace/demo', title, undefined, undefined, `/fake/${providerSessionId}.jsonl`, true,
+    );
+
+    sessionsDb.createAppSession('app-auto', 'claude', '/workspace/demo', 'first words of prompt');
+    sessionsDb.assignProviderSessionId('app-auto', 'provider-auto');
+    syncTitle('provider-auto', 'Claude title');
+    assert.equal(sessionsDb.getSessionById('app-auto')?.custom_name, 'Claude title');
+
+    sessionsDb.createAppSession('app-renamed', 'claude', '/workspace/demo', 'first words of prompt');
+    sessionsDb.assignProviderSessionId('app-renamed', 'provider-renamed');
+    sessionsDb.updateSessionCustomName('app-renamed', 'My own name');
+    syncTitle('provider-renamed', 'Claude title');
+    assert.equal(sessionsDb.getSessionById('app-renamed')?.custom_name, 'My own name');
+
+    sessionsDb.createSession('disk-renamed', 'claude', '/workspace/demo', 'From Disk');
+    sessionsDb.updateSessionCustomName('disk-renamed', 'Renamed on disk row');
+    syncTitle('disk-renamed', 'Claude title');
+    assert.equal(sessionsDb.getSessionById('disk-renamed')?.custom_name, 'Renamed on disk row');
+  });
+});
+
 test('assignProviderSessionId merges a watcher-created duplicate into the app row', async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createAppSession('app-id-2', 'claude', '/workspace/demo');

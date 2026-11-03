@@ -474,6 +474,29 @@ const addProviderModelEffortColumns = (db: Database): void => {
   addColumnToTableIfNotExists(db, 'provider_models', columnNames, 'effort_default', 'TEXT DEFAULT NULL');
 };
 
+/**
+ * Adds the flag that tells a user's rename apart from an automatic name.
+ *
+ * Before it, a session created in AgentHarbor kept the first words of its
+ * first message forever, and an indexed one the first title it was synced
+ * with, because the synchronizer skipped any session that already had a name.
+ * Existing names were all automatic, so they start unflagged; clearing the
+ * scan cursor makes the next scan revisit every transcript and pick up the
+ * title Claude gave it.
+ */
+const addSessionCustomNameIsManualColumn = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+  if (columnNames.includes('custom_name_is_manual')) {
+    return;
+  }
+
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'custom_name_is_manual', 'BOOLEAN DEFAULT 0');
+  db.exec(`UPDATE sessions SET custom_name_is_manual = 1 WHERE forked_from_session_id IS NOT NULL`);
+  if (tableExists(db, 'scan_state')) {
+    db.exec('UPDATE scan_state SET last_scanned_at = NULL');
+  }
+};
+
 const ensureProjectsForSessionPaths = (db: Database): void => {
   if (!tableExists(db, 'sessions')) {
     return;
@@ -538,6 +561,7 @@ export const runMigrations = (db: Database) => {
     addSessionModelColumn(db);
     addSessionEffortColumn(db);
     addForkedFromSessionIdColumn(db);
+    addSessionCustomNameIsManualColumn(db);
     ensureProjectsForSessionPaths(db);
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
