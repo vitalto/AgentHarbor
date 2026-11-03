@@ -398,6 +398,24 @@ test('a start that answers the trust dialog itself (home folder, --trust-folder)
   assert.deepEqual(state.completed, []);
 });
 
+test('another chat in the folder never shows (or sounds) the trust dialog of a window started for a different session', async (t) => {
+  // The registry guesses an unregistered window's session from the newest transcript in its folder; resuming a
+  // home-folder session after a long pause names another, more recently written session there.
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  const otherChat = new FakeSocket();
+  monitor.watch('app1', otherChat);
+  state.paneRegistered = false;
+  state.screen = fixture('trust-folder');
+  monitor.setStartingPane('app2', '%1', { answersTrustDialog: true });
+
+  await monitor.tick();
+  await monitor.tick();
+  assert.deepEqual(otherChat.kinds(), []);
+  assert.equal(await monitor.findPane('app1'), null, "its keys and messages must not reach the other session's window");
+  assert.equal(await monitor.resolvePaneId('app2'), '%1', 'the starting session still reaches its window');
+});
+
 test('a start that answers the trust dialog still shows the other menus of its window', async (t) => {
   const { monitor, state, cleanup } = await harness();
   t.after(cleanup);

@@ -373,7 +373,15 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
     try {
       const [panes, statuses] = await Promise.all([deps.registry.refresh(), deps.readStatuses()]);
       const panesBySession = new Map<string, PaneSession>();
+      const startingPaneIds = new Set([...startingPanes.values()].map((starting) => starting.paneId));
       for (const pane of panes) {
+        // A window AgentHarbor is starting belongs to the session that started it. The registry's guess
+        // for it (the newest transcript in its folder) names another session whenever the one being
+        // resumed is not the latest written, e.g. after a long pause in the home folder, and that
+        // session's chat would then show (and sound) the starting window's trust dialog.
+        if (!pane.registered && startingPaneIds.has(pane.pane.paneId)) {
+          continue;
+        }
         if (pane.providerSessionId && (pane.registered || !panesBySession.has(pane.providerSessionId))) {
           panesBySession.set(pane.providerSessionId, pane);
         }
@@ -436,7 +444,11 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
 
     async findPane(appSessionId: string): Promise<PaneSession | null> {
       const providerSessionId = deps.resolveProviderSessionId(appSessionId);
-      return providerSessionId ? deps.registry.findPaneForSession(providerSessionId) : null;
+      const found = providerSessionId ? await deps.registry.findPaneForSession(providerSessionId) : null;
+      // A guess that is another session's starting window would send this chat's keys and messages there.
+      const startedByAnotherSession = found && !found.registered && [...startingPanes.entries()]
+        .some(([startingSessionId, starting]) => starting.paneId === found.pane.paneId && startingSessionId !== appSessionId);
+      return startedByAnotherSession ? null : found;
     },
 
     /** `answersTrustDialog`: the start answers Claude's folder-trust dialog itself, so it is not shown to the user. */
