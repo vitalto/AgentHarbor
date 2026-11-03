@@ -1,4 +1,3 @@
-import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { pushSubscriptionsDb, sessionsDb } from '@/modules/database/index.js';
@@ -6,7 +5,11 @@ import { createNotificationEvent, notifyUserIfEnabled } from '@/modules/notifica
 import {
   findTranscriptPath,
   onFolderTrustRequested,
+  paneRegistry,
+  planApiErrorRetry,
+  readApiErrorRetrySettings,
   readClaudeProcesses,
+  readTranscriptEnd,
   type ClaudeActivity,
   type ClaudeProcess,
   type FolderTrustRequest,
@@ -15,7 +18,6 @@ import {
 const CHECK_INTERVAL_MS = 3000;
 /** Idle must hold this many checks in a row before a turn counts as over, so rows written at the very end are in the transcript. */
 const IDLE_CHECKS_TO_FINISH = 2;
-const TRANSCRIPT_TAIL_BYTES = 256 * 1024;
 const MAX_TEXT_CHARS = 160;
 
 export type AgentTransition = {
@@ -133,17 +135,20 @@ export function describeLastAssistantTurn(transcriptTail: string, kind: AgentTra
   return null;
 }
 
-async function readTranscriptTail(transcriptPath: string): Promise<string> {
-  const handle = await fsp.open(transcriptPath, 'r');
-  try {
-    const { size } = await handle.stat();
-    const length = Math.min(size, TRANSCRIPT_TAIL_BYTES);
-    const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, size - length);
-    return buffer.toString('utf8');
-  } finally {
-    await handle.close();
+/**
+ * A turn that died on a network error is pushed only once AgentHarbor stops
+ * retrying it: while a retry is coming the agent has not really stopped.
+ * Resolves to undefined to skip the push, else to the summary to push.
+ */
+async function summarizeFinishedTurn(transition: AgentTransition, transcriptTail: string, summary: string | null): Promise<string | null | undefined> {
+  const plan = planApiErrorRetry(transcriptTail, readApiErrorRetrySettings(), transition.at);
+  if (plan.kind === 'retry' && (await paneRegistry.findPaneForSession(transition.providerSessionId))?.registered) {
+    return undefined;
   }
+  if (plan.kind === 'exhausted') {
+    return `${plan.errorText} · AgentHarbor stopped after ${plan.attempts} automatic retries`;
+  }
+  return summary;
 }
 
 async function notifyTransition(transition: AgentTransition, claude: ClaudeProcess | undefined): Promise<void> {
@@ -155,9 +160,15 @@ async function notifyTransition(transition: AgentTransition, claude: ClaudeProce
   const sessionName = (session && sessionsDb.getSessionName(session.session_id, 'claude'))
     || (claude?.cwd ? path.basename(claude.cwd.replace(/[\\/]+$/, '')) : null);
   const transcriptPath = claude ? await findTranscriptPath(claude) : null;
-  const text = transcriptPath
-    ? describeLastAssistantTurn(await readTranscriptTail(transcriptPath).catch(() => ''), transition.kind)
-    : null;
+  const transcriptTail = transcriptPath ? await readTranscriptEnd(transcriptPath).catch(() => '') : '';
+  let text = describeLastAssistantTurn(transcriptTail, transition.kind);
+  if (transition.kind === 'finished') {
+    const summary = await summarizeFinishedTurn(transition, transcriptTail, text);
+    if (summary === undefined) {
+      return;
+    }
+    text = summary;
+  }
 
   const event = createNotificationEvent({
     provider: 'claude',

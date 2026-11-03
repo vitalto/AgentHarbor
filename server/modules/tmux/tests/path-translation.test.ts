@@ -11,6 +11,8 @@ const windowsClaude: AgentConfig = {
   idleCloseMinutes: 60,
   attachmentRetentionDays: 7,
   backgroundReminderMinutes: 60,
+  apiErrorRetryAttempts: 3,
+  apiErrorRetryDelayMinutes: 1,
   claudeHome: '/mnt/c/Users/u/.claude',
   stateDir: '/mnt/c/Users/u/.agentharbor',
   windowsClaude: true,

@@ -9,6 +9,10 @@ export type AgentSettings = {
   attachmentRetentionDays: number;
   /** A resting agent is reminded of a background command after this many minutes, then after doubling gaps; 0 never. */
   backgroundReminderMinutes: number;
+  /** A turn that died on a network or API server error is continued up to this many times in a row; 0 never. */
+  apiErrorRetryAttempts: number;
+  /** Minutes from the error to the first retry; each further retry waits three times longer. */
+  apiErrorRetryDelayMinutes: number;
 };
 
 export type AgentSettingName = keyof AgentSettings;
@@ -21,6 +25,8 @@ export const AGENT_SETTING_RULES: Record<AgentSettingName, AgentSettingRule> = {
   idleCloseMinutes: { storageKey: 'agent_settings.idle_close_minutes', minimum: 0, maximum: 7 * 24 * 60 },
   attachmentRetentionDays: { storageKey: 'agent_settings.attachment_retention_days', minimum: 1, maximum: 365 },
   backgroundReminderMinutes: { storageKey: 'agent_settings.background_reminder_minutes', minimum: 0, maximum: 7 * 24 * 60 },
+  apiErrorRetryAttempts: { storageKey: 'agent_settings.api_error_retry_attempts', minimum: 0, maximum: 10 },
+  apiErrorRetryDelayMinutes: { storageKey: 'agent_settings.api_error_retry_delay_minutes', minimum: 1, maximum: 60 },
 };
 
 const AGENT_SETTING_NAMES = Object.keys(AGENT_SETTING_RULES) as AgentSettingName[];

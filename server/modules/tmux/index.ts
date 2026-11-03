@@ -33,4 +33,10 @@ export type { AgentPane } from '@/modules/tmux/tmux.service.js';
 export { getPermissionMode, setPermissionMode } from '@/modules/tmux/permission-mode.js';
 export type { PermissionMode } from '@/modules/tmux/permission-mode.js';
 export { startIdleReaper } from '@/modules/tmux/idle-reaper.service.js';
+export {
+  planApiErrorRetry,
+  readApiErrorRetrySettings,
+  readTranscriptEnd,
+  startApiErrorRetries,
+} from '@/modules/tmux/api-error-retry.service.js';
 export { readInputBox } from '@/modules/tmux/tui-prompt.js';

@@ -25,23 +25,29 @@ test('saved agent settings override the environment, survive a reload and reset 
     loadStoredAgentSettings();
     assert.equal(getAgentConfig().idleCloseMinutes, 45);
 
-    saveAgentSettings({ idleCloseMinutes: 10, attachmentRetentionDays: 3, backgroundReminderMinutes: 0 });
+    saveAgentSettings({ idleCloseMinutes: 10, attachmentRetentionDays: 3, backgroundReminderMinutes: 0, apiErrorRetryAttempts: 0 });
     loadStoredAgentSettings();
-    assert.deepEqual(describeAgentSettings().values, { idleCloseMinutes: 10, attachmentRetentionDays: 3, backgroundReminderMinutes: 0 });
-    assert.deepEqual(describeAgentSettings().defaults, { idleCloseMinutes: 45, attachmentRetentionDays: 7, backgroundReminderMinutes: 60 });
+    assert.deepEqual(describeAgentSettings().values, {
+      idleCloseMinutes: 10, attachmentRetentionDays: 3, backgroundReminderMinutes: 0, apiErrorRetryAttempts: 0, apiErrorRetryDelayMinutes: 1,
+    });
+    assert.deepEqual(describeAgentSettings().defaults, {
+      idleCloseMinutes: 45, attachmentRetentionDays: 7, backgroundReminderMinutes: 60, apiErrorRetryAttempts: 3, apiErrorRetryDelayMinutes: 1,
+    });
 
     saveAgentSettings({ idleCloseMinutes: null });
     loadStoredAgentSettings();
     assert.equal(getAgentConfig().idleCloseMinutes, 45);
     assert.equal(getAgentConfig().attachmentRetentionDays, 3);
 
-    for (const invalid of [{ idleCloseMinutes: -1 }, { idleCloseMinutes: 1.5 }, { attachmentRetentionDays: 0 }, { unknown: 1 }, [], 'x']) {
+    for (const invalid of [{ idleCloseMinutes: -1 }, { idleCloseMinutes: 1.5 }, { attachmentRetentionDays: 0 }, { apiErrorRetryDelayMinutes: 0 }, { apiErrorRetryAttempts: 11 }, { unknown: 1 }, [], 'x']) {
       assert.throws(() => saveAgentSettings(invalid), AppError);
     }
     assert.throws(() => saveAgentSettings({ attachmentRetentionDays: 5, idleCloseMinutes: '5' }), AppError);
     assert.equal(getAgentConfig().attachmentRetentionDays, 3, 'a rejected update writes nothing');
   } finally {
-    saveAgentSettings({ idleCloseMinutes: null, attachmentRetentionDays: null, backgroundReminderMinutes: null });
+    saveAgentSettings({
+      idleCloseMinutes: null, attachmentRetentionDays: null, backgroundReminderMinutes: null, apiErrorRetryAttempts: null,
+    });
     closeConnection();
     process.env.DATABASE_PATH = previousDatabasePath;
     if (previousIdleClose === undefined) {

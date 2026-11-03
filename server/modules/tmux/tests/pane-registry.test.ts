@@ -26,6 +26,8 @@ async function setup(panes: AgentPane[]) {
     idleCloseMinutes: 60,
     attachmentRetentionDays: 7,
     backgroundReminderMinutes: 60,
+    apiErrorRetryAttempts: 3,
+    apiErrorRetryDelayMinutes: 1,
     claudeHome: path.join(root, 'claude'),
     stateDir: path.join(root, 'state'),
     windowsClaude: true,

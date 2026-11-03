@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import { newestWrite } from '@/modules/tmux/agent-activity.js';
 import { getAgentConfig } from '@/modules/tmux/agent-config.js';
+import { isAwaitingApiErrorRetry } from '@/modules/tmux/api-error-retry.service.js';
 import { readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
@@ -59,7 +60,8 @@ export async function sweepIdleAgents(): Promise<string[]> {
   const [panes, processes] = await Promise.all([paneRegistry.refresh(), readClaudeProcesses()]);
   const closed: string[] = [];
   for (const pane of panes) {
-    if (!pane.registered || !pane.providerSessionId) {
+    // Its retry types into this window, possibly long after the error if the network stays down.
+    if (!pane.registered || !pane.providerSessionId || isAwaitingApiErrorRetry(pane.providerSessionId)) {
       continue;
     }
     const status = processes

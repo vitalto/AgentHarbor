@@ -481,6 +481,16 @@
         "description": "When an agent has finished its turn but a background command is still running, the agent gets a short note from you after this long, then after gaps that double each time (1, 3, 7… times this value from the start). Catches a script waiting for something that will never happen. 0 turns it off. Default {{defaultValue}}.",
         "unit": "min"
       },
+      "apiErrorRetryAttempts": {
+        "label": "Continue after a network error",
+        "description": "When a turn stops on a network or API server error (\"Connection lost mid-response\", \"Can't reach the API server\"), the agent gets a short note to continue, at most this many times in a row. It is sent only once Windows reports internet access and api.anthropic.com resolves; nothing else is sent to Anthropic. Usage limits are left to Claude's own automatic continue. 0 turns it off. Default {{defaultValue}}.",
+        "unit": "times"
+      },
+      "apiErrorRetryDelayMinutes": {
+        "label": "First retry after",
+        "description": "Time from the error to the first retry; each next one waits three times longer (1, 3, 9 times this value). Default {{defaultValue}}.",
+        "unit": "min"
+      },
       "attachmentRetentionDays": {
         "label": "Keep pasted files for",
         "description": "Copies of pasted images and files handed to a Windows Claude are deleted after this. Default {{defaultValue}}.",

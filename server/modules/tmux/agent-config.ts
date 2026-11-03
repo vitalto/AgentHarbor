@@ -39,6 +39,8 @@ export function readAgentConfig(env: NodeJS.ProcessEnv = process.env): AgentConf
     idleCloseMinutes: readNonNegativeNumber(env.AH_IDLE_CLOSE_MINUTES, 60),
     attachmentRetentionDays: readNonNegativeNumber(env.AH_ATTACHMENT_RETENTION_DAYS, 7),
     backgroundReminderMinutes: readNonNegativeNumber(env.AH_BACKGROUND_REMINDER_MINUTES, 60),
+    apiErrorRetryAttempts: readNonNegativeNumber(env.AH_API_ERROR_RETRY_ATTEMPTS, 3),
+    apiErrorRetryDelayMinutes: Math.max(1, readNonNegativeNumber(env.AH_API_ERROR_RETRY_DELAY_MINUTES, 1)),
     wslDistro: env.WSL_DISTRO_NAME?.trim() || null,
   };
 }
@@ -83,6 +85,8 @@ function pickAgentSettings(config: AgentConfig): AgentSettings {
     idleCloseMinutes: config.idleCloseMinutes,
     attachmentRetentionDays: config.attachmentRetentionDays,
     backgroundReminderMinutes: config.backgroundReminderMinutes,
+    apiErrorRetryAttempts: config.apiErrorRetryAttempts,
+    apiErrorRetryDelayMinutes: config.apiErrorRetryDelayMinutes,
   };
 }
 

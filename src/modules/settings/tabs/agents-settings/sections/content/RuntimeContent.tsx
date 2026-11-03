@@ -156,7 +156,13 @@ export default function RuntimeContent() {
       <SettingsSection title={t('runtime.windows.title')} description={t('runtime.windows.description')}>
         {overview ? (
           <SettingsCard divided>
-            {(['idleCloseMinutes', 'backgroundReminderMinutes', 'attachmentRetentionDays'] as const).map((name) => (
+            {([
+              'idleCloseMinutes',
+              'backgroundReminderMinutes',
+              'apiErrorRetryAttempts',
+              'apiErrorRetryDelayMinutes',
+              'attachmentRetentionDays',
+            ] as const).map((name) => (
               <NumberSettingRow
                 // A saved value remounts the row, so its draft starts from what the server now holds.
                 key={`${name}:${overview.values[name]}`}

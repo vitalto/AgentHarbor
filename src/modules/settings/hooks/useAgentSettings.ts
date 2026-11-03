@@ -2,7 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
 
-export type AgentSettingName = 'idleCloseMinutes' | 'attachmentRetentionDays' | 'backgroundReminderMinutes';
+export type AgentSettingName =
+  | 'idleCloseMinutes'
+  | 'attachmentRetentionDays'
+  | 'backgroundReminderMinutes'
+  | 'apiErrorRetryAttempts'
+  | 'apiErrorRetryDelayMinutes';
 
 /** Mirrors the server's AgentSettingsOverview. */
 export type AgentSettingsOverview = {

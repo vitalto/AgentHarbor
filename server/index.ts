@@ -23,6 +23,7 @@ import {
     findAgentWindow,
     getAgentConfig,
     loadStoredAgentSettings,
+    startApiErrorRetries,
     startIdleReaper,
     writeHookSettings,
 } from '@/modules/tmux/index.js';
@@ -116,6 +117,7 @@ writeHookSettings(getAgentConfig());
 sessionMonitor.start();
 startIdleReaper();
 startBackgroundCommandReminders();
+startApiErrorRetries();
 
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
 // A completed run stays subscribable while its session's background work
