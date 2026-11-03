@@ -1,9 +1,5 @@
 import fsSync from 'node:fs';
 import path from 'node:path';
-import readline from 'node:readline';
-
-import { spawn } from 'cross-spawn';
-import { rgPath } from '@vscode/ripgrep';
 
 import { stripAnsiSequences } from '@/shared/utils.js';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
@@ -14,6 +10,7 @@ import {
   type ConversationSearchQuery,
   type SearchSnippetHighlight,
 } from '@/modules/providers/services/conversation-search-query.js';
+import { scanTranscriptLines } from '@/modules/providers/services/transcript-line-scanner.js';
 
 type AnyRecord = Record<string, any>;
 type SearchableProvider = 'claude';
@@ -91,12 +88,6 @@ type ProjectBucket = {
 
 const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude']);
 const MAX_MATCHES_PER_SESSION = 2;
-const RIPGREP_FILE_CHUNK_SIZE = 40;
-const RIPGREP_CHUNK_CONCURRENCY = 6;
-// Longer transcript lines are tool output and injected context; real chat
-// messages fit, and printing those lines would multiply the bytes to parse.
-const RIPGREP_MAX_LINE_LENGTH = 100_000;
-const RIPGREP_OMITTED_LINE_PREFIX = '[Omitted long line';
 const UNKNOWN_PROJECT_KEY = '__unknown_project__';
 
 const INTERNAL_CONTENT_PREFIXES = [
@@ -121,18 +112,6 @@ function normalizeComparablePath(inputPath: string): string {
 
   const resolved = path.resolve(normalized);
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
-}
-
-function chunkArray<TItem>(items: TItem[], size: number): TItem[][] {
-  if (size <= 0) {
-    return [items];
-  }
-
-  const chunks: TItem[][] = [];
-  for (let idx = 0; idx < items.length; idx += size) {
-    chunks.push(items.slice(idx, idx + size));
-  }
-  return chunks;
 }
 
 function makeProjectKey(projectPath: string | null): string {
@@ -470,141 +449,18 @@ function buildProjectBuckets(searchableSessions: SearchableSessionRow[]): Projec
   return buckets;
 }
 
-/**
- * Streams every transcript line that holds at least one prefilter string,
- * grouped by file, from one ripgrep pass over the known transcript paths.
- *
- * One pass that prints only those lines replaces a files-with-matches pass
- * per word followed by a full read of each matching file in Node: on WSL the
- * transcripts sit on /mnt/<drive>, where every byte read is a 9p round trip
- * and the old way read the same gigabyte several times.
- */
-async function streamMatchingTranscriptLines(
-  prefilterStrings: string[],
-  filePaths: string[],
-  onFileLines: (filePath: string, lines: string[]) => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  if (prefilterStrings.length === 0 || filePaths.length === 0 || signal?.aborted) {
-    return;
-  }
-
-  const args = [
-    '--no-messages',
-    '--ignore-case',
-    '--fixed-strings',
-    '--with-filename',
-    '--null',
-    '--no-line-number',
-    '--max-columns',
-    String(RIPGREP_MAX_LINE_LENGTH),
-    ...prefilterStrings.flatMap((prefilterString) => ['-e', prefilterString]),
-    '--',
-    ...filePaths,
-  ];
-
-  await new Promise<void>((resolve, reject) => {
-    const rg = spawn(rgPath, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-
-    const stderrChunks: Buffer[] = [];
-    let aborted = false;
-    let currentFilePath: string | null = null;
-    let currentFileLines: string[] = [];
-
-    const flushCurrentFile = () => {
-      if (currentFilePath !== null && currentFileLines.length > 0) {
-        onFileLines(currentFilePath, currentFileLines);
-      }
-      currentFilePath = null;
-      currentFileLines = [];
-    };
-
-    const abortListener = () => {
-      aborted = true;
-      rg.kill();
-    };
-    signal?.addEventListener('abort', abortListener, { once: true });
-
-    // ripgrep prints all matches of one file together, so a change of path
-    // marks the end of the previous file.
-    const lineReader = readline.createInterface({ input: rg.stdout, crlfDelay: Infinity });
-    lineReader.on('line', (outputLine) => {
-      const separatorIndex = outputLine.indexOf('\0');
-      if (separatorIndex === -1) {
-        return;
-      }
-      const filePath = outputLine.slice(0, separatorIndex);
-      const transcriptLine = outputLine.slice(separatorIndex + 1);
-      if (filePath !== currentFilePath) {
-        flushCurrentFile();
-        currentFilePath = filePath;
-      }
-      if (!transcriptLine.startsWith(RIPGREP_OMITTED_LINE_PREFIX)) {
-        currentFileLines.push(transcriptLine);
-      }
-    });
-
-    rg.stderr.on('data', (chunk: Buffer) => {
-      stderrChunks.push(chunk);
-    });
-
-    rg.on('error', (error) => {
-      signal?.removeEventListener('abort', abortListener);
-      if (aborted || signal?.aborted) {
-        resolve();
-        return;
-      }
-      reject(error);
-    });
-
-    // 'close' comes after stdout has ended, so every line has been read.
-    rg.on('close', (exitCode) => {
-      signal?.removeEventListener('abort', abortListener);
-      if (aborted || signal?.aborted) {
-        resolve();
-        return;
-      }
-      flushCurrentFile();
-      if (exitCode !== 0 && exitCode !== 1) {
-        const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
-        reject(new Error(`ripgrep failed with code ${String(exitCode)}: ${stderr}`));
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
 async function scanTranscriptsForQuery(
   searchablePathEntries: SearchablePathEntry[],
   query: ConversationSearchQuery,
   onFileLines: (normalizedPath: string, lines: string[]) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const fileChunks = chunkArray(
+  await scanTranscriptLines(
+    query.prefilterStrings,
     searchablePathEntries.map((entry) => entry.absolutePath),
-    RIPGREP_FILE_CHUNK_SIZE,
+    (filePath, lines) => onFileLines(normalizeComparablePath(filePath), lines),
+    signal,
   );
-
-  let nextChunkIndex = 0;
-  const workerCount = Math.min(RIPGREP_CHUNK_CONCURRENCY, fileChunks.length);
-  const workers = Array.from({ length: workerCount }, async () => {
-    while (nextChunkIndex < fileChunks.length && !signal?.aborted) {
-      const currentIndex = nextChunkIndex;
-      nextChunkIndex += 1;
-      await streamMatchingTranscriptLines(
-        query.prefilterStrings,
-        fileChunks[currentIndex],
-        (filePath, lines) => onFileLines(normalizeComparablePath(filePath), lines),
-        signal,
-      );
-    }
-  });
-
-  await Promise.all(workers);
 }
 
 /** A file can only hold a match when every prefilter string occurs in it somewhere. */

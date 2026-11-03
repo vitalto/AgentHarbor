@@ -137,6 +137,7 @@ Environment Variables:
   AH_CLAUDE_ARGS      Extra flags for every Claude launch
   AH_STATE_DIR        AgentHarbor state directory (default: ~/.agentharbor)
   CLAUDE_CONFIG_DIR   Claude Code config directory (default: ~/.claude)
+  AH_WINDOWS_RIPGREP  Windows rg.exe for searching transcripts on /mnt/<drive>
 
 Documentation:
   ${dependencies.packageMetadata.homepage || 'https://github.com/vitalto/AgentHarbor'}

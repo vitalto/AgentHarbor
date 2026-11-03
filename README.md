@@ -148,6 +148,7 @@ Set variables in the environment or in a `.env` file in the repository root (see
 | `AH_BACKGROUND_REMINDER_MINUTES` | `60` | Type a short reminder into an agent whose turn is over while a background command keeps running: after this many minutes, then 3x, 7x… from the start (`0` = never). Default only, like the ones above |
 | `AH_PROJECTS_DIR` | *(none)* | Folder the New Project wizard lists first, to open a project from it or create one by typing a name (an absolute path; with a Windows Claude also `D:\Develop`). Default only: choosing another folder in the wizard overrides it |
 | `WORKSPACES_ROOT` | home folder | Projects must lie under this folder. With a Windows Claude every mounted drive (`/mnt/c`, `/mnt/d`...) is allowed as well; Windows system folders never are |
+| `AH_WINDOWS_RIPGREP` | *(none)* | WSL path to a Windows `rg.exe` ([ripgrep release](https://github.com/BurntSushi/ripgrep/releases)). Conversation search then reads transcripts on `/mnt/<drive>` with it instead of through the slow 9p mount, about 10x faster |
 | `CONTEXT_WINDOW` | by model | Context window the token counter measures against. Unset: 1M for Claude 5 models and `[1m]` variants, 200k for older ones |
 | `SERVER_PORT` | `3001` | HTTP / WebSocket port |
 | `HOST` | `0.0.0.0` | Address to bind to |
@@ -162,6 +163,7 @@ Windows tooling while AgentHarbor and tmux run in WSL:
 AH_CLAUDE_CMD=/mnt/c/Users/<you>/.local/bin/claude.exe
 CLAUDE_CONFIG_DIR=/mnt/c/Users/<you>/.claude
 AH_STATE_DIR=/mnt/c/Users/<you>/.agentharbor
+AH_WINDOWS_RIPGREP=/mnt/c/<path>/rg.exe   # optional, faster conversation search
 ```
 
 - `AH_STATE_DIR` must live on `/mnt/c` so the Windows Claude process can read the hook settings and
