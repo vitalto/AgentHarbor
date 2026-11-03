@@ -102,6 +102,21 @@ self.addEventListener('push', event => {
   );
 });
 
+// The browser replaced or dropped this subscription (Firefox does this, and push services expire
+// subscriptions). Subscribe again with the same key and let open pages re-register it with the
+// server; a page opened later does the same on load.
+self.addEventListener('pushsubscriptionchange', event => {
+  const applicationServerKey = event.oldSubscription?.options?.applicationServerKey;
+  event.waitUntil((async () => {
+    if (applicationServerKey && !event.newSubscription) {
+      await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey })
+        .catch(err => console.warn('Push re-subscribe failed:', err));
+    }
+    const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    clientList.forEach(client => client.postMessage({ type: 'push:subscription-changed' }));
+  })());
+});
+
 // The user is looking at that chat right now on this device: the push would only repeat what the page shows.
 // Chrome shows no fallback notification for a skipped push while a page of the origin is visible.
 async function isChatOnScreen(sessionId) {

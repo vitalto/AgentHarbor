@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
 import type { NotificationCategories } from '@/shared/types';
+import { rememberPushWanted, urlBase64ToUint8Array } from '@/modules/settings/utils/pushSubscriptionSync';
 
 type WebPushState = {
   permission: NotificationPermission | 'unsupported';
@@ -15,17 +16,6 @@ type WebPushState = {
   unsubscribe: () => Promise<void>;
   setCategory: (category: keyof NotificationCategories, enabled: boolean) => Promise<void>;
 };
-
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
 
 async function currentSubscription(): Promise<PushSubscription | null> {
   const registration = await navigator.serviceWorker.ready;
@@ -88,11 +78,15 @@ export function useWebPush(): WebPushState {
       });
 
       const subJson = subscription.toJSON();
-      await api.settings.push.subscribe({
+      const response = await api.settings.push.subscribe({
         endpoint: subJson.endpoint,
         keys: subJson.keys,
       });
+      if (!response.ok) {
+        throw new Error(`the server did not store the subscription (HTTP ${response.status})`);
+      }
 
+      rememberPushWanted(true);
       setIsSubscribed(true);
       setCategories(await loadCategories(subscription.endpoint));
     } catch (err) {
@@ -111,6 +105,7 @@ export function useWebPush(): WebPushState {
         await subscription.unsubscribe();
         await api.settings.push.unsubscribe(endpoint);
       }
+      rememberPushWanted(false);
       setIsSubscribed(false);
       setCategories(null);
     } catch (err) {

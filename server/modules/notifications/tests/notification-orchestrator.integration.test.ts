@@ -4,9 +4,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+// @ts-expect-error -- web-push ships no type declarations (see vapid-keys.service.ts).
+import webPush from 'web-push';
+
 import {
   closeConnection,
   initializeDatabase,
+  notificationPreferencesDb,
   pushSubscriptionsDb,
   sessionsDb,
   userDb,
@@ -16,6 +20,8 @@ import { categoryOfEventKind } from '@/shared/notification-categories.js';
 import { folderTrustNotificationEvent } from '../services/agent-activity-notifier.service.js';
 import {
   buildNotificationPayload,
+  createNotificationEvent,
+  notifyUserIfEnabled,
 } from '../services/notification-orchestrator.service.js';
 
 async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
@@ -120,5 +126,97 @@ test('an untitled start waiting on the folder-trust dialog is named by its folde
 
     assert.equal(payload.title, 'cloned');
     assert.equal(payload.body, 'Claude in cloned waits for you to trust the folder');
+  });
+});
+
+/** A user with one subscribed browser and Web Push on, as after "Enable" in Settings. */
+function subscribedUser(name: string, endpoint: string): number {
+  const userId = Number(userDb.createUser(name, 'hash').id);
+  pushSubscriptionsDb.saveSubscription(userId, endpoint, 'key', 'auth');
+  notificationPreferencesDb.updatePreferences(userId, { channels: { webPush: true } });
+  return userId;
+}
+
+/** Lets the delivery's awaits run between fake-timer ticks (the retry waits on a timer). */
+async function settleDelivery(t: test.TestContext, delivery: Promise<unknown>): Promise<void> {
+  let done = false;
+  void delivery.finally(() => { done = true; });
+  for (let round = 0; round < 50 && !done; round += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+    t.mock.timers.tick(5_000);
+  }
+  await delivery;
+}
+
+const pushError = (statusCode: number | undefined, message = 'push failed') => Object.assign(new Error(message), { statusCode, body: message });
+const agentMessage = (message: string) => createNotificationEvent({ provider: 'system', code: 'agent.notification', meta: { message }, dedupeKey: `test:${message}` });
+
+test('a browser the push service calls gone (410 or 404) is dropped', async (t) => {
+  t.mock.method(console, 'warn', () => undefined);
+  await withIsolatedDatabase(async () => {
+    for (const [index, statusCode] of [410, 404].entries()) {
+      const userId = subscribedUser(`gone${index}`, `https://push.example.test/gone-${statusCode}`);
+      t.mock.method(webPush, 'sendNotification', async () => { throw pushError(statusCode); });
+
+      await notifyUserIfEnabled({ userId, event: agentMessage(`gone ${statusCode}`) });
+      assert.deepEqual(pushSubscriptionsDb.getSubscriptions(userId), [], String(statusCode));
+    }
+  });
+});
+
+test('a timeout, reset, 5xx or 429 keeps the subscription and is retried once', async (t) => {
+  t.mock.method(console, 'warn', () => undefined);
+  t.mock.method(console, 'error', () => undefined);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await withIsolatedDatabase(async () => {
+    const failures = [pushError(undefined, 'ETIMEDOUT'), pushError(502), pushError(429)];
+    for (const [index, failure] of failures.entries()) {
+      const endpoint = `https://push.example.test/flaky-${index}`;
+      const userId = subscribedUser(`flaky${index}`, endpoint);
+      let attempts = 0;
+      t.mock.method(webPush, 'sendNotification', async () => {
+        attempts += 1;
+        throw failure;
+      });
+
+      await settleDelivery(t, notifyUserIfEnabled({ userId, event: agentMessage(`flaky ${index}`) }));
+      assert.equal(attempts, 2, `${failure.message}: one retry`);
+      assert.deepEqual(pushSubscriptionsDb.getSubscriptions(userId).map((subscription) => subscription.endpoint), [endpoint], failure.message);
+    }
+  });
+});
+
+test('a delivery that goes through on the retry counts the browser as reached', async (t) => {
+  t.mock.method(console, 'warn', () => undefined);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await withIsolatedDatabase(async () => {
+    const userId = subscribedUser('retry', 'https://push.example.test/retry');
+    let attempts = 0;
+    t.mock.method(webPush, 'sendNotification', async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw pushError(undefined, 'ECONNRESET');
+      }
+      return { statusCode: 201 };
+    });
+
+    const delivery = notifyUserIfEnabled({ userId, event: agentMessage('retry') });
+    await settleDelivery(t, delivery);
+    assert.equal(await delivery, 1);
+    assert.equal(attempts, 2);
+  });
+});
+
+test('a page re-sending its subscription keeps the browser, its categories and its user, and is not new', async () => {
+  await withIsolatedDatabase(() => {
+    const userId = Number(userDb.createUser('carol', 'hash').id);
+    const endpoint = 'https://push.example.test/reloaded';
+    assert.equal(pushSubscriptionsDb.saveSubscription(userId, endpoint, 'key', 'auth'), true);
+    pushSubscriptionsDb.setCategories(userId, endpoint, { finished: false, waiting: true, agentMessage: true, system: true });
+
+    assert.equal(pushSubscriptionsDb.saveSubscription(userId, endpoint, 'key2', 'auth2'), false);
+    const [stored] = pushSubscriptionsDb.getSubscriptions(userId);
+    assert.equal(stored.keys_p256dh, 'key2');
+    assert.equal(stored.categories.finished, false);
   });
 });

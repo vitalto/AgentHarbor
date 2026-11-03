@@ -8,6 +8,7 @@ import { WebSocketProvider } from '@/shared/context/WebSocketContext';
 import { PluginsProvider } from '@/modules/plugins';
 import { ProjectWorkspaceRoute } from '@/modules/project-workspace';
 import { i18n } from '@/modules/i18n';
+import { PushSubscriptionSync } from '@/modules/settings';
 
 const DEPLOYMENT_ASSET_DIRECTORIES = new Set(['assets', 'static', 'icons', 'images']);
 
@@ -116,6 +117,7 @@ export default function App() {
           <WebSocketProvider>
             <PluginsProvider>
               <ProtectedRoute>
+                <PushSubscriptionSync />
                 <Router basename={routerBasename}>
                   <Routes>
                     <Route path="/" element={<ProjectWorkspaceRoute />} />

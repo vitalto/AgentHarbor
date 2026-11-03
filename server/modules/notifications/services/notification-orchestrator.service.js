@@ -175,6 +175,43 @@ function buildNotificationPayload(event) {
   };
 }
 
+/** The push service can hang through a flaky route; a delivery waits this long before it counts as failed. */
+const PUSH_REQUEST_TIMEOUT_MS = 20_000;
+/** One retry after a failure that is not a definitive "gone": timeouts, resets, 5xx and 429 are usually brief. */
+const PUSH_RETRY_DELAY_MS = 5_000;
+
+/** Only these answers mean the browser dropped the subscription; anything else may pass and must keep it. */
+function isSubscriptionGone(statusCode) {
+  return statusCode === 404 || statusCode === 410;
+}
+
+function deliverPush(subscription, serializedPayload) {
+  return webPush.sendNotification(
+    {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.keys_p256dh,
+        auth: subscription.keys_auth
+      }
+    },
+    serializedPayload,
+    { timeout: PUSH_REQUEST_TIMEOUT_MS }
+  );
+}
+
+async function deliverPushWithRetry(subscription, serializedPayload) {
+  try {
+    await deliverPush(subscription, serializedPayload);
+  } catch (error) {
+    if (isSubscriptionGone(error?.statusCode)) {
+      throw error;
+    }
+    console.warn('[AgentHarbor] push delivery failed, retrying once', error?.statusCode ?? '', error?.body ?? error?.message ?? error);
+    await new Promise((resolve) => setTimeout(resolve, PUSH_RETRY_DELAY_MS));
+    await deliverPush(subscription, serializedPayload);
+  }
+}
+
 /** Sends to the user's browsers that take this category; resolves to how many were addressed. */
 function sendWebPushPayload(userId, payload, category) {
   const subscriptions = pushSubscriptionsDb.getSubscriptions(userId)
@@ -183,27 +220,16 @@ function sendWebPushPayload(userId, payload, category) {
 
   const serializedPayload = JSON.stringify(payload);
   return Promise.allSettled(
-    subscriptions.map((sub) =>
-      webPush.sendNotification(
-        {
-          endpoint: sub.endpoint,
-          keys: {
-            p256dh: sub.keys_p256dh,
-            auth: sub.keys_auth
-          }
-        },
-        serializedPayload
-      )
-    )
+    subscriptions.map((subscription) => deliverPushWithRetry(subscription, serializedPayload))
   ).then((results) => {
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
         const statusCode = result.reason?.statusCode;
-        if (statusCode === 410 || statusCode === 404) {
+        if (isSubscriptionGone(statusCode)) {
           console.warn(`[AgentHarbor] push service answered ${statusCode}: dropping the subscription ${subscriptions[index].endpoint.slice(0, 60)}...`);
           pushSubscriptionsDb.removeSubscription(subscriptions[index].endpoint);
         } else {
-          console.error('[AgentHarbor] push delivery failed', statusCode ?? '', result.reason?.body ?? result.reason?.message ?? result.reason);
+          console.error('[AgentHarbor] push delivery failed, subscription kept', statusCode ?? '', result.reason?.body ?? result.reason?.message ?? result.reason);
         }
       }
     });

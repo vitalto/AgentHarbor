@@ -32,7 +32,8 @@ type SettingsDependencies = {
     notifyUser(userId: number, event: unknown): void | Promise<void>;
   };
   pushSubscriptions: {
-    save(userId: number, endpoint: string, p256dh: string, auth: string): void;
+    /** True when the browser was not registered for the user before. */
+    save(userId: number, endpoint: string, p256dh: string, auth: string): boolean;
     remove(endpoint: string): void;
     getCategories(userId: number, endpoint: string): NotificationCategories | null;
     setCategories(userId: number, endpoint: string, categories: NotificationCategories): boolean;
@@ -150,9 +151,16 @@ export function createSettingsService(dependencies: SettingsDependencies) {
       return { success: true, preferences: dependencies.notifications.getPreferences(userId) };
     },
     updateNotificationPreferences(userId: number, preferences: NotificationPreferences) {
+      // Web Push is on while any browser is subscribed; a Settings dialog loaded before a browser
+      // subscribed would otherwise switch it off for every browser when it saves its other options.
+      const storedWebPush = dependencies.notifications.getPreferences(userId)?.channels?.webPush;
+      const merged = {
+        ...preferences,
+        channels: { ...preferences.channels, webPush: storedWebPush ?? preferences.channels?.webPush },
+      };
       return {
         success: true,
-        preferences: dependencies.notifications.updatePreferences(userId, preferences),
+        preferences: dependencies.notifications.updatePreferences(userId, merged),
       };
     },
     getVapidPublicKey() {
@@ -172,7 +180,7 @@ export function createSettingsService(dependencies: SettingsDependencies) {
         : {};
       const p256dh = requiredString(keys.p256dh, 'p256dh', 'PUSH_SUBSCRIPTION_REQUIRED');
       const auth = requiredString(keys.auth, 'auth', 'PUSH_SUBSCRIPTION_REQUIRED');
-      dependencies.pushSubscriptions.save(userId, endpoint, p256dh, auth);
+      const isNewBrowser = dependencies.pushSubscriptions.save(userId, endpoint, p256dh, auth);
 
       const currentPreferences = dependencies.notifications.getPreferences(userId);
       if (!currentPreferences?.channels?.webPush) {
@@ -181,9 +189,11 @@ export function createSettingsService(dependencies: SettingsDependencies) {
           channels: { ...currentPreferences?.channels, webPush: true },
         });
       }
-      const event = dependencies.notifications.createEnabledEvent();
-      void dependencies.notifications.notifyUser(userId, event);
-      return { success: true };
+      // Pages re-send their subscription on every load; only a browser that was not registered gets the confirmation.
+      if (isNewBrowser) {
+        void dependencies.notifications.notifyUser(userId, dependencies.notifications.createEnabledEvent());
+      }
+      return { success: true, isNewBrowser };
     },
     getPushCategories(userId: number, endpointInput: unknown) {
       const endpoint = requiredString(endpointInput, 'Endpoint', 'PUSH_ENDPOINT_REQUIRED');
@@ -203,14 +213,8 @@ export function createSettingsService(dependencies: SettingsDependencies) {
     },
     unsubscribeFromPush(userId: number, endpointInput: unknown) {
       const endpoint = requiredString(endpointInput, 'Endpoint', 'PUSH_ENDPOINT_REQUIRED');
+      // Only this browser: the user-wide Web Push switch stays on for the other subscribed browsers.
       dependencies.pushSubscriptions.remove(endpoint);
-      const currentPreferences = dependencies.notifications.getPreferences(userId);
-      if (currentPreferences?.channels?.webPush) {
-        dependencies.notifications.updatePreferences(userId, {
-          ...currentPreferences,
-          channels: { ...currentPreferences.channels, webPush: false },
-        });
-      }
       return { success: true };
     },
   };

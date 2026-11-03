@@ -69,13 +69,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     });
   };
 
+  // Only this browser stops: the user-wide Web Push switch stays on for the other subscribed browsers.
   const handleDisablePush = async () => {
     await pushUnsubscribe();
-    // Server sets webPush: false in preferences on unsubscribe; sync local state
-    setNotificationPreferences({
-      ...notificationPreferences,
-      channels: { ...notificationPreferences.channels, webPush: false },
-    });
   };
 
   // Escape closes Settings, matching the other modals in the app. Layers that open

@@ -15,7 +15,7 @@ function dependencies(overrides: Partial<Dependencies> = {}): Dependencies {
       createEnabledEvent: () => ({}),
       notifyUser: () => undefined,
     },
-    pushSubscriptions: { save: () => undefined, remove: () => undefined, getCategories: () => null, setCategories: () => false },
+    pushSubscriptions: { save: () => true, remove: () => undefined, getCategories: () => null, setCategories: () => false },
     getVapidPublicKey: () => null,
     agentSettings: { describe: () => ({}), save: () => undefined },
     ...overrides,
@@ -36,7 +36,7 @@ test('subscribeToPush persists the subscription and enables Web Push', () => {
   const operations: string[] = [];
   const service = createSettingsService(dependencies({
     pushSubscriptions: {
-      save: (_id, endpoint) => operations.push(`save:${endpoint}`),
+      save: (_id, endpoint) => { operations.push(`save:${endpoint}`); return true; },
       remove: () => undefined,
       getCategories: () => null,
       setCategories: () => false,
@@ -60,7 +60,7 @@ test('updatePushCategories stores a full category set for the browser and refuse
   const stored: unknown[] = [];
   const service = createSettingsService(dependencies({
     pushSubscriptions: {
-      save: () => undefined,
+      save: () => true,
       remove: () => undefined,
       getCategories: () => null,
       setCategories: (_id, endpoint, categories) => {
@@ -98,4 +98,57 @@ test('updateAgentSettings saves the update and answers with the settings as they
     settings: { idleCloseMinutes: 15 },
   });
   assert.deepEqual(saved, { idleCloseMinutes: 15 });
+});
+
+test('a page re-registering a browser the server already has sends no "enabled" push', () => {
+  const operations: string[] = [];
+  const service = createSettingsService(dependencies({
+    pushSubscriptions: { save: () => false, remove: () => undefined, getCategories: () => null, setCategories: () => false },
+    notifications: {
+      getPreferences: () => ({ channels: { webPush: true } }),
+      updatePreferences: () => { operations.push('preferences'); return {}; },
+      createEnabledEvent: () => ({ code: 'push.enabled' }),
+      notifyUser: () => { operations.push('notify'); },
+    },
+  }));
+
+  const result = service.subscribeToPush(1, { endpoint: 'https://push.example.test', keys: { p256dh: 'key', auth: 'auth' } });
+  assert.equal(result.isNewBrowser, false);
+  assert.deepEqual(operations, []);
+});
+
+test('turning push off in one browser leaves Web Push on for the other browsers', () => {
+  const operations: string[] = [];
+  const service = createSettingsService(dependencies({
+    pushSubscriptions: {
+      save: () => true,
+      remove: (endpoint) => { operations.push(`remove:${endpoint}`); },
+      getCategories: () => null,
+      setCategories: () => false,
+    },
+    notifications: {
+      getPreferences: () => ({ channels: { webPush: true } }),
+      updatePreferences: () => { operations.push('preferences'); return {}; },
+      createEnabledEvent: () => ({}),
+      notifyUser: () => undefined,
+    },
+  }));
+
+  service.unsubscribeFromPush(1, 'https://push.example.test/laptop');
+  assert.deepEqual(operations, ['remove:https://push.example.test/laptop']);
+});
+
+test('saving the other notification options never switches Web Push off', () => {
+  const saved: unknown[] = [];
+  const service = createSettingsService(dependencies({
+    notifications: {
+      getPreferences: () => ({ channels: { webPush: true, sound: true } }),
+      updatePreferences: (_id, preferences) => { saved.push(preferences); return preferences; },
+      createEnabledEvent: () => ({}),
+      notifyUser: () => undefined,
+    },
+  }));
+
+  service.updateNotificationPreferences(1, { channels: { webPush: false, sound: false } });
+  assert.deepEqual(saved, [{ channels: { webPush: true, sound: false } }]);
 });

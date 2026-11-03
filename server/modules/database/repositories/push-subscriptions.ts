@@ -25,14 +25,20 @@ const withCategories = ({ categories_json, ...row }: PushSubscriptionRow): PushS
 });
 
 export const pushSubscriptionsDb = {
-  /** Upserts a push subscription endpoint for a user. */
+  /**
+   * Upserts a push subscription endpoint for a user, keeping its categories. True when the browser
+   * was not registered for this user before (a page re-sending its subscription on load is not new).
+   */
   createPushSubscription(
     userId: number,
     endpoint: string,
     keysP256dh: string,
     keysAuth: string
-  ): void {
+  ): boolean {
     const db = getConnection();
+    const existing = db
+      .prepare('SELECT user_id FROM push_subscriptions WHERE endpoint = ?')
+      .get(endpoint) as { user_id: number } | undefined;
     db.prepare(
       `INSERT INTO push_subscriptions (user_id, endpoint, keys_p256dh, keys_auth)
        VALUES (?, ?, ?, ?)
@@ -41,6 +47,7 @@ export const pushSubscriptionsDb = {
          keys_p256dh = excluded.keys_p256dh,
          keys_auth = excluded.keys_auth`
     ).run(userId, endpoint, keysP256dh, keysAuth);
+    return existing?.user_id !== userId;
   },
 
   /** Returns all subscriptions for a user. */
@@ -97,8 +104,8 @@ export const pushSubscriptionsDb = {
     endpoint: string,
     keysP256dh: string,
     keysAuth: string
-  ): void {
-    pushSubscriptionsDb.createPushSubscription(
+  ): boolean {
+    return pushSubscriptionsDb.createPushSubscription(
       userId,
       endpoint,
       keysP256dh,
