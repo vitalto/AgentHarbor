@@ -122,6 +122,7 @@ export default function App() {
                   <Routes>
                     <Route path="/" element={<ProjectWorkspaceRoute />} />
                     <Route path="/session/:sessionId" element={<ProjectWorkspaceRoute />} />
+                    <Route path="/plugins/:pluginName" element={<ProjectWorkspaceRoute />} />
                   </Routes>
                 </Router>
               </ProtectedRoute>

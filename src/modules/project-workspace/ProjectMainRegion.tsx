@@ -1,8 +1,10 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 
 import { useProjectMainState } from '@/modules/project-workspace/context/ProjectsStateContext';
 import type { SessionEstablishedContext, SessionNavigationOptions,ProjectWorkspaceShellProps } from '@/shared/types';
 import WorkspaceMain from '@/modules/project-workspace/WorkspaceMain';
+import WorkspacePluginApp from '@/modules/project-workspace/WorkspacePluginApp';
 
 /** Rendered by ProjectWorkspaceShell to bind this module's project state to WorkspaceMain. */
 function ProjectMainRegion({
@@ -27,9 +29,17 @@ function ProjectMainRegion({
     renameSession,
   } = useProjectMainState();
 
+  const { pluginName: appPluginName } = useParams<{ pluginName?: string }>();
+
   const handleOpenSidebar = useCallback(() => {
     setSidebarOpen(true);
   }, [setSidebarOpen]);
+
+  useEffect(() => {
+    if (appPluginName && isMobile) {
+      setSidebarOpen(false);
+    }
+  }, [appPluginName, isMobile, setSidebarOpen]);
 
   const handleNavigateToSession = useCallback((
     targetSessionId: string,
@@ -48,6 +58,16 @@ function ProjectMainRegion({
   const handleProjectsRefresh = useCallback(() => {
     void refreshProjectsSilently();
   }, [refreshProjectsSilently]);
+
+  if (appPluginName) {
+    return (
+      <WorkspacePluginApp
+        pluginName={appPluginName}
+        isMobile={isMobile}
+        onMenuClick={handleOpenSidebar}
+      />
+    );
+  }
 
   return (
     <WorkspaceMain

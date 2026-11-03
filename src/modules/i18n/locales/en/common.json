@@ -363,7 +363,8 @@
     "unknownProvider": "Unknown",
     "browseFolders": "Browse folders",
     "closeLoginModal": "Close login modal",
-    "pluginLoadFailed": "Plugin failed to load: {{error}}"
+    "pluginLoadFailed": "Plugin failed to load: {{error}}",
+    "pluginNotFound": "Plugin \"{{name}}\" is not installed or is turned off."
   },
   "workflow": {
     "title": "Workflow",

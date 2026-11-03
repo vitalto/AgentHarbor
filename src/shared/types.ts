@@ -1210,7 +1210,8 @@ export type Plugin = {
   author: string;
   icon: string;
   type: 'react' | 'module';
-  slot: 'tab';
+  /** 'tab': a tab in each session's workspace; 'app': a page of its own opened from the sidebar. */
+  slot: 'tab' | 'app';
   entry: string;
   server: string | null;
   permissions: string[];

@@ -1,10 +1,10 @@
-import React, { useCallback, type Dispatch, type SetStateAction, useState } from 'react';
+import React, { useCallback, useEffect, type Dispatch, type SetStateAction, useState } from 'react';
 
 import { ChatInterface } from '@/modules/chat';
 import { FileTree } from '@/modules/file-tree';
 import { StandaloneShell } from '@/modules/standalone-shell';
 import { GitPanel } from '@/modules/git-panel';
-import { PluginTabContent } from '@/modules/plugins';
+import { PluginTabContent, usePlugins } from '@/modules/plugins';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
 import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
@@ -58,6 +58,19 @@ function WorkspaceMain({
   onRenameSession,
 }: WorkspaceMainProps) {
   const preferences = useUiPreferences();
+  const { plugins, loading: pluginsLoading } = usePlugins();
+
+  // The last tab is remembered across reloads; a plugin tab whose plugin was
+  // removed, turned off or moved to its own page would otherwise stay open
+  // with no button left to leave it.
+  const openPluginTabName = activeTab.startsWith('plugin:') ? activeTab.slice('plugin:'.length) : null;
+  const openPluginTabExists = openPluginTabName === null
+    || plugins.some((plugin) => plugin.name === openPluginTabName && plugin.enabled && plugin.slot !== 'app');
+  useEffect(() => {
+    if (!pluginsLoading && !openPluginTabExists) {
+      setActiveTab('chat');
+    }
+  }, [openPluginTabExists, pluginsLoading, setActiveTab]);
   const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
 
   // The folder an in-chat `path/` reference asked to reveal. Held as an object

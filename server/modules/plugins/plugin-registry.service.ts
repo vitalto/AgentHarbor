@@ -23,7 +23,10 @@ function sanitizeRepoUrl(raw) {
   }
 }
 const ALLOWED_TYPES = ['react', 'module'];
-const ALLOWED_SLOTS = ['tab'];
+// "tab": a tab in every session's workspace, given the open project and session.
+// "app": a page of its own (/plugins/<name>) opened from the sidebar, for
+// plugins that show something global.
+const ALLOWED_SLOTS = ['tab', 'app'];
 
 function isDirectory(candidate) {
   try {

@@ -5,6 +5,7 @@ import { Button, Input } from '@/shared/ui';
 import { APP_WORDMARK_FONT_FAMILY } from '@/shared/constants';
 import type { SidebarSearchMode } from '@/shared/types';
 import SidebarModeTabs from '@/modules/sidebar/SidebarModeTabs';
+import { AppPluginLinks } from '@/modules/plugins';
 
 const MOD_KEY =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
@@ -84,6 +85,10 @@ export default function SidebarHeader({
           <LogoBlock t={t} />
 
           <div className="flex flex-shrink-0 items-center gap-0.5">
+            <AppPluginLinks
+              buttonClassName="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent/80 hover:text-foreground"
+              iconClassName="h-3.5 w-3.5"
+            />
             <Button
               variant="ghost"
               size="sm"
@@ -173,6 +178,10 @@ export default function SidebarHeader({
           <LogoBlock t={t} />
 
           <div className="flex flex-shrink-0 gap-1.5">
+            <AppPluginLinks
+              buttonClassName="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50 text-muted-foreground transition-all active:scale-95"
+              iconClassName="h-4 w-4"
+            />
             <button
               className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50 transition-all active:scale-95"
               onClick={onRefresh}

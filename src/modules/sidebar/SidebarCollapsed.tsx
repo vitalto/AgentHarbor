@@ -1,6 +1,8 @@
 import { Settings, Sparkles, PanelLeftOpen, Bug, AlertTriangle } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
+import { AppPluginLinks } from '@/modules/plugins';
+
 const GITHUB_ISSUES_URL = 'https://github.com/vitalto/AgentHarbor/issues/new';
 
 type SidebarCollapsedProps = {
@@ -34,6 +36,11 @@ export default function SidebarCollapsed({
       </button>
 
       <div className="nav-divider my-1 w-6" />
+
+      <AppPluginLinks
+        buttonClassName="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent/80 hover:text-foreground"
+        iconClassName="h-4 w-4"
+      />
 
       {/* Settings */}
       <button

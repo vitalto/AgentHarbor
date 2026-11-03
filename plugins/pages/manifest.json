@@ -6,7 +6,7 @@
   "author": "vitalto",
   "icon": "icon.svg",
   "type": "module",
-  "slot": "tab",
+  "slot": "app",
   "entry": "index.js",
   "server": "server.mjs"
 }
