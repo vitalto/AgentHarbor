@@ -7,14 +7,16 @@ import { rgPath } from '@vscode/ripgrep';
 
 import { stripAnsiSequences } from '@/shared/utils.js';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import {
+  buildQuerySnippet,
+  matchQueryTerms,
+  parseConversationSearchQuery,
+  type ConversationSearchQuery,
+  type SearchSnippetHighlight,
+} from '@/modules/providers/services/conversation-search-query.js';
 
 type AnyRecord = Record<string, any>;
 type SearchableProvider = 'claude';
-
-type SearchSnippetHighlight = {
-  start: number;
-  end: number;
-};
 
 type SessionConversationMatch = {
   role: string;
@@ -23,6 +25,11 @@ type SessionConversationMatch = {
   timestamp: string | null;
   provider: SearchableProvider;
   messageUuid?: string | null;
+};
+
+type RankedSessionMatch = SessionConversationMatch & {
+  /** How many different query terms the message contains. */
+  score: number;
 };
 
 type SessionConversationResult = {
@@ -69,17 +76,6 @@ type SearchableSessionRow = SessionRepositoryRow & {
   jsonl_path: string;
 };
 
-type SearchRuntime = {
-  matchesQuery: (text: string) => boolean;
-  buildSnippet: (text: string) => { snippet: string; highlights: SearchSnippetHighlight[] };
-  limit: number;
-  totalMatches: number;
-  isAborted: () => boolean;
-  matchedSessionKeys: Set<string>;
-  claudeSessionsByFileKey: Map<string, SearchableSessionRow[]>;
-  claudeFileResultsCache: Map<string, Map<string, SessionConversationResult>>;
-};
-
 type SearchablePathEntry = {
   normalizedPath: string;
   absolutePath: string;
@@ -97,6 +93,10 @@ const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude']);
 const MAX_MATCHES_PER_SESSION = 2;
 const RIPGREP_FILE_CHUNK_SIZE = 40;
 const RIPGREP_CHUNK_CONCURRENCY = 6;
+// Longer transcript lines are tool output and injected context; real chat
+// messages fit, and printing those lines would multiply the bytes to parse.
+const RIPGREP_MAX_LINE_LENGTH = 100_000;
+const RIPGREP_OMITTED_LINE_PREFIX = '[Omitted long line';
 const UNKNOWN_PROJECT_KEY = '__unknown_project__';
 
 const INTERNAL_CONTENT_PREFIXES = [
@@ -135,10 +135,6 @@ function chunkArray<TItem>(items: TItem[], size: number): TItem[][] {
   return chunks;
 }
 
-function getSessionKey(session: Pick<SessionRepositoryRow, 'provider' | 'session_id'>): string {
-  return `${session.provider}:${session.session_id}`;
-}
-
 function makeProjectKey(projectPath: string | null): string {
   const normalized = typeof projectPath === 'string' ? projectPath.trim() : '';
   return normalized.length > 0 ? normalized : UNKNOWN_PROJECT_KEY;
@@ -159,26 +155,26 @@ function toSummaryText(customName: string | null, fallback: string | null | unde
 }
 
 /**
- * Finds visible sessions whose displayed title contains the query. Title
- * matches are resolved from the database before transcript scanning so the UI
- * can always present them first, including sessions without a transcript yet.
+ * Finds visible sessions whose displayed title contains every query term.
+ * Title matches are resolved from the database before transcript scanning so
+ * the UI can always present them first, including sessions without a
+ * transcript yet.
  */
 function findSessionTitleResults(
   sessions: SessionRepositoryRow[],
-  query: string,
+  query: ConversationSearchQuery,
   limit: number,
 ): SessionTitleSearchResult[] {
-  const normalizedQuery = query.toLocaleLowerCase().replace(/\s+/g, ' ');
   const projectCache = new Map<string, ReturnType<typeof projectsDb.getProjectPath>>();
 
   return sessions
     .flatMap((session) => {
       const sessionTitle = toSummaryText(session.custom_name, session.session_id, session.session_id);
-      const normalizedTitle = sessionTitle.toLocaleLowerCase().replace(/\s+/g, ' ');
-      const matchIndex = normalizedTitle.indexOf(normalizedQuery);
-      if (matchIndex === -1) {
+      const titleMatch = matchQueryTerms(query, sessionTitle);
+      if (titleMatch.matchedTermIndexes.length < query.terms.length) {
         return [];
       }
+      const matchIndex = titleMatch.firstMatchIndex;
 
       const projectPath = typeof session.project_path === 'string' && session.project_path.trim()
         ? session.project_path.trim()
@@ -223,123 +219,6 @@ function isInternalContent(content: string): boolean {
   return INTERNAL_CONTENT_PREFIXES.some((prefix) => content.startsWith(prefix));
 }
 
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function createWordMatcher(
-  rawQuery: string,
-  words: string[],
-): Pick<SearchRuntime, 'matchesQuery' | 'buildSnippet'> {
-  const normalizedQuery = rawQuery.trim().replace(/\s+/g, ' ');
-  const requireExactPhrase = words.length > 1 && normalizedQuery.length > 0;
-  const wordPatterns = words.map((word) => new RegExp(`(?<!\\p{L})${escapeRegex(word)}(?!\\p{L})`, 'u'));
-  const phrasePattern = words.map((word) => escapeRegex(word)).join('\\s+');
-  const phraseRegex = new RegExp(phrasePattern, 'iu');
-
-  const allWordsMatch = (textLower: string): boolean =>
-    wordPatterns.every((pattern) => pattern.test(textLower));
-
-  const matchesQuery = (text: string): boolean => {
-    if (typeof text !== 'string' || text.length === 0) {
-      return false;
-    }
-
-    if (requireExactPhrase) {
-      return phraseRegex.test(text);
-    }
-
-    if (phraseRegex.test(text)) {
-      return true;
-    }
-
-    if (words.length === 1) {
-      return allWordsMatch(text.toLowerCase());
-    }
-
-    return allWordsMatch(text.toLowerCase());
-  };
-
-  const buildSnippet = (
-    text: string,
-    snippetLen = 150,
-  ): { snippet: string; highlights: SearchSnippetHighlight[] } => {
-    const textLower = text.toLowerCase();
-    let firstIndex = -1;
-    let firstWordLen = 0;
-    let phraseStart = -1;
-    let phraseLength = 0;
-
-    const phraseMatch = phraseRegex.exec(text);
-    if (phraseMatch) {
-      phraseStart = phraseMatch.index;
-      phraseLength = phraseMatch[0].length;
-      firstIndex = phraseStart;
-      firstWordLen = phraseLength;
-    }
-
-    if (firstIndex === -1) {
-      for (const word of words) {
-        const regex = new RegExp(`(?<!\\p{L})${escapeRegex(word)}(?!\\p{L})`, 'u');
-        const match = regex.exec(textLower);
-        if (match && (firstIndex === -1 || match.index < firstIndex)) {
-          firstIndex = match.index;
-          firstWordLen = word.length;
-        }
-      }
-    }
-
-    if (firstIndex === -1) {
-      firstIndex = 0;
-    }
-
-    const halfLen = Math.floor(snippetLen / 2);
-    const start = Math.max(0, firstIndex - halfLen);
-    const end = Math.min(text.length, firstIndex + halfLen + firstWordLen);
-    const prefix = start > 0 ? '...' : '';
-    const suffix = end < text.length ? '...' : '';
-    const snippetBody = text.slice(start, end).replace(/\n/g, ' ');
-    const snippet = `${prefix}${snippetBody}${suffix}`;
-
-    const snippetLower = snippet.toLowerCase();
-    const highlights: SearchSnippetHighlight[] = [];
-
-    if (phraseStart >= start && phraseStart + phraseLength <= end) {
-      const phraseOffset = prefix.length + (phraseStart - start);
-      highlights.push({
-        start: phraseOffset,
-        end: phraseOffset + phraseLength,
-      });
-    }
-
-    if (!requireExactPhrase) {
-      for (const word of words) {
-        const regex = new RegExp(`(?<!\\p{L})${escapeRegex(word)}(?!\\p{L})`, 'gu');
-        let match = regex.exec(snippetLower);
-        while (match) {
-          highlights.push({ start: match.index, end: match.index + word.length });
-          match = regex.exec(snippetLower);
-        }
-      }
-    }
-
-    highlights.sort((left, right) => left.start - right.start);
-    const merged: SearchSnippetHighlight[] = [];
-    for (const highlight of highlights) {
-      const previous = merged[merged.length - 1];
-      if (previous && highlight.start <= previous.end) {
-        previous.end = Math.max(previous.end, highlight.end);
-      } else {
-        merged.push({ ...highlight });
-      }
-    }
-
-    return { snippet, highlights: merged };
-  };
-
-  return { matchesQuery, buildSnippet };
-}
-
 function extractClaudeText(content: unknown): string {
   if (typeof content === 'string') {
     return content;
@@ -349,9 +228,13 @@ function extractClaudeText(content: unknown): string {
     return '';
   }
 
+  // A prompt sent with attachments or hook output is an array in which
+  // system reminders can come first; dropping only those parts keeps the
+  // prompt itself searchable.
   return content
     .filter((part: AnyRecord) => part?.type === 'text' && typeof part?.text === 'string')
     .map((part: AnyRecord) => String(part.text))
+    .filter((text) => !isInternalContent(text))
     .join(' ');
 }
 
@@ -588,49 +471,80 @@ function buildProjectBuckets(searchableSessions: SearchableSessionRow[]): Projec
 }
 
 /**
- * Executes ripgrep with the file list explicitly provided from sessionsDb jsonl paths.
+ * Streams every transcript line that holds at least one prefilter string,
+ * grouped by file, from one ripgrep pass over the known transcript paths.
  *
- * This avoids recursive directory walks and uses a fixed known candidate list.
+ * One pass that prints only those lines replaces a files-with-matches pass
+ * per word followed by a full read of each matching file in Node: on WSL the
+ * transcripts sit on /mnt/<drive>, where every byte read is a 9p round trip
+ * and the old way read the same gigabyte several times.
  */
-async function runRipgrepFilesWithMatches(
-  pattern: string,
+async function streamMatchingTranscriptLines(
+  prefilterStrings: string[],
   filePaths: string[],
+  onFileLines: (filePath: string, lines: string[]) => void,
   signal?: AbortSignal,
-): Promise<Set<string>> {
-  if (!pattern || filePaths.length === 0 || signal?.aborted) {
-    return new Set();
+): Promise<void> {
+  if (prefilterStrings.length === 0 || filePaths.length === 0 || signal?.aborted) {
+    return;
   }
 
-  return new Promise((resolve, reject) => {
-    const args = [
-      '--files-with-matches',
-      '--no-messages',
-      '--ignore-case',
-      '--fixed-strings',
-      '--',
-      pattern,
-      ...filePaths,
-    ];
+  const args = [
+    '--no-messages',
+    '--ignore-case',
+    '--fixed-strings',
+    '--with-filename',
+    '--null',
+    '--no-line-number',
+    '--max-columns',
+    String(RIPGREP_MAX_LINE_LENGTH),
+    ...prefilterStrings.flatMap((prefilterString) => ['-e', prefilterString]),
+    '--',
+    ...filePaths,
+  ];
+
+  await new Promise<void>((resolve, reject) => {
     const rg = spawn(rgPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
 
-    const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
     let aborted = false;
+    let currentFilePath: string | null = null;
+    let currentFileLines: string[] = [];
+
+    const flushCurrentFile = () => {
+      if (currentFilePath !== null && currentFileLines.length > 0) {
+        onFileLines(currentFilePath, currentFileLines);
+      }
+      currentFilePath = null;
+      currentFileLines = [];
+    };
 
     const abortListener = () => {
       aborted = true;
       rg.kill();
     };
+    signal?.addEventListener('abort', abortListener, { once: true });
 
-    if (signal) {
-      signal.addEventListener('abort', abortListener, { once: true });
-    }
-
-    rg.stdout.on('data', (chunk: Buffer) => {
-      stdoutChunks.push(chunk);
+    // ripgrep prints all matches of one file together, so a change of path
+    // marks the end of the previous file.
+    const lineReader = readline.createInterface({ input: rg.stdout, crlfDelay: Infinity });
+    lineReader.on('line', (outputLine) => {
+      const separatorIndex = outputLine.indexOf('\0');
+      if (separatorIndex === -1) {
+        return;
+      }
+      const filePath = outputLine.slice(0, separatorIndex);
+      const transcriptLine = outputLine.slice(separatorIndex + 1);
+      if (filePath !== currentFilePath) {
+        flushCurrentFile();
+        currentFilePath = filePath;
+      }
+      if (!transcriptLine.startsWith(RIPGREP_OMITTED_LINE_PREFIX)) {
+        currentFileLines.push(transcriptLine);
+      }
     });
 
     rg.stderr.on('data', (chunk: Buffer) => {
@@ -638,342 +552,213 @@ async function runRipgrepFilesWithMatches(
     });
 
     rg.on('error', (error) => {
-      if (signal) {
-        signal.removeEventListener('abort', abortListener);
-      }
-
+      signal?.removeEventListener('abort', abortListener);
       if (aborted || signal?.aborted) {
-        resolve(new Set());
+        resolve();
         return;
       }
-
       reject(error);
     });
 
-    rg.on('close', (code) => {
-      if (signal) {
-        signal.removeEventListener('abort', abortListener);
-      }
-
+    // 'close' comes after stdout has ended, so every line has been read.
+    rg.on('close', (exitCode) => {
+      signal?.removeEventListener('abort', abortListener);
       if (aborted || signal?.aborted) {
-        resolve(new Set());
+        resolve();
         return;
       }
-
-      if (code !== 0 && code !== 1) {
+      flushCurrentFile();
+      if (exitCode !== 0 && exitCode !== 1) {
         const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
-        reject(new Error(`ripgrep failed with code ${String(code)}: ${stderr}`));
+        reject(new Error(`ripgrep failed with code ${String(exitCode)}: ${stderr}`));
         return;
       }
-
-      const stdout = Buffer.concat(stdoutChunks).toString('utf8');
-      const matchedPaths = new Set<string>();
-
-      for (const line of stdout.split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (!trimmed) {
-          continue;
-        }
-
-        matchedPaths.add(normalizeComparablePath(trimmed));
-      }
-
-      resolve(matchedPaths);
+      resolve();
     });
   });
 }
 
-async function findMatchedFileKeys(
+async function scanTranscriptsForQuery(
   searchablePathEntries: SearchablePathEntry[],
-  rawQuery: string,
-  words: string[],
+  query: ConversationSearchQuery,
+  onFileLines: (normalizedPath: string, lines: string[]) => void,
   signal?: AbortSignal,
-): Promise<Set<string>> {
-  if (searchablePathEntries.length === 0 || words.length === 0 || signal?.aborted) {
-    return new Set();
-  }
+): Promise<void> {
+  const fileChunks = chunkArray(
+    searchablePathEntries.map((entry) => entry.absolutePath),
+    RIPGREP_FILE_CHUNK_SIZE,
+  );
 
-  const normalizedQuery = rawQuery.trim().replace(/\s+/g, ' ');
-  const requireExactPhrase = words.length > 1 && normalizedQuery.length > 0;
-
-  if (requireExactPhrase) {
-    let matchedForPhrase = searchablePathEntries.slice();
-
-    // Keep ripgrep as an over-approximation for exact phrase mode by requiring
-    // each word to appear somewhere in the file, then defer strict phrase
-    // validation to the in-memory matcher.
-    for (const word of words) {
-      if (signal?.aborted) {
-        return new Set();
-      }
-
-      const matchedForWord = new Set<string>();
-      const fileChunks = chunkArray(
-        matchedForPhrase.map((entry) => entry.absolutePath),
-        RIPGREP_FILE_CHUNK_SIZE,
+  let nextChunkIndex = 0;
+  const workerCount = Math.min(RIPGREP_CHUNK_CONCURRENCY, fileChunks.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (nextChunkIndex < fileChunks.length && !signal?.aborted) {
+      const currentIndex = nextChunkIndex;
+      nextChunkIndex += 1;
+      await streamMatchingTranscriptLines(
+        query.prefilterStrings,
+        fileChunks[currentIndex],
+        (filePath, lines) => onFileLines(normalizeComparablePath(filePath), lines),
+        signal,
       );
-
-      let nextChunkIndex = 0;
-      const workerCount = Math.min(RIPGREP_CHUNK_CONCURRENCY, fileChunks.length);
-      const workers = Array.from({ length: workerCount }, async () => {
-        while (nextChunkIndex < fileChunks.length && !signal?.aborted) {
-          const currentIndex = nextChunkIndex;
-          nextChunkIndex += 1;
-          const chunkMatches = await runRipgrepFilesWithMatches(word, fileChunks[currentIndex], signal);
-          for (const matchedPath of chunkMatches) {
-            matchedForWord.add(matchedPath);
-          }
-        }
-      });
-
-      await Promise.all(workers);
-      if (signal?.aborted) {
-        return new Set();
-      }
-
-      matchedForPhrase = matchedForPhrase.filter((entry) => matchedForWord.has(entry.normalizedPath));
-      if (matchedForPhrase.length === 0) {
-        break;
-      }
     }
+  });
 
-    return new Set(matchedForPhrase.map((entry) => entry.normalizedPath));
-  }
-
-  let remainingEntries = searchablePathEntries.slice();
-
-  // Run one ripgrep pass per term and intersect by keeping only files that
-  // matched every query word.
-  for (const word of words) {
-    if (signal?.aborted) {
-      return new Set();
-    }
-
-    const matchedForWord = new Set<string>();
-    const fileChunks = chunkArray(
-      remainingEntries.map((entry) => entry.absolutePath),
-      RIPGREP_FILE_CHUNK_SIZE,
-    );
-
-    let nextChunkIndex = 0;
-    const workerCount = Math.min(RIPGREP_CHUNK_CONCURRENCY, fileChunks.length);
-
-    const workers = Array.from({ length: workerCount }, async () => {
-      while (nextChunkIndex < fileChunks.length && !signal?.aborted) {
-        const currentIndex = nextChunkIndex;
-        nextChunkIndex += 1;
-        const chunkMatches = await runRipgrepFilesWithMatches(word, fileChunks[currentIndex], signal);
-        for (const matchedPath of chunkMatches) {
-          matchedForWord.add(matchedPath);
-        }
-      }
-    });
-
-    await Promise.all(workers);
-    if (signal?.aborted) {
-      return new Set();
-    }
-
-    remainingEntries = remainingEntries.filter((entry) => matchedForWord.has(entry.normalizedPath));
-    if (remainingEntries.length === 0) {
-      break;
-    }
-  }
-
-  return new Set(remainingEntries.map((entry) => entry.normalizedPath));
+  await Promise.all(workers);
 }
 
-function addSessionMatch(
-  runtime: SearchRuntime,
-  matches: SessionConversationMatch[],
-  match: SessionConversationMatch,
+/** A file can only hold a match when every prefilter string occurs in it somewhere. */
+function linesContainEveryPrefilterString(query: ConversationSearchQuery, lines: string[]): boolean {
+  const remaining = new Set(query.prefilterStrings);
+  for (const line of lines) {
+    const lowercasedLine = line.toLowerCase();
+    for (const prefilterString of remaining) {
+      if (lowercasedLine.includes(prefilterString)) {
+        remaining.delete(prefilterString);
+      }
+    }
+    if (remaining.size === 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function keepBestSessionMatches(
+  matches: RankedSessionMatch[],
+  candidate: RankedSessionMatch,
 ): void {
-  if (runtime.totalMatches >= runtime.limit || matches.length >= MAX_MATCHES_PER_SESSION) {
-    return;
+  const weakestIndex = matches.length < MAX_MATCHES_PER_SESSION
+    ? -1
+    : matches.reduce((weakest, match, index) => (match.score < matches[weakest].score ? index : weakest), 0);
+  if (weakestIndex === -1) {
+    matches.push(candidate);
+  } else if (candidate.score > matches[weakestIndex].score) {
+    matches.splice(weakestIndex, 1);
+    matches.push(candidate);
   }
-
-  matches.push(match);
-  runtime.totalMatches += 1;
 }
 
-async function parseClaudeSessionMatches(
-  session: SearchableSessionRow,
-  runtime: SearchRuntime,
-): Promise<SessionConversationResult | null> {
-  const fileKey = normalizeComparablePath(session.jsonl_path);
-  if (!fileKey) {
-    return null;
+/**
+ * Turns the matching lines of one Claude transcript into per-session results.
+ * Only lines that hold a query term reach this function, so session summaries
+ * fall back to the matched messages when a session has no name.
+ */
+function collectClaudeSessionMatches(
+  lines: string[],
+  sessionsForFile: SearchableSessionRow[],
+  query: ConversationSearchQuery,
+): Map<string, SessionConversationResult> {
+  // Transcript lines are tagged with the provider session id (e.g. Claude's own
+  // conversation UUID), which is not necessarily the app-facing `session_id`.
+  // Match and attribute by the provider id, but map results back to the
+  // internal `session_id` the rest of the app uses to identify sessions.
+  const providerToInternalId = new Map<string, string>();
+  const customNameBySessionId = new Map<string, string | null>();
+  for (const candidate of sessionsForFile) {
+    const providerId = candidate.provider_session_id || candidate.session_id;
+    providerToInternalId.set(providerId, candidate.session_id);
+    customNameBySessionId.set(providerId, candidate.custom_name ?? null);
   }
 
-  if (!runtime.claudeFileResultsCache.has(fileKey)) {
-    const sessionsForFile = runtime.claudeSessionsByFileKey.get(fileKey) || [];
-    const matchedSessionsForFile = sessionsForFile.filter((candidate) =>
-      runtime.matchedSessionKeys.has(getSessionKey(candidate)),
-    );
+  type ClaudeSessionSearchState = {
+    matches: RankedSessionMatch[];
+    matchedTermIndexes: Set<number>;
+    fallbackUserText: string | null;
+    fallbackAssistantText: string | null;
+    resolvedSummary: string | null;
+  };
 
-    const targetSessions = matchedSessionsForFile.length > 0
-      ? matchedSessionsForFile
-      : [session];
-
-    // Transcript lines are tagged with the provider session id (e.g. Claude's own
-    // conversation UUID), which is not necessarily the app-facing `session_id`.
-    // Match and attribute by the provider id, but map results back to the
-    // internal `session_id` the rest of the app uses to identify sessions.
-    const providerToInternalId = new Map<string, string>();
-    const customNameBySessionId = new Map<string, string | null>();
-    for (const candidate of targetSessions) {
-      const providerId = candidate.provider_session_id || candidate.session_id;
-      providerToInternalId.set(providerId, candidate.session_id);
-      customNameBySessionId.set(providerId, candidate.custom_name ?? null);
+  const sessionStateById = new Map<string, ClaudeSessionSearchState>();
+  const getSessionState = (sessionId: string): ClaudeSessionSearchState => {
+    let state = sessionStateById.get(sessionId);
+    if (!state) {
+      const titleMatch = matchQueryTerms(query, customNameBySessionId.get(sessionId) ?? '');
+      state = {
+        matches: [],
+        matchedTermIndexes: new Set(titleMatch.matchedTermIndexes),
+        fallbackUserText: null,
+        fallbackAssistantText: null,
+        resolvedSummary: null,
+      };
+      sessionStateById.set(sessionId, state);
     }
-    const targetSessionIds = new Set(providerToInternalId.keys());
+    return state;
+  };
 
-    type ClaudeSessionSearchState = {
-      matches: SessionConversationMatch[];
-      pendingSummaries: Map<string, string>;
-      fallbackUserText: string | null;
-      fallbackAssistantText: string | null;
-      resolvedSummary: string | null;
-    };
-
-    const sessionStateById = new Map<string, ClaudeSessionSearchState>();
-    const getSessionState = (sessionId: string): ClaudeSessionSearchState => {
-      if (!sessionStateById.has(sessionId)) {
-        sessionStateById.set(sessionId, {
-          matches: [],
-          pendingSummaries: new Map<string, string>(),
-          fallbackUserText: null,
-          fallbackAssistantText: null,
-          resolvedSummary: null,
-        });
-      }
-      return sessionStateById.get(sessionId) as ClaudeSessionSearchState;
-    };
-
-    let currentSessionId: string | null = null;
-
+  for (const line of lines) {
+    let entry: AnyRecord;
     try {
-      const fileStream = fsSync.createReadStream(session.jsonl_path);
-      const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
-      for await (const line of rl) {
-        if (runtime.totalMatches >= runtime.limit || runtime.isAborted()) {
-          break;
-        }
-        if (!line.trim()) {
-          continue;
-        }
-
-        let entry: AnyRecord;
-        try {
-          entry = JSON.parse(line) as AnyRecord;
-        } catch {
-          continue;
-        }
-
-        if (entry.sessionId) {
-          currentSessionId = String(entry.sessionId);
-        }
-        const entrySessionId = entry.sessionId
-          ? String(entry.sessionId)
-          : currentSessionId;
-        if (!entrySessionId || !targetSessionIds.has(entrySessionId)) {
-          continue;
-        }
-
-        const state = getSessionState(entrySessionId);
-
-        if (entry.type === 'summary' && entry.summary) {
-          const summaryValue = String(entry.summary);
-          if (entry.sessionId) {
-            state.resolvedSummary = summaryValue;
-          } else if (entry.leafUuid) {
-            state.pendingSummaries.set(String(entry.leafUuid), summaryValue);
-          }
-        }
-
-        if (!state.resolvedSummary && entry.parentUuid) {
-          const pendingSummary = state.pendingSummaries.get(String(entry.parentUuid));
-          if (pendingSummary) {
-            state.resolvedSummary = pendingSummary;
-          }
-        }
-
-        const searchableMessage = extractClaudeSearchableMessage(entry);
-        if (!searchableMessage) {
-          continue;
-        }
-
-        const { text, role } = searchableMessage;
-
-        /**
-         * Claude compact summaries are the most faithful session-summary source
-         * after a `/compact` because they describe the post-compaction state that
-         * the resumed session actually continues from. Prefer them over generic
-         * fallback user text when present.
-         */
-        if (entry.isCompactSummary === true) {
-          state.resolvedSummary = text;
-        }
-
-        if (role === 'user') {
-          state.fallbackUserText = text;
-        } else {
-          state.fallbackAssistantText = text;
-        }
-
-        if (!runtime.matchesQuery(text)) {
-          continue;
-        }
-
-        const { snippet, highlights } = runtime.buildSnippet(text);
-        addSessionMatch(runtime, state.matches, {
-          role,
-          snippet,
-          highlights,
-          timestamp: entry.timestamp ? String(entry.timestamp) : null,
-          provider: 'claude',
-          messageUuid: entry.uuid ? String(entry.uuid) : null,
-        });
-      }
+      entry = JSON.parse(line) as AnyRecord;
     } catch {
-      runtime.claudeFileResultsCache.set(fileKey, new Map());
-      return null;
+      continue;
     }
 
-    const fileResults = new Map<string, SessionConversationResult>();
-    for (const [sessionId, state] of sessionStateById.entries()) {
-      if (state.matches.length === 0) {
-        continue;
-      }
-
-      const internalSessionId = providerToInternalId.get(sessionId) ?? sessionId;
-      fileResults.set(internalSessionId, {
-        sessionId: internalSessionId,
-        provider: 'claude',
-        sessionSummary: toSummaryText(
-          customNameBySessionId.get(sessionId) ?? null,
-          state.resolvedSummary || state.fallbackUserText || state.fallbackAssistantText,
-          'New Session',
-        ),
-        matches: state.matches,
-      });
+    const entrySessionId = entry.sessionId ? String(entry.sessionId) : null;
+    if (!entrySessionId || !providerToInternalId.has(entrySessionId)) {
+      continue;
     }
 
-    runtime.claudeFileResultsCache.set(fileKey, fileResults);
+    const searchableMessage = extractClaudeSearchableMessage(entry);
+    if (!searchableMessage) {
+      continue;
+    }
+
+    const { text, role } = searchableMessage;
+    const termMatch = matchQueryTerms(query, text);
+    if (termMatch.matchedTermIndexes.length === 0) {
+      continue;
+    }
+
+    const state = getSessionState(entrySessionId);
+    // A compact summary describes the state a resumed session continues from.
+    if (entry.isCompactSummary === true) {
+      state.resolvedSummary = text;
+    }
+    if (role === 'user') {
+      state.fallbackUserText ??= text;
+    } else {
+      state.fallbackAssistantText ??= text;
+    }
+    for (const termIndex of termMatch.matchedTermIndexes) {
+      state.matchedTermIndexes.add(termIndex);
+    }
+
+    const { snippet, highlights } = buildQuerySnippet(query, text, termMatch.firstMatchIndex);
+    keepBestSessionMatches(state.matches, {
+      score: termMatch.matchedTermIndexes.length,
+      role,
+      snippet,
+      highlights,
+      timestamp: entry.timestamp ? String(entry.timestamp) : null,
+      provider: 'claude',
+      messageUuid: entry.uuid ? String(entry.uuid) : null,
+    });
   }
 
-  return runtime.claudeFileResultsCache.get(fileKey)?.get(session.session_id) ?? null;
-}
+  const fileResults = new Map<string, SessionConversationResult>();
+  for (const [sessionId, state] of sessionStateById.entries()) {
+    // Every term has to occur in the session, though not in one message.
+    if (state.matches.length === 0 || state.matchedTermIndexes.size < query.terms.length) {
+      continue;
+    }
 
-async function parseSessionMatches(
-  session: SearchableSessionRow,
-  runtime: SearchRuntime,
-): Promise<SessionConversationResult | null> {
-  if (session.provider === 'claude') {
-    return parseClaudeSessionMatches(session, runtime);
+    const internalSessionId = providerToInternalId.get(sessionId) ?? sessionId;
+    fileResults.set(internalSessionId, {
+      sessionId: internalSessionId,
+      provider: 'claude',
+      sessionSummary: toSummaryText(
+        customNameBySessionId.get(sessionId) ?? null,
+        state.resolvedSummary || state.fallbackUserText || state.fallbackAssistantText,
+        'New Session',
+      ),
+      matches: state.matches
+        .sort((left, right) => right.score - left.score)
+        .map(({ score: _score, ...match }) => match),
+    });
   }
-  return null;
+
+  return fileResults;
 }
 
 /**
@@ -994,9 +779,9 @@ export async function searchConversations(
 }> {
   const safeQuery = typeof query === 'string' ? query.trim() : '';
   const safeLimit = Math.max(1, Math.min(Number.isFinite(limit) ? limit : 50, 200));
-  const words = safeQuery.toLowerCase().split(/\s+/).filter((word) => word.length > 0);
+  const parsedQuery = parseConversationSearchQuery(safeQuery);
 
-  if (words.length === 0) {
+  if (parsedQuery.terms.length === 0) {
     return { results: [], titleResults: [], totalMatches: 0, query: safeQuery };
   }
 
@@ -1006,7 +791,7 @@ export async function searchConversations(
   }
 
   const activeSessions = sessionsDb.getAllSessions();
-  const titleResults = findSessionTitleResults(activeSessions, safeQuery, safeLimit);
+  const titleResults = findSessionTitleResults(activeSessions, parsedQuery, safeLimit);
   onTitleResults?.(titleResults);
 
   const searchableSessions = normalizeSearchableSessions(activeSessions);
@@ -1035,52 +820,32 @@ export async function searchConversations(
     pathSessions.push(session);
   }
 
-  const matchedFileKeys = await findMatchedFileKeys(
+  const resultsByFileKey = new Map<string, Map<string, SessionConversationResult>>();
+  await scanTranscriptsForQuery(
     searchablePathEntries,
-    safeQuery,
-    words,
+    parsedQuery,
+    (fileKey, lines) => {
+      const sessionsForFile = (sessionsByPathKey.get(fileKey) ?? [])
+        .filter((session) => session.provider === 'claude');
+      if (sessionsForFile.length === 0 || !linesContainEveryPrefilterString(parsedQuery, lines)) {
+        return;
+      }
+      resultsByFileKey.set(fileKey, collectClaudeSessionMatches(lines, sessionsForFile, parsedQuery));
+    },
     signal ?? undefined,
   );
-  if (isAborted() || matchedFileKeys.size === 0) {
+  if (isAborted()) {
     return { results: [], titleResults, totalMatches: 0, query: safeQuery };
-  }
-
-  const matchedSessionKeys = new Set<string>();
-  for (const fileKey of matchedFileKeys) {
-    const sessions = sessionsByPathKey.get(fileKey);
-    if (!sessions) {
-      continue;
-    }
-
-    for (const session of sessions) {
-      matchedSessionKeys.add(getSessionKey(session));
-    }
   }
 
   const projectBuckets = buildProjectBuckets(searchableSessions);
   const totalProjects = projectBuckets.length;
   const results: ProjectConversationResult[] = [];
+  let totalMatches = 0;
   let scannedProjects = 0;
 
-  const runtime: SearchRuntime = {
-    ...createWordMatcher(safeQuery, words),
-    limit: safeLimit,
-    totalMatches: 0,
-    isAborted,
-    matchedSessionKeys,
-    claudeSessionsByFileKey: new Map<string, SearchableSessionRow[]>(),
-    claudeFileResultsCache: new Map<string, Map<string, SessionConversationResult>>(),
-  };
-
-  for (const [fileKey, sessions] of sessionsByPathKey.entries()) {
-    const claudeSessions = sessions.filter((session) => session.provider === 'claude');
-    if (claudeSessions.length > 0) {
-      runtime.claudeSessionsByFileKey.set(fileKey, claudeSessions);
-    }
-  }
-
   for (const bucket of projectBuckets) {
-    if (runtime.totalMatches >= runtime.limit || runtime.isAborted()) {
+    if (totalMatches >= safeLimit) {
       break;
     }
 
@@ -1092,17 +857,20 @@ export async function searchConversations(
     };
 
     for (const session of bucket.sessions) {
-      if (runtime.totalMatches >= runtime.limit || runtime.isAborted()) {
+      if (totalMatches >= safeLimit) {
         break;
       }
-      if (!matchedSessionKeys.has(getSessionKey(session))) {
+      const fileKey = normalizeComparablePath(session.jsonl_path);
+      const sessionResult = resultsByFileKey.get(fileKey)?.get(session.session_id);
+      if (!sessionResult) {
         continue;
       }
-
-      const sessionResult = await parseSessionMatches(session, runtime);
-      if (sessionResult) {
-        projectResult.sessions.push(sessionResult);
-      }
+      const remainingMatches = safeLimit - totalMatches;
+      const limitedResult = sessionResult.matches.length > remainingMatches
+        ? { ...sessionResult, matches: sessionResult.matches.slice(0, remainingMatches) }
+        : sessionResult;
+      projectResult.sessions.push(limitedResult);
+      totalMatches += limitedResult.matches.length;
     }
 
     scannedProjects += 1;
@@ -1110,14 +878,14 @@ export async function searchConversations(
       results.push(projectResult);
       onProjectResult?.({
         projectResult,
-        totalMatches: runtime.totalMatches,
+        totalMatches,
         scannedProjects,
         totalProjects,
       });
     } else if (onProjectResult && scannedProjects % 10 === 0) {
       onProjectResult({
         projectResult: null,
-        totalMatches: runtime.totalMatches,
+        totalMatches,
         scannedProjects,
         totalProjects,
       });
@@ -1127,7 +895,7 @@ export async function searchConversations(
   return {
     results,
     titleResults,
-    totalMatches: runtime.totalMatches,
+    totalMatches,
     query: safeQuery,
   };
 }

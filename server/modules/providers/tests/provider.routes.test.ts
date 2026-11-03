@@ -163,6 +163,45 @@ test('conversation search streams title matches before transcript results', asyn
   });
 });
 
+test('conversation search finds a session whose messages hold the words separately and inflected', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    const transcriptPath = path.join(path.dirname(workspacePath), 'claude-words.jsonl');
+    const transcriptRow = (uuid: string, role: 'user' | 'assistant', content: string) => JSON.stringify({
+      type: role,
+      sessionId: 'words-session',
+      uuid,
+      timestamp: '2026-08-12T09:00:00.000Z',
+      message: { role, content },
+    });
+    await writeFile(transcriptPath, [
+      transcriptRow('m1', 'user', 'Сделай плагин для этой вкладки'),
+      transcriptRow('m2', 'assistant', 'Готово: страницы показываются в Pages.'),
+      transcriptRow('m3', 'assistant', 'Unrelated reply'),
+    ].join('\n') + '\n');
+    sessionsDb.createSession('words-session', 'claude', workspacePath, 'Some session', undefined, undefined, transcriptPath);
+
+    const search = async (query: string) => {
+      const response = await fetch(`${baseUrl}/api/providers/search/sessions?q=${encodeURIComponent(query)}&limit=50`);
+      const resultLines = (await response.text())
+        .split('\n')
+        .filter((line) => line.startsWith('data: ') && line.includes('"projectResult"'));
+      return resultLines.flatMap((line) => {
+        const payload = JSON.parse(line.slice('data: '.length)) as {
+          projectResult: { sessions: Array<{ sessionId: string; matches: Array<{ snippet: string }> }> } | null;
+        };
+        return payload.projectResult?.sessions ?? [];
+      });
+    };
+
+    const found = await search('плагины страница pages');
+    assert.equal(found.length, 1);
+    assert.equal(found[0]?.sessionId, 'words-session');
+    assert.equal(found[0]?.matches.length, 2);
+
+    assert.equal((await search('плагин отсутствует')).length, 0);
+  });
+});
+
 test('reasoning effort is persisted and returned with the active session model', async () => {
   await withProviderServer(async (baseUrl, workspacePath) => {
     sessionsDb.createAppSession('effort-session', 'claude', workspacePath);
