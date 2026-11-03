@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 import { useTuiSessionState } from '@/modules/chat/hooks/useTuiSessionState';
+import { useReportViewedChat } from '@/modules/chat/hooks/useReportViewedChat';
 import OutsideTmuxNotice from '@/modules/chat/composer/OutsideTmuxNotice';
 import SessionAgentsPanel from '@/modules/chat/composer/SessionAgentsPanel';
 import SessionProcessesPanel from '@/modules/chat/composer/SessionProcessesPanel';
@@ -76,7 +77,7 @@ function ChatInterface({
   externalMessageUpdate,
   newSessionTrigger,
 }: ChatInterfaceProps) {
-  const { subscribe } = useWebSocket();
+  const { subscribe, isConnected } = useWebSocket();
   const { handleTuiEvent, getTuiState } = useTuiSessionState();
   const { findWindow, moveToTmux, clearConversation } = useAgentWindows();
   const navigate = useNavigate();
@@ -300,6 +301,7 @@ function ChatInterface({
   }, [isActive, requestLatestMessages, selectedProject, selectedSession, sendMessage]);
 
   const viewedSessionId = selectedSession?.id || currentSessionId || null;
+  useReportViewedChat({ sendMessage, viewedSessionId, isActive, isConnected });
   const viewedTui = getTuiState(viewedSessionId);
   const viewedAgent = findWindow(viewedSessionId);
   const viewedOutsideTmux = viewedAgent && (viewedAgent.location !== 'tmux' || viewedAgent.duplicateProcesses) ? viewedAgent : null;

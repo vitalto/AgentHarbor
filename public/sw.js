@@ -119,13 +119,14 @@ self.addEventListener('pushsubscriptionchange', event => {
 
 // The user is looking at that chat right now on this device: the push would only repeat what the page shows.
 // Chrome shows no fallback notification for a skipped push while a page of the origin is visible.
+// Visible is enough: a chat on screen in a window that lacks keyboard focus is still being read. The
+// server already holds back most of these pushes (pages report the chat they show); this catches the rest.
 async function isChatOnScreen(sessionId) {
   if (!sessionId) return false;
   const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
   return clientList.some(client =>
     client.visibilityState === 'visible'
-    && client.focused
-    && new URL(client.url).pathname === `/session/${sessionId}`
+    && new URL(client.url).pathname.endsWith(`/session/${sessionId}`)
   );
 }
 

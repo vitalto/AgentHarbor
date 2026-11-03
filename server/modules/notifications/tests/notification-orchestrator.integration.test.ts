@@ -18,6 +18,7 @@ import {
 import { categoryOfEventKind } from '@/shared/notification-categories.js';
 
 import { folderTrustNotificationEvent } from '../services/agent-activity-notifier.service.js';
+import { forgetChatViewer, isChatOnScreen, reportChatViewer } from '../services/chat-viewers.service.js';
 import {
   buildNotificationPayload,
   createNotificationEvent,
@@ -219,4 +220,44 @@ test('a page re-sending its subscription keeps the browser, its categories and i
     assert.equal(stored.keys_p256dh, 'key2');
     assert.equal(stored.categories.finished, false);
   });
+});
+
+test('no push about a chat that a page of the user has on screen, on any device', async (t) => {
+  await withIsolatedDatabase(async () => {
+    const userId = subscribedUser('reader', 'https://push.example.test/phone');
+    sessionsDb.createAppSession('read-chat', 'claude', '/workspace/read');
+    sessionsDb.createAppSession('other-chat', 'claude', '/workspace/other');
+    const sent: string[] = [];
+    t.mock.method(webPush, 'sendNotification', async (_subscription: unknown, payload: string) => {
+      sent.push(JSON.parse(payload).body);
+      return { statusCode: 201 };
+    });
+    const desktopPage = {};
+    reportChatViewer(desktopPage, { userId, sessionId: 'read-chat' });
+    t.after(() => forgetChatViewer(desktopPage));
+
+    const finished = (sessionId: string, summary: string) => createNotificationEvent({
+      provider: 'claude', sessionId, kind: 'stop', code: 'agent.finished', meta: { summary }, dedupeKey: `test:${summary}`,
+    });
+    assert.equal(await notifyUserIfEnabled({ userId, event: finished('read-chat', 'done where the user reads') }), 0);
+    assert.equal(await notifyUserIfEnabled({ userId, event: finished('other-chat', 'done elsewhere') }), 1);
+    assert.equal(await notifyUserIfEnabled({
+      userId,
+      event: createNotificationEvent({ provider: 'claude', sessionId: 'read-chat', kind: 'agent_message', code: 'agent.notification', meta: { message: 'ah notify text' }, dedupeKey: 'test:ah-notify' }),
+    }), 1, 'an ah notify message is not shown in the chat, so it still goes out');
+
+    forgetChatViewer(desktopPage);
+    assert.equal(await notifyUserIfEnabled({ userId, event: finished('read-chat', 'done after the page closed') }), 1);
+    assert.deepEqual(sent, ['done elsewhere', 'ah notify text', 'done after the page closed']);
+  });
+});
+
+test('a viewing report goes stale when the page stops repeating it', () => {
+  const page = {};
+  reportChatViewer(page, { userId: 3, sessionId: 'chat' }, 1_000);
+  assert.equal(isChatOnScreen(3, 'chat', 1_000 + 60_000), true);
+  assert.equal(isChatOnScreen(3, 'chat', 1_000 + 120_000), false, 'a page that vanished without closing its socket');
+  assert.equal(isChatOnScreen(4, 'chat', 1_000), false, 'another user');
+  reportChatViewer(page, { userId: 3, sessionId: null }, 2_000);
+  assert.equal(isChatOnScreen(3, 'chat', 2_000), false);
 });

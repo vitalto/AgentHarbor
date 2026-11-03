@@ -1,6 +1,7 @@
 import webPush from 'web-push';
 
 import { notificationPreferencesDb, pushSubscriptionsDb, sessionsDb } from '@/modules/database/index.js';
+import { isChatOnScreen } from '@/modules/notifications/services/chat-viewers.service.js';
 import { categoryOfEventKind } from '@/shared/notification-categories.js';
 
 const recentEventKeys = new Map();
@@ -247,6 +248,19 @@ const notificationChannels = [
   }
 ];
 
+/** Events whose content the chat itself shows as it happens: a finished turn, a question, a failure. */
+const CHAT_CONTENT_EVENT_KINDS = new Set(['stop', 'action_required', 'error']);
+
+/**
+ * While some page of the user shows the event's chat, the push would only repeat it (on that
+ * device or another). `ah notify` messages are not part of the chat and still go out.
+ */
+function repeatsWhatTheUserSees(userId, event) {
+  return CHAT_CONTENT_EVENT_KINDS.has(event.kind)
+    && Boolean(event.sessionId)
+    && isChatOnScreen(Number(userId), event.sessionId);
+}
+
 /**
  * Delivers an event to every enabled channel; each subscribed browser filters
  * by its own categories. Resolves to how many devices were addressed.
@@ -257,6 +271,9 @@ async function notifyUserIfEnabled({ userId, event }) {
   }
 
   const normalizedEvent = normalizeNotificationSession(event);
+  if (repeatsWhatTheUserSees(userId, normalizedEvent)) {
+    return 0;
+  }
   if (isDuplicate(normalizedEvent)) {
     return 0;
   }

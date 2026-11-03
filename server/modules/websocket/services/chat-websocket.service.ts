@@ -119,6 +119,11 @@ export type ChatWebSocketDependencies = {
   /** Central dispatcher for every provider SDK/CLI runtime. */
   runtime: ProviderRuntimeGateway;
   terminal?: TerminalGateway;
+  /** Which chat each page has on screen, so pushes about it are held back (see `chat.viewing`). */
+  viewers?: {
+    report(connection: object, viewer: { userId: number | null; sessionId: string | null }): void;
+    forget(connection: object): void;
+  };
 };
 
 /**
@@ -594,6 +599,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * - `chat.stop-task`           { sessionId, taskId }
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
  * - `chat.permission-response` { requestId, allow, updatedInput?, message?, rememberEntry? }
+ * - `chat.viewing`             { sessionId, visible } (repeated while visible; no reply)
  *
  * Outbound protocol (server to client): every frame is `kind`-based — either
  * a provider `NormalizedMessage` (with `seq`) or a gateway event
@@ -639,6 +645,12 @@ export function handleChatConnection(
         case 'chat.permission-response':
           handlePermissionResponse(data, dependencies);
           return;
+        case 'chat.viewing':
+          dependencies.viewers?.report(ws, {
+            userId: userId === null ? null : Number(userId),
+            sessionId: data.visible === true && typeof data.sessionId === 'string' && data.sessionId ? data.sessionId : null,
+          });
+          return;
         default:
           sendProtocolError(ws, 'UNKNOWN_MESSAGE_TYPE', `Unknown message type "${messageType}".`);
           return;
@@ -654,5 +666,6 @@ export function handleChatConnection(
     console.log('[INFO] Chat client disconnected');
     connectedClients.delete(ws);
     dependencies.terminal?.unwatchSocket(ws);
+    dependencies.viewers?.forget(ws);
   });
 }
