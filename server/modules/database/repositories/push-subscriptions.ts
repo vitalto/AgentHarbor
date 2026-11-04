@@ -26,28 +26,43 @@ const withCategories = ({ categories_json, ...row }: PushSubscriptionRow): PushS
 
 export const pushSubscriptionsDb = {
   /**
-   * Upserts a push subscription endpoint for a user, keeping its categories. True when the browser
-   * was not registered for this user before (a page re-sending its subscription on load is not new).
+   * Upserts a push subscription endpoint for a user, keeping its categories. A browser that sends
+   * its subscription is alive, so a "gone" mark from an earlier failed delivery is cleared.
    */
   createPushSubscription(
     userId: number,
     endpoint: string,
     keysP256dh: string,
     keysAuth: string
-  ): boolean {
+  ): void {
     const db = getConnection();
-    const existing = db
-      .prepare('SELECT user_id FROM push_subscriptions WHERE endpoint = ?')
-      .get(endpoint) as { user_id: number } | undefined;
     db.prepare(
       `INSERT INTO push_subscriptions (user_id, endpoint, keys_p256dh, keys_auth)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(endpoint) DO UPDATE SET
          user_id = excluded.user_id,
          keys_p256dh = excluded.keys_p256dh,
-         keys_auth = excluded.keys_auth`
+         keys_auth = excluded.keys_auth,
+         gone_since = NULL`
     ).run(userId, endpoint, keysP256dh, keysAuth);
-    return existing?.user_id !== userId;
+  },
+
+  /**
+   * Notes that the push service called this subscription gone (404/410) and answers since when
+   * (epoch ms): the first such answer in a row, kept until a delivery succeeds again.
+   */
+  markGone(endpoint: string, now: number): number | null {
+    const db = getConnection();
+    db.prepare('UPDATE push_subscriptions SET gone_since = COALESCE(gone_since, ?) WHERE endpoint = ?').run(now, endpoint);
+    const row = db.prepare('SELECT gone_since FROM push_subscriptions WHERE endpoint = ?').get(endpoint) as
+      { gone_since: number | null } | undefined;
+    return row?.gone_since ?? null;
+  },
+
+  /** A delivery to this subscription went through. */
+  markDelivered(endpoint: string): void {
+    const db = getConnection();
+    db.prepare('UPDATE push_subscriptions SET gone_since = NULL WHERE endpoint = ? AND gone_since IS NOT NULL').run(endpoint);
   },
 
   /** Returns all subscriptions for a user. */
@@ -104,8 +119,8 @@ export const pushSubscriptionsDb = {
     endpoint: string,
     keysP256dh: string,
     keysAuth: string
-  ): boolean {
-    return pushSubscriptionsDb.createPushSubscription(
+  ): void {
+    pushSubscriptionsDb.createPushSubscription(
       userId,
       endpoint,
       keysP256dh,

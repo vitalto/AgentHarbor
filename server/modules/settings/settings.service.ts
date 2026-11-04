@@ -28,12 +28,9 @@ type SettingsDependencies = {
   notifications: {
     getPreferences(userId: number): NotificationPreferences | undefined;
     updatePreferences(userId: number, preferences: NotificationPreferences): unknown;
-    createEnabledEvent(): unknown;
-    notifyUser(userId: number, event: unknown): void | Promise<void>;
   };
   pushSubscriptions: {
-    /** True when the browser was not registered for the user before. */
-    save(userId: number, endpoint: string, p256dh: string, auth: string): boolean;
+    save(userId: number, endpoint: string, p256dh: string, auth: string): void;
     remove(endpoint: string): void;
     getCategories(userId: number, endpoint: string): NotificationCategories | null;
     setCategories(userId: number, endpoint: string, categories: NotificationCategories): boolean;
@@ -180,7 +177,7 @@ export function createSettingsService(dependencies: SettingsDependencies) {
         : {};
       const p256dh = requiredString(keys.p256dh, 'p256dh', 'PUSH_SUBSCRIPTION_REQUIRED');
       const auth = requiredString(keys.auth, 'auth', 'PUSH_SUBSCRIPTION_REQUIRED');
-      const isNewBrowser = dependencies.pushSubscriptions.save(userId, endpoint, p256dh, auth);
+      dependencies.pushSubscriptions.save(userId, endpoint, p256dh, auth);
 
       const currentPreferences = dependencies.notifications.getPreferences(userId);
       if (!currentPreferences?.channels?.webPush) {
@@ -189,11 +186,7 @@ export function createSettingsService(dependencies: SettingsDependencies) {
           channels: { ...currentPreferences?.channels, webPush: true },
         });
       }
-      // Pages re-send their subscription on every load; only a browser that was not registered gets the confirmation.
-      if (isNewBrowser) {
-        void dependencies.notifications.notifyUser(userId, dependencies.notifications.createEnabledEvent());
-      }
-      return { success: true, isNewBrowser };
+      return { success: true };
     },
     getPushCategories(userId: number, endpointInput: unknown) {
       const endpoint = requiredString(endpointInput, 'Endpoint', 'PUSH_ENDPOINT_REQUIRED');

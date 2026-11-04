@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     keys_p256dh TEXT NOT NULL,
     keys_auth TEXT NOT NULL,
     categories_json TEXT,
+    gone_since INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

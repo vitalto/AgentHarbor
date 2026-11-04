@@ -157,8 +157,7 @@ function buildNotificationPayload(event) {
     'agent.notification': normalizedEvent.meta?.message ? String(normalizedEvent.meta.message) : 'You have a new notification',
     'agent.finished': normalizedEvent.meta?.summary || 'Finished',
     'agent.waiting': normalizedEvent.meta?.question || 'Waiting for your answer',
-    'agent.trust_folder': `Claude in ${normalizedEvent.meta?.folderName || 'this folder'} waits for you to trust the folder`,
-    'push.enabled': 'Push notifications are now enabled!'
+    'agent.trust_folder': `Claude in ${normalizedEvent.meta?.folderName || 'this folder'} waits for you to trust the folder`
   };
   const sessionName = resolveSessionName(normalizedEvent);
   const message = CODE_MAP[normalizedEvent.code] || 'You have a new notification';
@@ -181,7 +180,15 @@ const PUSH_REQUEST_TIMEOUT_MS = 20_000;
 /** One retry after a failure that is not a definitive "gone": timeouts, resets, 5xx and 429 are usually brief. */
 const PUSH_RETRY_DELAY_MS = 5_000;
 
-/** Only these answers mean the browser dropped the subscription; anything else may pass and must keep it. */
+/**
+ * FCM answered 410 for a phone's subscription that took pushes again hours later (2026-11-04), and
+ * deleting it on that answer silenced every push until AgentHarbor was next opened on the phone.
+ * So a "gone" answer only marks the subscription; it is deleted once deliveries kept failing that
+ * way this long with the browser never re-sending it. A dead one costs one refused request per push.
+ */
+const GONE_SUBSCRIPTION_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Answers that say the browser dropped the subscription; anything else is a passing failure. */
 function isSubscriptionGone(statusCode) {
   return statusCode === 404 || statusCode === 410;
 }
@@ -223,15 +230,26 @@ function sendWebPushPayload(userId, payload, category) {
   return Promise.allSettled(
     subscriptions.map((subscription) => deliverPushWithRetry(subscription, serializedPayload))
   ).then((results) => {
+    const now = Date.now();
     results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        const statusCode = result.reason?.statusCode;
-        if (isSubscriptionGone(statusCode)) {
-          console.warn(`[AgentHarbor] push service answered ${statusCode}: dropping the subscription ${subscriptions[index].endpoint.slice(0, 60)}...`);
-          pushSubscriptionsDb.removeSubscription(subscriptions[index].endpoint);
+      const { endpoint } = subscriptions[index];
+      if (result.status === 'fulfilled') {
+        pushSubscriptionsDb.markDelivered(endpoint);
+        return;
+      }
+      const statusCode = result.reason?.statusCode;
+      if (isSubscriptionGone(statusCode)) {
+        const goneSince = pushSubscriptionsDb.markGone(endpoint, now) ?? now;
+        const shortEndpoint = `${endpoint.slice(0, 60)}...`;
+        const answer = String(result.reason?.body ?? '').trim();
+        if (now - goneSince >= GONE_SUBSCRIPTION_GRACE_MS) {
+          console.warn(`[AgentHarbor] push service answered ${statusCode} for 7 days: dropping the subscription ${shortEndpoint}`, answer);
+          pushSubscriptionsDb.removeSubscription(endpoint);
         } else {
-          console.error('[AgentHarbor] push delivery failed, subscription kept', statusCode ?? '', result.reason?.body ?? result.reason?.message ?? result.reason);
+          console.warn(`[AgentHarbor] push service answered ${statusCode}, subscription kept (gone since ${new Date(goneSince).toISOString()}) ${shortEndpoint}`, answer);
         }
+      } else {
+        console.error('[AgentHarbor] push delivery failed, subscription kept', statusCode ?? '', result.reason?.body ?? result.reason?.message ?? result.reason);
       }
     });
     return subscriptions.length;

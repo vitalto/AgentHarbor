@@ -429,6 +429,11 @@ const addPushSubscriptionCategoriesColumn = (db: Database): void => {
   addColumnToTableIfNotExists(db, 'push_subscriptions', columnNames, 'categories_json', 'TEXT');
 };
 
+const addPushSubscriptionGoneSinceColumn = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'push_subscriptions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'push_subscriptions', columnNames, 'gone_since', 'INTEGER');
+};
+
 const addForkedFromSessionIdColumn = (db: Database): void => {
   const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'forked_from_session_id', 'TEXT');
@@ -537,6 +542,7 @@ export const runMigrations = (db: Database) => {
     db.exec(PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL);
     db.exec('CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id)');
     addPushSubscriptionCategoriesColumn(db);
+    addPushSubscriptionGoneSinceColumn(db);
     db.exec(NOTIFICATION_CHANNEL_ENDPOINTS_TABLE_SCHEMA_SQL);
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_user_channel ON notification_channel_endpoints(user_id, channel)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_enabled ON notification_channel_endpoints(enabled)');

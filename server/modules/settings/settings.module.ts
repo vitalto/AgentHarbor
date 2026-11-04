@@ -4,11 +4,7 @@ import {
   notificationPreferencesDb,
   pushSubscriptionsDb,
 } from '@/modules/database/index.js';
-import {
-  createNotificationEvent,
-  getPublicKey,
-  notifyUserIfEnabled,
-} from '@/modules/notifications/index.js';
+import { getPublicKey } from '@/modules/notifications/index.js';
 import { describeAgentSettings, saveAgentSettings } from '@/modules/tmux/index.js';
 
 import { createSettingsRouter } from './settings.routes.js';
@@ -33,13 +29,6 @@ const settingsService = createSettingsService({
     getPreferences: (userId) => notificationPreferencesDb.getPreferences(userId),
     updatePreferences: (userId, preferences) =>
       notificationPreferencesDb.updatePreferences(userId, preferences),
-    createEnabledEvent: () => createNotificationEvent({
-      provider: 'system', kind: 'info', code: 'push.enabled',
-      meta: { message: 'Push notifications are now enabled!' }, severity: 'info',
-    }),
-    notifyUser: async (userId, event) => {
-      await notifyUserIfEnabled({ userId, event });
-    },
   },
   pushSubscriptions: {
     save: (userId, endpoint, p256dh, auth) =>

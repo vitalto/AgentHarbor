@@ -12,10 +12,8 @@ function dependencies(overrides: Partial<Dependencies> = {}): Dependencies {
     notifications: {
       getPreferences: () => undefined,
       updatePreferences: () => ({}),
-      createEnabledEvent: () => ({}),
-      notifyUser: () => undefined,
     },
-    pushSubscriptions: { save: () => true, remove: () => undefined, getCategories: () => null, setCategories: () => false },
+    pushSubscriptions: { save: () => undefined, remove: () => undefined, getCategories: () => null, setCategories: () => false },
     getVapidPublicKey: () => null,
     agentSettings: { describe: () => ({}), save: () => undefined },
     ...overrides,
@@ -32,11 +30,11 @@ test('listApiKeys redacts secret values through the service boundary', () => {
   assert.equal(service.listApiKeys(1).apiKeys[0]?.api_key, '1234567890...');
 });
 
-test('subscribeToPush persists the subscription and enables Web Push', () => {
+test('subscribeToPush persists the subscription and enables Web Push without a push of its own', () => {
   const operations: string[] = [];
   const service = createSettingsService(dependencies({
     pushSubscriptions: {
-      save: (_id, endpoint) => { operations.push(`save:${endpoint}`); return true; },
+      save: (_id, endpoint) => { operations.push(`save:${endpoint}`); },
       remove: () => undefined,
       getCategories: () => null,
       setCategories: () => false,
@@ -44,8 +42,6 @@ test('subscribeToPush persists the subscription and enables Web Push', () => {
     notifications: {
       getPreferences: () => ({ channels: { webPush: false } }),
       updatePreferences: () => { operations.push('preferences'); return {}; },
-      createEnabledEvent: () => ({ code: 'push.enabled' }),
-      notifyUser: () => { operations.push('notify'); },
     },
   }));
 
@@ -53,14 +49,14 @@ test('subscribeToPush persists the subscription and enables Web Push', () => {
     endpoint: 'https://push.example.test',
     keys: { p256dh: 'key', auth: 'auth' },
   });
-  assert.deepEqual(operations, ['save:https://push.example.test', 'preferences', 'notify']);
+  assert.deepEqual(operations, ['save:https://push.example.test', 'preferences']);
 });
 
 test('updatePushCategories stores a full category set for the browser and refuses an unknown one', () => {
   const stored: unknown[] = [];
   const service = createSettingsService(dependencies({
     pushSubscriptions: {
-      save: () => true,
+      save: () => undefined,
       remove: () => undefined,
       getCategories: () => null,
       setCategories: (_id, endpoint, categories) => {
@@ -100,28 +96,11 @@ test('updateAgentSettings saves the update and answers with the settings as they
   assert.deepEqual(saved, { idleCloseMinutes: 15 });
 });
 
-test('a page re-registering a browser the server already has sends no "enabled" push', () => {
-  const operations: string[] = [];
-  const service = createSettingsService(dependencies({
-    pushSubscriptions: { save: () => false, remove: () => undefined, getCategories: () => null, setCategories: () => false },
-    notifications: {
-      getPreferences: () => ({ channels: { webPush: true } }),
-      updatePreferences: () => { operations.push('preferences'); return {}; },
-      createEnabledEvent: () => ({ code: 'push.enabled' }),
-      notifyUser: () => { operations.push('notify'); },
-    },
-  }));
-
-  const result = service.subscribeToPush(1, { endpoint: 'https://push.example.test', keys: { p256dh: 'key', auth: 'auth' } });
-  assert.equal(result.isNewBrowser, false);
-  assert.deepEqual(operations, []);
-});
-
 test('turning push off in one browser leaves Web Push on for the other browsers', () => {
   const operations: string[] = [];
   const service = createSettingsService(dependencies({
     pushSubscriptions: {
-      save: () => true,
+      save: () => undefined,
       remove: (endpoint) => { operations.push(`remove:${endpoint}`); },
       getCategories: () => null,
       setCategories: () => false,
@@ -129,8 +108,6 @@ test('turning push off in one browser leaves Web Push on for the other browsers'
     notifications: {
       getPreferences: () => ({ channels: { webPush: true } }),
       updatePreferences: () => { operations.push('preferences'); return {}; },
-      createEnabledEvent: () => ({}),
-      notifyUser: () => undefined,
     },
   }));
 
@@ -144,8 +121,6 @@ test('saving the other notification options never switches Web Push off', () => 
     notifications: {
       getPreferences: () => ({ channels: { webPush: true, sound: true } }),
       updatePreferences: (_id, preferences) => { saved.push(preferences); return preferences; },
-      createEnabledEvent: () => ({}),
-      notifyUser: () => undefined,
     },
   }));
 

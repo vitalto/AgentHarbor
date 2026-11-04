@@ -152,16 +152,59 @@ async function settleDelivery(t: test.TestContext, delivery: Promise<unknown>): 
 const pushError = (statusCode: number | undefined, message = 'push failed') => Object.assign(new Error(message), { statusCode, body: message });
 const agentMessage = (message: string) => createNotificationEvent({ provider: 'system', code: 'agent.notification', meta: { message }, dedupeKey: `test:${message}` });
 
-test('a browser the push service calls gone (410 or 404) is dropped', async (t) => {
+test('a browser the push service calls gone (410 or 404) is kept until it fails that way for 7 days', async (t) => {
   t.mock.method(console, 'warn', () => undefined);
+  const day = 24 * 60 * 60 * 1000;
+  let clock = Date.parse('2026-11-04T05:36:52Z');
+  t.mock.method(Date, 'now', () => clock);
   await withIsolatedDatabase(async () => {
     for (const [index, statusCode] of [410, 404].entries()) {
-      const userId = subscribedUser(`gone${index}`, `https://push.example.test/gone-${statusCode}`);
+      const endpoint = `https://push.example.test/gone-${statusCode}`;
+      const userId = subscribedUser(`gone${index}`, endpoint);
       t.mock.method(webPush, 'sendNotification', async () => { throw pushError(statusCode); });
+      const endpoints = () => pushSubscriptionsDb.getSubscriptions(userId).map((subscription) => subscription.endpoint);
 
-      await notifyUserIfEnabled({ userId, event: agentMessage(`gone ${statusCode}`) });
-      assert.deepEqual(pushSubscriptionsDb.getSubscriptions(userId), [], String(statusCode));
+      await notifyUserIfEnabled({ userId, event: agentMessage(`gone ${statusCode} first`) });
+      assert.deepEqual(endpoints(), [endpoint], `${statusCode}: kept after the first refusal`);
+      clock += 7 * day - 1;
+      await notifyUserIfEnabled({ userId, event: agentMessage(`gone ${statusCode} almost a week`) });
+      assert.deepEqual(endpoints(), [endpoint], `${statusCode}: kept just short of 7 days`);
+      clock += 1;
+      await notifyUserIfEnabled({ userId, event: agentMessage(`gone ${statusCode} a week`) });
+      assert.deepEqual(endpoints(), [], `${statusCode}: dropped after 7 days of refusals`);
     }
+  });
+});
+
+test('a delivery that goes through again, or the browser re-sending its subscription, clears the gone mark', async (t) => {
+  t.mock.method(console, 'warn', () => undefined);
+  const day = 24 * 60 * 60 * 1000;
+  let clock = Date.parse('2026-11-04T05:36:52Z');
+  t.mock.method(Date, 'now', () => clock);
+  await withIsolatedDatabase(async () => {
+    const endpoint = 'https://push.example.test/phone';
+    const userId = subscribedUser('phone', endpoint);
+    let refuse = true;
+    t.mock.method(webPush, 'sendNotification', async () => {
+      if (refuse) {
+        throw pushError(410);
+      }
+    });
+    const endpoints = () => pushSubscriptionsDb.getSubscriptions(userId).map((subscription) => subscription.endpoint);
+
+    await notifyUserIfEnabled({ userId, event: agentMessage('refused') });
+    refuse = false;
+    clock += 3 * day;
+    await notifyUserIfEnabled({ userId, event: agentMessage('delivered') });
+    refuse = true;
+    clock += 5 * day;
+    await notifyUserIfEnabled({ userId, event: agentMessage('refused again') });
+    assert.deepEqual(endpoints(), [endpoint], 'the success restarted the 7 days');
+
+    pushSubscriptionsDb.saveSubscription(userId, endpoint, 'p256dh', 'auth');
+    clock += 6 * day;
+    await notifyUserIfEnabled({ userId, event: agentMessage('refused after re-register') });
+    assert.deepEqual(endpoints(), [endpoint], 're-registering restarted the 7 days');
   });
 });
 
@@ -208,14 +251,15 @@ test('a delivery that goes through on the retry counts the browser as reached', 
   });
 });
 
-test('a page re-sending its subscription keeps the browser, its categories and its user, and is not new', async () => {
+test('a page re-sending its subscription keeps the browser, its categories and its user', async () => {
   await withIsolatedDatabase(() => {
     const userId = Number(userDb.createUser('carol', 'hash').id);
     const endpoint = 'https://push.example.test/reloaded';
-    assert.equal(pushSubscriptionsDb.saveSubscription(userId, endpoint, 'key', 'auth'), true);
+    pushSubscriptionsDb.saveSubscription(userId, endpoint, 'key', 'auth');
     pushSubscriptionsDb.setCategories(userId, endpoint, { finished: false, waiting: true, agentMessage: true, system: true });
 
-    assert.equal(pushSubscriptionsDb.saveSubscription(userId, endpoint, 'key2', 'auth2'), false);
+    pushSubscriptionsDb.saveSubscription(userId, endpoint, 'key2', 'auth2');
+    assert.equal(pushSubscriptionsDb.getSubscriptions(userId).length, 1);
     const [stored] = pushSubscriptionsDb.getSubscriptions(userId);
     assert.equal(stored.keys_p256dh, 'key2');
     assert.equal(stored.categories.finished, false);
