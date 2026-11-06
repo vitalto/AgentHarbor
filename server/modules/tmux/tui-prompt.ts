@@ -139,11 +139,29 @@ function findMenuEnd(lines: string[]): number {
   if (last < 0 || !NUMBERED_OPTION.test(lines[last])) {
     return -1;
   }
+  if (hasReviewTitleAboveOptions(lines, last)) {
+    return last + 1;
+  }
   let dialogTop = last - 1;
   while (dialogTop >= 0 && !DIALOG_BORDER.test(lines[dialogTop])) {
     dialogTop -= 1;
   }
   return dialogTop >= 0 && QUESTION_SET_TABS.test(lines[dialogTop + 1] ?? '') ? last + 1 : -1;
+}
+
+/** The question set's review step asks this right above its "Submit answers" / "Cancel" options. */
+const REVIEW_TITLE = /^\s*Ready to submit your answers\?\s*$/;
+
+/**
+ * A review step listing several long questions is taller than an 80x24 window:
+ * its top rule and tab bar scroll off, and only this title stays recognisable.
+ */
+function hasReviewTitleAboveOptions(lines: string[], lastOptionIndex: number): boolean {
+  let index = lastOptionIndex;
+  while (index >= 0 && (NUMBERED_OPTION.test(lines[index]) || !lines[index].trim())) {
+    index -= 1;
+  }
+  return index >= 0 && REVIEW_TITLE.test(lines[index]);
 }
 
 /** Joins a wrapped continuation onto text; a line that filled the screen was hard-wrapped mid-word. */
@@ -364,25 +382,26 @@ function readQuotedText(line: string): string | null {
   return QUOTED_LINE.exec(line)?.[1] ?? null;
 }
 
-function readBody(lines: string[], optionsTopIndex: number, screenWidth: number): string[] {
+function readBody(lines: string[], optionsTopIndex: number): string[] {
   let top = optionsTopIndex;
   while (top > 0 && !DIALOG_BORDER.test(lines[top - 1])) {
     top -= 1;
   }
   const body: string[] = [];
-  let quoteEndsLine: string | null = null;
+  let insideQuote = false;
   for (const line of lines.slice(top, optionsTopIndex)) {
     if (!line.trim() || ANY_RULE.test(line)) {
-      quoteEndsLine = null;
+      insideQuote = false;
       continue;
     }
-    const quoted = readQuotedText(line);
-    if (quoted !== null && quoteEndsLine !== null) {
-      body[body.length - 1] = appendWrapped(body[body.length - 1], quoteEndsLine, quoted, screenWidth);
+    const quoted = readQuotedText(line)?.trim() ?? null;
+    // A quote wraps at word boundaries, so even a line that fills the screen continues after a space.
+    if (quoted !== null && insideQuote) {
+      body[body.length - 1] = `${body[body.length - 1]} ${quoted}`;
     } else {
       body.push(quoted ?? line.trim());
     }
-    quoteEndsLine = quoted !== null ? line : null;
+    insideQuote = quoted !== null;
   }
   return body;
 }
@@ -406,14 +425,15 @@ export function parseTuiPrompt(screen: string[]): TuiPrompt | null {
     freeText: !option.confirmsSelection && (FREE_TEXT_PLACEHOLDER.test(option.label) || index === block.freeTextSlotIndex),
   }));
 
-  const dialogText = readBody(lines, block.topIndex, screenWidth);
+  const dialogText = readBody(lines, block.topIndex);
   const body = dialogText.filter((line) => !QUESTION_SET_TABS.test(line));
   const safeguardPause = body.some((line) => SAFEGUARD_TITLE.test(line));
   const question = safeguardPause
     ? 'Session paused'
     : [...body].reverse().find((line) => line.endsWith('?')) ?? body.join(' ');
+  const questionTabs = body.length < dialogText.length || body.some((line) => REVIEW_TITLE.test(line));
   return {
-    question, body, options, questionTabs: body.length < dialogText.length, safeguardPause, preview: previewSplit?.preview ?? [], unreadable: false,
+    question, body, options, questionTabs, safeguardPause, preview: previewSplit?.preview ?? [], unreadable: false,
   };
 }
 

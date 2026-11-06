@@ -1,0 +1,24 @@
+ │   them to handlers based on path patterns. It currently supports static
+ │   segments and simple wildcards, and its tests run in under a second. Should
+ │   the router keep its current matching order?
+   → A
+ │ ● In SampleProject the sample router logs every request it matches, including
+ │   the method, the path and the chosen handler name. This logging is useful
+ │   during development but adds noise in production output. Should the router
+ │   log matched requests by default?
+   → A
+ │ ● The sample router in SampleProject returns a plain 404 response when no
+ │   route matches the incoming path. Some callers would prefer a JSON body with
+ │   the path and a short reason, while others rely on the plain text. Should
+ │   the router change its 404 format?
+   → A
+ │ ● SampleProject loads the sample router's route table once at startup from a
+ │   small config file. Reloading it at runtime would let routes change without
+ │   a restart, but it adds file watching and locking to keep matching safe.
+ │   Should the router support live reloads?
+   → A
+
+Ready to submit your answers?
+
+> 1. Submit answers
+  2. Cancel

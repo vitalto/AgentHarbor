@@ -140,6 +140,23 @@ test('AskUserQuestion review step: a menu without the key-hint footer, recognise
   assert.equal(isInputReady(lines), false);
 });
 
+test('AskUserQuestion review step taller than the window: recognised by its title once the tabs scrolled off', () => {
+  const lines = screen('ask-question-review-scrolled');
+  const prompt = parseTuiPrompt(lines);
+  assert.ok(prompt);
+  assert.equal(prompt.question, 'Ready to submit your answers?');
+  assert.equal(prompt.questionTabs, true, '←/→ still switch tabs while the tab bar is off-screen');
+  assert.ok(prompt.body.includes(
+    '● In SampleProject the sample router logs every request it matches, including the method, the path and the chosen handler name. This logging is useful during development but adds noise in production output. Should the router log matched requests by default?',
+  ));
+  assert.deepEqual(prompt.options.map((option) => [option.label, option.selected, option.freeText]), [
+    ['Submit answers', true, false],
+    ['Cancel', false, false],
+  ]);
+  assert.deepEqual(keysForOption(prompt, 1), ['Down', 'Enter']);
+  assert.equal(isInputReady(lines), false);
+});
+
 test('safeguard "Session paused" dialog: parsed despite no footer and a trailing status line', () => {
   const lines = screen('session-paused');
   const prompt = parseTuiPrompt(lines);
