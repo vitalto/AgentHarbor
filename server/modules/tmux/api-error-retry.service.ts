@@ -22,12 +22,14 @@ export const API_ERROR_RETRY_MARKER = '[AgentHarbor] API error retry';
 
 /**
  * Claude's own labels for a request that died on the way: the network or the
- * API server failed, not the request itself. Everything else (rate and usage
+ * API server failed, not the request itself. `network_edge_blocked` (HTTP 403
+ * "the network this request came from isn't allowed") comes with a brief
+ * internet outage here, when traffic leaves through the wrong route for a moment. Everything else (rate and usage
  * limits, which Claude resumes itself; auth; safeguards; local out of memory)
  * would fail the same way again.
  */
 const TRANSIENT_ERRORS = new Set(['server_error']);
-const TRANSIENT_API_ERRORS = new Set(['connection_failed', 'stream_idle_timeout', 'computer_slept']);
+const TRANSIENT_API_ERRORS = new Set(['connection_failed', 'stream_idle_timeout', 'computer_slept', 'network_edge_blocked']);
 
 export type ApiErrorRetrySettings = { attempts: number; delayMinutes: number };
 

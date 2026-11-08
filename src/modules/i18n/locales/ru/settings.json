@@ -444,7 +444,7 @@
       },
       "apiErrorRetryAttempts": {
         "label": "Продолжать после ошибки сети",
-        "description": "Если ход оборвался на ошибке сети или сервера API (\"Connection lost mid-response\", \"Can't reach the API server\"), агенту уходит короткое сообщение продолжать, не больше этого числа раз подряд. Оно отправляется, только когда Windows видит интернет и имя api.anthropic.com находится в DNS, других запросов к Anthropic нет. Лимиты использования не трогаются, их Claude продолжает сам. 0 выключает. По умолчанию {{defaultValue}}.",
+        "description": "Если ход оборвался на ошибке сети или сервера API (\"Connection lost mid-response\", \"Can't reach the API server\", \"Request blocked before it reached Anthropic's API\"), агенту уходит короткое сообщение продолжать, не больше этого числа раз подряд. Оно отправляется, только когда Windows видит интернет и имя api.anthropic.com находится в DNS, других запросов к Anthropic нет. Лимиты использования не трогаются, их Claude продолжает сам. 0 выключает. По умолчанию {{defaultValue}}.",
         "unit": "раз"
       },
       "apiErrorRetryDelayMinutes": {

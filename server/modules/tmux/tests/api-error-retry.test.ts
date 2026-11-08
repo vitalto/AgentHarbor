@@ -64,6 +64,19 @@ test('an unreachable API server counts as transient too', () => {
   assert.equal(plan(transcript(humanPrompt('do it'), cannotReachServer())).kind, 'retry');
 });
 
+test('a request the network edge blocked (HTTP 403, wrong route during an outage) is retried', () => {
+  const edgeBlocked = {
+    type: 'assistant',
+    ...stamp(),
+    message: { role: 'assistant', content: [{ type: 'text', text: "API Error: Request blocked before it reached Anthropic's API (HTTP 403)" }] },
+    apiError: 'network_edge_blocked',
+    error: 'invalid_request',
+    apiErrorStatus: 403,
+    isApiErrorMessage: true,
+  };
+  assert.equal(plan(transcript(humanPrompt('do it'), edgeBlocked)).kind, 'retry');
+});
+
 test('limits, auth and other errors are left alone: Claude resumes usage limits itself', () => {
   assert.equal(plan(transcript(humanPrompt('do it'), sessionLimit())).kind, 'none');
   const outOfMemory = { ...connectionLost(), error: 'unknown', apiError: undefined, message: { role: 'assistant', content: [{ type: 'text', text: 'API Error: Out of memory' }] } };

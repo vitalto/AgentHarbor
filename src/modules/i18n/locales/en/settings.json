@@ -483,7 +483,7 @@
       },
       "apiErrorRetryAttempts": {
         "label": "Continue after a network error",
-        "description": "When a turn stops on a network or API server error (\"Connection lost mid-response\", \"Can't reach the API server\"), the agent gets a short note to continue, at most this many times in a row. It is sent only once Windows reports internet access and api.anthropic.com resolves; nothing else is sent to Anthropic. Usage limits are left to Claude's own automatic continue. 0 turns it off. Default {{defaultValue}}.",
+        "description": "When a turn stops on a network or API server error (\"Connection lost mid-response\", \"Can't reach the API server\", \"Request blocked before it reached Anthropic's API\"), the agent gets a short note to continue, at most this many times in a row. It is sent only once Windows reports internet access and api.anthropic.com resolves; nothing else is sent to Anthropic. Usage limits are left to Claude's own automatic continue. 0 turns it off. Default {{defaultValue}}.",
         "unit": "times"
       },
       "apiErrorRetryDelayMinutes": {
