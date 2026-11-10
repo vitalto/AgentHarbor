@@ -1,20 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-import { api } from '@/shared/api';
-import type { Project,FileTreeNode } from '@/shared/types';
+import { api, readApiJson } from '@/shared/api';
+import type { FileTreeDirectoryListing, FileTreeLocation, FileTreeNode, Project } from '@/shared/types';
 
 type UseFileTreeDataResult = {
   files: FileTreeNode[];
+  /** Where the tree is rooted; null until the server has described it. */
+  location: FileTreeLocation | null;
+  /** The root folder held more entries than one listing returns. */
+  rootTruncated: boolean;
   loading: boolean;
   error: string | null;
   refreshFiles: () => void;
+  /** Bumped by every refresh, so folders fetched on demand are read again too. */
+  refreshKey: number;
 };
 
 const DEFAULT_LOAD_ERROR = 'Unable to load the file tree for this project.';
 
-// The API reports refusals such as FILE_TREE_TOO_LARGE as { error: message }.
-// Surfacing that message tells the user why the tree is missing and what to do
-// about it, instead of leaving them with an unexplained empty tree.
+// The API reports refusals as { error: message }. Surfacing that message tells
+// the user why the tree is missing, instead of an unexplained empty tree.
 function readResponseErrorMessage(responseBody: string): string | null {
   try {
     const parsedBody = JSON.parse(responseBody) as unknown;
@@ -27,12 +32,41 @@ function readResponseErrorMessage(responseBody: string): string | null {
   }
 }
 
-export function useFileTreeData(selectedProject: Project | null): UseFileTreeDataResult {
+async function fetchProjectTree(projectId: string, signal: AbortSignal) {
+  const [treeResponse, location] = await Promise.all([
+    api.getFileTreeWithIgnored(projectId, { signal }),
+    // The location only labels the bar; a failure there must not hide the tree.
+    api.getFileTreeLocation(projectId, null, { signal })
+      .then((response) => readApiJson<FileTreeLocation>(response))
+      .catch(() => null),
+  ]);
+  if (!treeResponse.ok) {
+    throw new Error(readResponseErrorMessage(await treeResponse.text()) ?? DEFAULT_LOAD_ERROR);
+  }
+  return { files: (await treeResponse.json()) as FileTreeNode[], location, rootTruncated: false };
+}
+
+async function fetchBrowsedDirectory(projectId: string, directoryPath: string, signal: AbortSignal) {
+  const response = await api.getFileTreeDirectory(projectId, directoryPath, { signal });
+  if (!response.ok) {
+    throw new Error(readResponseErrorMessage(await response.text()) ?? DEFAULT_LOAD_ERROR);
+  }
+  const { entries, truncated, ...location } = (await response.json()) as FileTreeDirectoryListing;
+  return { files: entries, location, rootTruncated: truncated };
+}
+
+/**
+ * Loads the tree's root: the project (walked by the server, ignored entries
+ * flagged and left unwalked) or, with `browsedPath`, one folder anywhere on
+ * the machine whose subfolders are all fetched on demand.
+ */
+export function useFileTreeData(selectedProject: Project | null, browsedPath: string | null): UseFileTreeDataResult {
   const [files, setFiles] = useState<FileTreeNode[]>([]);
+  const [location, setLocation] = useState<FileTreeLocation | null>(null);
+  const [rootTruncated, setRootTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   const refreshFiles = useCallback(() => {
     setRefreshKey((prev) => prev + 1);
@@ -45,51 +79,39 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
 
     if (!projectId) {
       setFiles([]);
+      setLocation(null);
       setLoading(false);
       setError(null);
       return;
     }
 
-    // Abort previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
-
-    // Track mount state so aborted or late responses do not enqueue stale state updates.
+    const abortController = new AbortController();
     let isActive = true;
 
-    const fetchFiles = async () => {
-      if (isActive) {
-        setLoading(true);
-        setError(null);
-      }
+    const fetchRoot = async () => {
+      setLoading(true);
+      setError(null);
+      // The previous root's location must not describe the folder being opened.
+      setLocation(null);
       try {
-        const response = await api.getFiles(projectId, { signal: abortControllerRef.current!.signal });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('File fetch failed:', response.status, errorText);
-          if (isActive) {
-            setFiles([]);
-            setError(readResponseErrorMessage(errorText) ?? DEFAULT_LOAD_ERROR);
-          }
-          return;
-        }
-
-        const data = (await response.json()) as FileTreeNode[];
+        const result = browsedPath
+          ? await fetchBrowsedDirectory(projectId, browsedPath, abortController.signal)
+          : await fetchProjectTree(projectId, abortController.signal);
         if (isActive) {
-          setFiles(data);
+          setFiles(result.files);
+          setLocation(result.location);
+          setRootTruncated(result.rootTruncated);
         }
       } catch (error) {
         if ((error as { name?: string }).name === 'AbortError') {
           return;
         }
-
         console.error('Error fetching files:', error);
         if (isActive) {
           setFiles([]);
-          setError(DEFAULT_LOAD_ERROR);
+          setLocation(null);
+          setRootTruncated(false);
+          setError(error instanceof Error && error.message ? error.message : DEFAULT_LOAD_ERROR);
         }
       } finally {
         if (isActive) {
@@ -98,18 +120,21 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
       }
     };
 
-    void fetchFiles();
+    void fetchRoot();
 
     return () => {
       isActive = false;
-      abortControllerRef.current?.abort();
+      abortController.abort();
     };
-  }, [selectedProject?.projectId, refreshKey]);
+  }, [selectedProject?.projectId, browsedPath, refreshKey]);
 
   return {
     files,
+    location,
+    rootTruncated,
     loading,
     error,
     refreshFiles,
+    refreshKey,
   };
 }

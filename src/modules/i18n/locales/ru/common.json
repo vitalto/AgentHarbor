@@ -134,6 +134,14 @@
       "refresh": "Обновить",
       "menuLabel": "Контекстное меню файла",
       "loading": "Загрузка..."
+    },
+    "folderLoading": "Загрузка...",
+    "folderTruncated": "Показаны только первые {{count}} записей",
+    "location": {
+      "up": "Папка выше",
+      "placeholder": "Путь к папке",
+      "label": "Папка, показанная в дереве",
+      "backToProject": "Вернуться в папку проекта"
     }
   },
   "projectWizard": {

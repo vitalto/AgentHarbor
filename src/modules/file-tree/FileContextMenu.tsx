@@ -94,7 +94,7 @@ export default function FileContextMenu({
     action?.();
   }, [closeContextMenu]);
 
-  const menuActions = useMemo<ContextMenuAction[]>(() => {
+  const allMenuActions = useMemo<ContextMenuAction[]>(() => {
     if (item?.type === 'file') {
       return [
         {
@@ -204,6 +204,24 @@ export default function FileContextMenu({
       },
     ];
   }, [item, onCopyPath, onDelete, onDownload, onNewFile, onNewFolder, onRefresh, onRename, onUpload, t]);
+
+  // A tree shown read-only (a folder outside the project) passes no writing
+  // handlers, so their entries are left out instead of doing nothing.
+  const menuActions = useMemo(() => {
+    const handlerByActionKey: Record<string, unknown> = {
+      rename: onRename,
+      delete: onDelete,
+      newFile: onNewFile,
+      newFolder: onNewFolder,
+      upload: onUpload,
+      copyPath: onCopyPath,
+      download: onDownload,
+      refresh: onRefresh,
+    };
+    return allMenuActions
+      .filter((action) => handlerByActionKey[action.key])
+      .map((action, index) => (index === 0 && action.showDividerBefore ? { ...action, showDividerBefore: false } : action));
+  }, [allMenuActions, onCopyPath, onDelete, onDownload, onNewFile, onNewFolder, onRefresh, onRename, onUpload]);
 
   useEffect(() => {
     if (!isMenuOpen) {

@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import type { ChangeEvent } from 'react';
+import type { ChangeEvent, ReactNode } from 'react';
 import { ChevronDown, Eye, FileText, FolderPlus, List, Loader2, RefreshCw, Search, TableProperties, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -13,6 +13,8 @@ type FileTreeHeaderProps = {
   onViewModeChange: (mode: FileTreeViewMode) => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
+  /** Shown between the toolbar and the search box. */
+  locationBar?: ReactNode;
   // Toolbar actions
   onNewFile?: () => void;
   onNewFolder?: () => void;
@@ -32,6 +34,7 @@ export default function FileTreeHeader({
   onViewModeChange,
   searchQuery,
   onSearchQueryChange,
+  locationBar,
   onNewFile,
   onNewFolder,
   onUploadFiles,
@@ -190,6 +193,8 @@ export default function FileTreeHeader({
           </Button>
         </div>
       </div>
+
+      {locationBar}
 
       {/* Search Bar */}
       <div className="relative">

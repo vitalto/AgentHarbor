@@ -930,8 +930,33 @@ export type FileTreeNode = {
   size?: number;
   modified?: string;
   permissionsRwx?: string;
+  /** Matched by the project's ignore rules (or inside such a folder): rendered dimmed, its contents load on demand. */
+  ignored?: boolean;
+  /** The folder held more entries than one listing returns; `children` is the first part of it. */
+  childrenTruncated?: boolean;
+  /** Set by the tree on an open folder whose contents are being fetched. */
+  childrenLoading?: boolean;
+  /** Set by the tree on an open folder whose contents could not be fetched. */
+  childrenError?: string;
   children?: FileTreeNode[];
   [key: string]: unknown;
+};
+
+/** Where the file tree is rooted, as the server resolved and describes it for the location bar. */
+export type FileTreeLocation = {
+  /** The path the server reads, which tree node paths start with. */
+  path: string;
+  /** The same path as the user and Claude write it (`D:\...` with a Windows Claude). */
+  displayPath: string;
+  parentPath: string | null;
+  /** Inside the project root, where the tree may also create, rename, delete and upload. */
+  insideProject: boolean;
+};
+
+/** One folder listed by the server without its subfolders' contents. */
+export type FileTreeDirectoryListing = FileTreeLocation & {
+  entries: FileTreeNode[];
+  truncated: boolean;
 };
 
 /** The image the file tree asked to preview, carrying the path plus the DB `projectId` the image viewer needs to build its raw content URL. */

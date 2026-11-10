@@ -21,6 +21,8 @@ function createFakeServices(overrides: Partial<FileTreeServices> = {}): FileTree
     openFile: unexpectedOperation,
     saveTextFile: unexpectedOperation,
     listProjectFiles: unexpectedOperation,
+    describeDirectory: unexpectedOperation,
+    listDirectory: unexpectedOperation,
     createEntry: unexpectedOperation,
     renameEntry: unexpectedOperation,
     deleteEntry: unexpectedOperation,
@@ -73,7 +75,7 @@ test('project files route uses the File Tree API namespace and forwards the proj
     assert.deepEqual(await response.json(), []);
   });
 
-  assert.deepEqual(inputs, [['project-1', { respectGitignore: false }]]);
+  assert.deepEqual(inputs, [['project-1', { respectGitignore: false, includeIgnored: false }]]);
 });
 
 test('project files route requests gitignore filtering when explicitly enabled', async () => {
@@ -87,13 +89,42 @@ test('project files route requests gitignore filtering when explicitly enabled',
 
   await withFileTreeServer(services, async (baseUrl) => {
     const response = await fetch(
-      `${baseUrl}/api/file-tree/projects/project-1/files?respectGitignore=true`,
+      `${baseUrl}/api/file-tree/projects/project-1/files?respectGitignore=true&includeIgnored=true`,
     );
 
     assert.equal(response.status, 200);
   });
 
-  assert.deepEqual(inputs, [['project-1', { respectGitignore: true }]]);
+  assert.deepEqual(inputs, [['project-1', { respectGitignore: true, includeIgnored: true }]]);
+});
+
+test('directory and location routes forward the requested path, or null for the project root', async () => {
+  const listInputs: Parameters<FileTreeServices['listDirectory']>[] = [];
+  const describeInputs: Parameters<FileTreeServices['describeDirectory']>[] = [];
+  const location = { path: '/elsewhere', displayPath: 'D:\\elsewhere', parentPath: '/', insideProject: false };
+  const services = createFakeServices({
+    listDirectory: async (...input) => {
+      listInputs.push(input);
+      return { ...location, entries: [], truncated: false };
+    },
+    describeDirectory: async (...input) => {
+      describeInputs.push(input);
+      return location;
+    },
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const listResponse = await fetch(`${baseUrl}/api/file-tree/projects/project-1/directory?path=${encodeURIComponent('D:\\elsewhere')}`);
+    assert.equal(listResponse.status, 200);
+    assert.deepEqual(await listResponse.json(), { ...location, entries: [], truncated: false });
+
+    const locationResponse = await fetch(`${baseUrl}/api/file-tree/projects/project-1/location`);
+    assert.equal(locationResponse.status, 200);
+    assert.deepEqual(await locationResponse.json(), location);
+  });
+
+  assert.deepEqual(listInputs, [['project-1', 'D:\\elsewhere']]);
+  assert.deepEqual(describeInputs, [['project-1', null]]);
 });
 
 test('create route parses the transport payload before invoking the service', async () => {

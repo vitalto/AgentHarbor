@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import type { ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Check, X, Loader2, Folder, Upload } from 'lucide-react';
@@ -6,6 +6,7 @@ import { AlertTriangle, Check, X, Loader2, Folder, Upload } from 'lucide-react';
 import { cn } from '@/shared/utils';
 import { ICON_SIZE_CLASS, getFileIconData } from '@/modules/file-tree/utils/fileIcons';
 import { useExpandedDirectories } from '@/modules/file-tree/hooks/useExpandedDirectories';
+import { useDirectoryLoader } from '@/modules/file-tree/hooks/useDirectoryLoader';
 import { useFileTreeData } from '@/modules/file-tree/hooks/useFileTreeData';
 import { useFileTreeOperations } from '@/modules/file-tree/hooks/useFileTreeOperations';
 import { useFileTreeSearch } from '@/modules/file-tree/hooks/useFileTreeSearch';
@@ -13,12 +14,14 @@ import { useFileTreeViewMode } from '@/modules/file-tree/hooks/useFileTreeViewMo
 import { useFileTreeUpload } from '@/modules/file-tree/hooks/useFileTreeUpload';
 import type { DirectoryRevealRequest, FileTreeImageSelection, FileTreeNode,Project } from '@/shared/types';
 import { formatFileSize, formatRelativeTime, isImageFile } from '@/modules/file-tree/utils/fileTreeUtils';
+import { findUnloadedOpenDirectories, mergeLoadedDirectories } from '@/modules/file-tree/utils/loadedDirectories';
 import { directoryRevealPaths } from '@/modules/file-tree/utils/revealDirectory';
 import { ScrollArea, Input } from '@/shared/ui';
 import FileTreeBody from '@/modules/file-tree/FileTreeBody';
 import FileTreeDetailedColumns from '@/modules/file-tree/FileTreeDetailedColumns';
 import FileTreeHeader from '@/modules/file-tree/FileTreeHeader';
 import FileTreeLoadingState from '@/modules/file-tree/FileTreeLoadingState';
+import FileTreeLocationBar from '@/modules/file-tree/FileTreeLocationBar';
 import FileTreeUploadProgress from '@/modules/file-tree/FileTreeUploadProgress';
 import ImageViewer from '@/modules/file-tree/ImageViewer';
 
@@ -52,13 +55,66 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
     }
   }, [toast]);
 
-  const { files, loading, error, refreshFiles } = useFileTreeData(selectedProject);
+  // A folder other than the project root opened from the location bar. It
+  // belongs to one project and one chat reveal request: switching projects, or
+  // clicking a project folder in the chat, brings the tree back to the project.
+  const [browsedFolder, setBrowsedFolder] = useState<{
+    projectId: string;
+    path: string;
+    revealRequest: DirectoryRevealRequest | null;
+  } | null>(null);
+  const projectId = selectedProject?.projectId ?? null;
+  const browsedPath = browsedFolder
+    && browsedFolder.projectId === projectId
+    && browsedFolder.revealRequest === (revealDirectory ?? null)
+    ? browsedFolder.path
+    : null;
+
+  const {
+    files: rootFiles,
+    location,
+    rootTruncated,
+    loading,
+    error,
+    refreshFiles,
+    refreshKey,
+  } = useFileTreeData(selectedProject, browsedPath);
+  // A typed path can turn out to be the project root itself.
+  const showsProjectRoot = browsedPath === null || location?.path === selectedProject?.fullPath;
+  // Outside the project root the tree only reads: the server refuses writes there.
+  const canModify = showsProjectRoot;
+  const { directoryLoadState, loadDirectory } = useDirectoryLoader(
+    projectId,
+    `${projectId}|${browsedPath ?? ''}|${refreshKey}`,
+  );
+  const files = useMemo(
+    () => mergeLoadedDirectories(rootFiles, directoryLoadState),
+    [rootFiles, directoryLoadState],
+  );
   const { viewMode, changeViewMode } = useFileTreeViewMode();
   const { expandedDirs, toggleDirectory, expandDirectories, collapseAll } = useExpandedDirectories();
   const { searchQuery, setSearchQuery, filteredFiles } = useFileTreeSearch({
     files,
     expandDirectories,
   });
+
+  // An opened folder the server did not walk (ignored, too deep, past the
+  // tree's size budget, or anything outside the project) is read now.
+  const unloadedOpenDirectories = useMemo(
+    () => findUnloadedOpenDirectories(files, expandedDirs),
+    [files, expandedDirs],
+  );
+  useEffect(() => {
+    unloadedOpenDirectories.forEach(loadDirectory);
+  }, [unloadedOpenDirectories, loadDirectory]);
+
+  const navigateTo = useCallback((targetPath: string) => {
+    if (!projectId) return;
+    setBrowsedFolder(targetPath === selectedProject?.fullPath
+      ? null
+      : { projectId, path: targetPath, revealRequest: revealDirectory ?? null });
+  }, [projectId, selectedProject?.fullPath, revealDirectory]);
+  const returnToProject = useCallback(() => setBrowsedFolder(null), []);
 
   // The reveal request already served, so a later tree refresh does not fold
   // the folders open again over a collapse the user has since made.
@@ -177,10 +233,10 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
     <div
       ref={treeRef}
       className="relative flex h-full flex-col bg-background"
-      onDragEnter={upload.handleDragEnter}
-      onDragOver={upload.handleDragOver}
-      onDragLeave={upload.handleDragLeave}
-      onDrop={upload.handleDrop}
+      onDragEnter={canModify ? upload.handleDragEnter : undefined}
+      onDragOver={canModify ? upload.handleDragOver : undefined}
+      onDragLeave={canModify ? upload.handleDragLeave : undefined}
+      onDrop={canModify ? upload.handleDrop : undefined}
     >
       {/* Hidden input for folder-targeted uploads (context menu / hover button) */}
       <input
@@ -214,9 +270,18 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
         onViewModeChange={changeViewMode}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
-        onUploadFiles={upload.handleFileSelect}
-        onNewFile={() => operations.handleStartCreate('', 'file')}
-        onNewFolder={() => operations.handleStartCreate('', 'directory')}
+        locationBar={
+          <FileTreeLocationBar
+            displayPath={location?.displayPath ?? browsedPath ?? selectedProject?.fullPath ?? ''}
+            parentPath={location?.parentPath ?? null}
+            isAwayFromProject={!showsProjectRoot}
+            onNavigate={navigateTo}
+            onReturnToProject={returnToProject}
+          />
+        }
+        onUploadFiles={canModify ? upload.handleFileSelect : undefined}
+        onNewFile={canModify ? () => operations.handleStartCreate('', 'file') : undefined}
+        onNewFolder={canModify ? () => operations.handleStartCreate('', 'directory') : undefined}
         onRefresh={refreshFiles}
         onCollapseAll={collapseAll}
         loading={loading}
@@ -273,16 +338,16 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
           renderFileIcon={renderFileIcon}
           formatFileSize={formatFileSize}
           formatRelativeTime={formatRelativeTimeLabel}
-          onRename={operations.handleStartRename}
-          onDelete={operations.handleStartDelete}
-          onNewFile={(path) => operations.handleStartCreate(path, 'file')}
-          onNewFolder={(path) => operations.handleStartCreate(path, 'directory')}
+          onRename={canModify ? operations.handleStartRename : undefined}
+          onDelete={canModify ? operations.handleStartDelete : undefined}
+          onNewFile={canModify ? (path) => operations.handleStartCreate(path, 'file') : undefined}
+          onNewFolder={canModify ? (path) => operations.handleStartCreate(path, 'directory') : undefined}
           onCopyPath={operations.handleCopyPath}
           onDownload={operations.handleDownload}
-          onUpload={handleUploadToFolder}
+          onUpload={canModify ? handleUploadToFolder : undefined}
           onRefresh={refreshFiles}
-          dropTarget={upload.dropTarget}
-          onItemDragOver={upload.handleItemDragOver}
+          dropTarget={canModify ? upload.dropTarget : null}
+          onItemDragOver={canModify ? upload.handleItemDragOver : undefined}
           // Pass rename state and handlers for inline editing
           renamingItem={operations.renamingItem}
           renameValue={operations.renameValue}
@@ -292,6 +357,11 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
           renameInputRef={renameInputRef}
           operationLoading={operationLoading}
         />
+        {rootTruncated && !error && (
+          <p className="px-1 py-1 text-xs text-muted-foreground">
+            {t('fileTree.folderTruncated', 'Only the first {{count}} entries are shown', { count: rootFiles.length })}
+          </p>
+        )}
       </ScrollArea>
 
       {selectedImage && (

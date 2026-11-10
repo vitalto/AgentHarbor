@@ -1317,7 +1317,27 @@ export type FileTreeNode = {
   permissions: string;
   permissionsRwx: string;
   isSymlink?: boolean;
+  /** Matched by the project's ignore rules: shown dimmed and never walked into, its contents load on demand. */
+  ignored?: boolean;
+  /** The folder held more entries than one listing returns; `children` is the first part of it. */
+  childrenTruncated?: boolean;
   children?: FileTreeNode[];
+};
+
+/** Where a File Tree listing is, as the location bar shows it and navigates from it. */
+export type FileTreeLocation = {
+  path: string;
+  /** The path the way the user and Claude write it (`D:\...` with a Windows Claude). */
+  displayPath: string;
+  parentPath: string | null;
+  /** Inside the project root, where the tree may also create, rename, delete and upload. */
+  insideProject: boolean;
+};
+
+/** One folder, listed without descending into its subfolders. */
+export type FileTreeDirectoryListing = FileTreeLocation & {
+  entries: FileTreeNode[];
+  truncated: boolean;
 };
 
 /**
@@ -1463,10 +1483,18 @@ export type FileTreeServices = {
     path: string;
     message: string;
   }>;
+  /**
+   * The project tree, ten levels deep and capped in size. Ignored entries are
+   * left out, or with `includeIgnored` listed as `ignored` without their contents.
+   */
   listProjectFiles(
     projectId: string,
-    options?: { respectGitignore: boolean },
+    options?: { respectGitignore: boolean; includeIgnored?: boolean },
   ): Promise<FileTreeNode[]>;
+  /** Where `targetPath` (any absolute path, or relative to the project; the project root when null) is. */
+  describeDirectory(projectId: string, targetPath: string | null): Promise<FileTreeLocation>;
+  /** Lists one folder anywhere on the machine; reading is not limited to the project. */
+  listDirectory(projectId: string, targetPath: string | null): Promise<FileTreeDirectoryListing>;
   createEntry(input: {
     projectId: string;
     parentPath: string;

@@ -137,6 +137,14 @@
       "refresh": "Refresh",
       "menuLabel": "File context menu",
       "loading": "Loading..."
+    },
+    "folderLoading": "Loading...",
+    "folderTruncated": "Only the first {{count}} entries are shown",
+    "location": {
+      "up": "Parent folder",
+      "placeholder": "Folder path",
+      "label": "Folder shown in the tree",
+      "backToProject": "Back to the project folder"
     }
   },
   "projectWizard": {

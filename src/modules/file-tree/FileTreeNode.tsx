@@ -1,6 +1,6 @@
 import type { DragEvent, ReactNode, RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, Folder, FolderOpen, Upload } from 'lucide-react';
+import { ChevronRight, Folder, FolderOpen, Loader2, Upload } from 'lucide-react';
 
 import { cn } from '@/shared/utils';
 import type { FileTreeNode as FileTreeNodeType, FileTreeViewMode } from '@/shared/types';
@@ -104,6 +104,7 @@ export default function FileTreeNode({
   const isDirectory = item.type === 'directory';
   const isOpen = isDirectory && expandedDirs.has(item.path);
   const hasChildren = Boolean(isDirectory && item.children && item.children.length > 0);
+  const hasFolderStatus = Boolean(item.childrenLoading || item.childrenError || item.childrenTruncated);
   const isRenaming = renamingItem?.path === item.path;
   const dragTargetPath = isDirectory ? item.path : getParentDirectoryPath(item.path);
   const isDropTarget = isDirectory && dropTarget === item.path;
@@ -124,6 +125,7 @@ export default function FileTreeNode({
     (isDirectory && !isOpen) || !isDirectory ? 'border-l-2 border-transparent' : '',
     'relative',
     isDropTarget && 'bg-blue-500/10 ring-1 ring-inset ring-blue-500/40',
+    item.ignored && 'opacity-60',
   );
 
   // Render rename input if this item is being renamed
@@ -243,7 +245,7 @@ export default function FileTreeNode({
         rowContent
       )}
 
-      {isDirectory && isOpen && hasChildren && (
+      {isDirectory && isOpen && (hasChildren || hasFolderStatus) && (
         <div className="relative">
           <span
             className="absolute bottom-0 top-0 border-l border-border/40"
@@ -280,6 +282,28 @@ export default function FileTreeNode({
               operationLoading={operationLoading}
             />
           ))}
+          {hasFolderStatus && (
+            <div
+              className={cn(
+                'flex items-center gap-1.5 py-[3px] pr-2 text-xs',
+                item.childrenError ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground',
+              )}
+              style={{ paddingLeft: `${(level + 1) * 16 + 22}px` }}
+            >
+              {item.childrenLoading ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {t('fileTree.folderLoading', 'Loading...')}
+                </>
+              ) : item.childrenError ? (
+                item.childrenError
+              ) : (
+                t('fileTree.folderTruncated', 'Only the first {{count}} entries are shown', {
+                  count: item.children?.length ?? 0,
+                })
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

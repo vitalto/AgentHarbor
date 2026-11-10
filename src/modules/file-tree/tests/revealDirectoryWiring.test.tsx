@@ -23,10 +23,14 @@ const tree = [
   },
 ];
 
+const jsonResponse = (body: unknown) => ({ ok: true, json: async () => body });
+
 vi.mock('@/shared/api', () => ({
   api: {
-    getFiles: async () => ({ ok: true, json: async () => tree }),
+    getFileTreeWithIgnored: async () => jsonResponse(tree),
+    getFileTreeLocation: async () => jsonResponse({ path: ROOT, displayPath: ROOT, parentPath: '/home/odoo/workspace', insideProject: true }),
   },
+  readApiJson: async (response: { json: () => Promise<unknown> }) => response.json(),
 }));
 
 const { default: FileTree } = await import('@/modules/file-tree/FileTree');

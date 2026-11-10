@@ -303,6 +303,13 @@ export const api = {
     put(`/api/file-tree/projects/${projectId}/file`, { filePath, content }),
   getFiles: (projectId: string, options: ApiRequestOptions = {}) =>
     get(`/api/file-tree/projects/${projectId}/files${query({ respectGitignore: true })}`, options),
+  // The Files tab also lists ignored entries (flagged, without their contents) and reads folders on demand.
+  getFileTreeWithIgnored: (projectId: string, options: ApiRequestOptions = {}) =>
+    get(`/api/file-tree/projects/${projectId}/files${query({ respectGitignore: true, includeIgnored: true })}`, options),
+  getFileTreeDirectory: (projectId: string, directoryPath: string | null, options: ApiRequestOptions = {}) =>
+    get(`/api/file-tree/projects/${projectId}/directory${query({ path: directoryPath })}`, options),
+  getFileTreeLocation: (projectId: string, directoryPath: string | null, options: ApiRequestOptions = {}) =>
+    get(`/api/file-tree/projects/${projectId}/location${query({ path: directoryPath })}`, options),
 
   // File operations
   createFile: (
