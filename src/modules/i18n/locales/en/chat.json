@@ -339,7 +339,7 @@
       "helpSubtitle": "Search built-ins, syntax patterns, and command usage without leaving the chat.",
       "modelsEyebrow": "Model selection",
       "modelsTitle": "Choose a Model",
-      "modelsSubtitle": "Pick the model this provider should use.",
+      "modelsSubtitle": "Pick the model and reasoning effort for this chat.",
       "costEyebrow": "Session telemetry",
       "costTitle": "Token Usage",
       "costSubtitle": "Input, output, and total token counts for this session.",
