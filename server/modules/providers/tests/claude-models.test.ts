@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { extractClaudeEventModel } from '@/modules/providers/list/claude/claude-models.provider.js';
+import { extractClaudeEventEffort, extractClaudeEventModel } from '@/modules/providers/list/claude/claude-models.provider.js';
 
 const SESSION_ID = 'session-1';
 
@@ -92,4 +92,17 @@ test('a /model switch names the model without the "saved as your default" tail',
     extractClaudeEventModel({ sessionId: SESSION_ID, message: { content: text } }, SESSION_ID),
     'Fable 5.1',
   );
+});
+
+test('reads the effort an assistant row of this session ran at', () => {
+  assert.equal(
+    extractClaudeEventEffort({ type: 'assistant', sessionId: SESSION_ID, effort: 'high' }, SESSION_ID),
+    'high',
+  );
+});
+
+test('takes no effort from user rows, rows without one, or another session', () => {
+  assert.equal(extractClaudeEventEffort({ type: 'user', sessionId: SESSION_ID, effort: 'high' }, SESSION_ID), null);
+  assert.equal(extractClaudeEventEffort({ type: 'assistant', sessionId: SESSION_ID }, SESSION_ID), null);
+  assert.equal(extractClaudeEventEffort({ type: 'assistant', sessionId: 'other', effort: 'low' }, SESSION_ID), null);
 });

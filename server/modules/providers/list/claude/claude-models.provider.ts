@@ -178,6 +178,7 @@ type ClaudeInitEvent = {
   type?: string;
   subtype?: string;
   model?: string;
+  effort?: string;
   message?: {
     content?: unknown;
     model?: string;
@@ -203,6 +204,16 @@ export const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: strin
 
   const messageModel = event.message?.model?.trim();
   return messageModel && !isPlaceholderProviderModel(messageModel) ? messageModel : null;
+};
+
+/** Claude Code (2.1.325) stamps every assistant row with the effort the request ran at. Exported for tests. */
+export const extractClaudeEventEffort = (event: ClaudeInitEvent, sessionId: string): string | null => {
+  const eventSessionId = event.sessionId ?? event.session_id;
+  if (event.type !== 'assistant' || (eventSessionId && eventSessionId !== sessionId)) {
+    return null;
+  }
+  const effort = typeof event.effort === 'string' ? event.effort.trim() : '';
+  return effort || null;
 };
 
 const extractTaggedContent = (content: string, tagName: string): string | null => {
@@ -263,19 +274,19 @@ const readClaudeSessionModelFromJsonl = async (
     .map((line) => line.trim())
     .filter(Boolean);
 
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
+  let model: string | null = null;
+  let effort: string | null = null;
+  for (let index = lines.length - 1; index >= 0 && !(model && effort); index -= 1) {
     try {
       const event = JSON.parse(lines[index]) as ClaudeInitEvent;
-      const model = extractClaudeEventModel(event, sessionId);
-      if (model) {
-        return { model };
-      }
+      model ??= extractClaudeEventModel(event, sessionId);
+      effort ??= extractClaudeEventEffort(event, sessionId);
     } catch {
       // Skip malformed JSONL lines that can happen during concurrent writes.
     }
   }
 
-  return null;
+  return model ? { model, ...(effort ? { effort } : {}) } : null;
 };
 
 export class ClaudeProviderModels implements IProviderModels {

@@ -449,28 +449,32 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
 
   /**
    * The model that actually wrote the session's latest reply (or that the
-   * latest /model switched to), as the provider names it. Null when nothing
-   * has answered yet: "default" then only says Claude picks one itself.
+   * latest /model switched to), as the provider names it, and the effort that
+   * reply ran at. Both null when nothing has answered yet: "default" then only
+   * says Claude picks one itself.
    */
-  const readAnsweringModel = async (
+  const readLastReply = async (
     provider: LLMProvider,
     sessionId: string | null | undefined,
-  ): Promise<string | null> => {
+  ): Promise<{ model: string | null; effort: string | null }> => {
     const normalizedSessionId = typeof sessionId === 'string' ? sessionId.trim() : '';
     if (!normalizedSessionId) {
-      return null;
+      return { model: null, effort: null };
     }
     const [providerCatalog, providerModel] = await Promise.all([
       getProviderModels(provider),
       getCurrentActiveModel(provider, normalizedSessionId),
     ]);
     const model = providerModel.model?.trim();
-    return model && model !== providerCatalog.DEFAULT ? model : null;
+    if (!model || model === providerCatalog.DEFAULT) {
+      return { model: null, effort: null };
+    }
+    return { model, effort: providerModel.effort?.trim() || null };
   };
 
   return {
     getProviderModels,
-    readAnsweringModel,
+    readLastReply,
     createCustomModel,
     updateCustomModel,
     deleteCustomModel,

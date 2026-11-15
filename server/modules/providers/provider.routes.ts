@@ -700,6 +700,16 @@ router.get(
   }),
 );
 
+/** The model and effort the session's latest reply actually ran with, read from its transcript. */
+router.get(
+  '/:provider/sessions/:sessionId/last-reply',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const sessionId = parseSessionId(req.params.sessionId);
+    res.json(createApiSuccessResponse(await providerModelsService.readLastReply(provider, sessionId)));
+  }),
+);
+
 router.post(
   '/:provider/sessions/:sessionId/active-model',
   asyncHandler(async (req: Request, res: Response) => {

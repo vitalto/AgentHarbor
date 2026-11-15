@@ -48,6 +48,7 @@ type ChatComposerProps = {
   hasLiveWindow: boolean;
   /** Control for the window's permission mode, shown when the session has a live window. */
   permissionModeControl?: ReactNode;
+  modelControl?: ReactNode;
   activity: SessionActivity | null;
   isLoading: boolean;
   onAbortSession: () => void;
@@ -109,6 +110,7 @@ export default function ChatComposer({
   onTuiQuestionStep,
   hasLiveWindow,
   permissionModeControl,
+  modelControl,
   activity,
   isLoading,
   onAbortSession,
@@ -369,6 +371,8 @@ export default function ChatComposer({
             </PromptInputButton>
 
             <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
+
+            {modelControl}
 
             <PromptInputButton
               tooltip={{ content: t('input.showAllCommands') }}

@@ -63,7 +63,8 @@ const executeModelsCommand = async (args, context, modelsService) => {
   const currentProvider = readModelProvider(context?.provider);
   const catalog = await modelsService.getProviderModels(currentProvider);
   const currentModel = await resolveCommandModel(modelsService, currentProvider, context);
-  const answeringModel = await modelsService.readAnsweringModel(currentProvider, context?.sessionId);
+  const lastReply = await modelsService.readLastReply(currentProvider, context?.sessionId);
+  const answeringModel = lastReply.model;
   const availableModels = catalog.OPTIONS.map((option) => option.value);
   const availableOptions = catalog.OPTIONS.map((option) => ({
     value: option.value,
@@ -82,6 +83,7 @@ const executeModelsCommand = async (args, context, modelsService) => {
         providerLabel: MODEL_PROVIDER_LABELS[currentProvider],
         model: currentModel,
         answeringModel,
+        answeringEffort: lastReply.effort,
       },
       available: {
         [currentProvider]: availableModels,
@@ -368,7 +370,7 @@ Custom commands can be created in:
 
     const statusProvider = readModelProvider(context?.provider);
     const model = await resolveCommandModel(providerModelsService, statusProvider, context);
-    const answeringModel = await providerModelsService.readAnsweringModel(statusProvider, context?.sessionId);
+    const lastReply = await providerModelsService.readLastReply(statusProvider, context?.sessionId);
     const memoryUsage = process.memoryUsage();
 
     return {
@@ -380,7 +382,8 @@ Custom commands can be created in:
         uptime: uptimeFormatted,
         uptimeSeconds: Math.floor(uptime),
         model,
-        answeringModel,
+        answeringModel: lastReply.model,
+        answeringEffort: lastReply.effort,
         provider: statusProvider,
         nodeVersion: process.version,
         platform: process.platform,

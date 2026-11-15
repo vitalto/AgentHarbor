@@ -26,6 +26,7 @@ import type {
   ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,StatusCommandData
 } from '@/shared/types';
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
+import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
 
 type CommandResultModalProps = {
   payload: CommandModalPayload | null;
@@ -42,6 +43,15 @@ type CommandResultModalProps = {
   ) => Promise<{
     scope: 'default' | 'session';
     model: string;
+  }>;
+  activeProviderEffort: string;
+  onSelectProviderEffort: (
+    provider: LLMProvider,
+    effort: string,
+    sessionId?: string | null,
+  ) => Promise<{
+    scope: 'default' | 'session';
+    effort: string;
   }>;
 };
 
@@ -231,6 +241,8 @@ function ModelsContent({
   activeProviderModel,
   currentSessionId,
   onSelectProviderModel,
+  activeProviderEffort,
+  onSelectProviderEffort,
 }: {
   data: ModelCommandData;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
@@ -239,6 +251,8 @@ function ModelsContent({
   activeProviderModel: string;
   currentSessionId: string | null;
   onSelectProviderModel: CommandResultModalProps['onSelectProviderModel'];
+  activeProviderEffort: string;
+  onSelectProviderEffort: CommandResultModalProps['onSelectProviderEffort'];
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
@@ -278,6 +292,26 @@ function ModelsContent({
 
   const hasConcreteSessionId = typeof currentSessionId === 'string' && currentSessionId.trim().length > 0;
   const showSearch = availableOptions.length > 6;
+  const currentOption = availableOptions.find((option) => option.value === currentModel);
+  const effortLevels = currentOption?.effort?.values.map((level) => level.value) ?? [];
+  const [changingEffort, setChangingEffort] = useState<string | null>(null);
+  const lastReplyModel = data?.current?.answeringModel;
+  const lastReplyEffort = data?.current?.answeringEffort;
+
+  const handleSelectEffort = async (effort: string) => {
+    setChangingEffort(effort);
+    const effortName = effort === DEFAULT_EFFORT_VALUE ? "Claude's own setting" : effort;
+    try {
+      const result = await onSelectProviderEffort(currentProvider, effort, currentSessionId);
+      setSelectionNotice(result.scope === 'session'
+        ? `Effort switches to ${effortName} with your next message.`
+        : `Default effort set to ${effortName}.`);
+    } catch (error) {
+      setSelectionNotice(error instanceof Error ? error.message : 'Unable to change the reasoning effort.');
+    } finally {
+      setChangingEffort(null);
+    }
+  };
 
   const handleSelectModel = async (model: string) => {
     setChangingModel(model);
@@ -318,16 +352,19 @@ function ModelsContent({
             Active model · {providerLabel}
           </p>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className="break-all font-mono text-sm font-semibold text-foreground">{currentModel}</span>
+            <span className="break-all text-sm font-semibold text-foreground">{currentOption?.label || currentModel}</span>
             {pendingSessionModel && pendingSessionModel !== currentModel && (
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-500 dark:text-emerald-400">
                 → {pendingSessionModel} next
               </span>
             )}
           </p>
-          {data?.current?.answeringModel && (
+          {lastReplyModel && (
             <p className="mt-0.5 break-all text-[11px] text-muted-foreground">
-              Last reply by <span className="font-mono text-foreground">{data.current.answeringModel}</span>
+              Last reply by <span className="font-mono text-foreground">{lastReplyModel}</span>
+              {lastReplyEffort && (
+                <> at <span className="font-mono text-foreground">{lastReplyEffort}</span> effort</>
+              )}
             </p>
           )}
         </div>
@@ -342,6 +379,40 @@ function ModelsContent({
           Manage models
         </Button>
       </div>
+
+      {effortLevels.length > 0 && (
+        <div className="rounded-2xl border border-border/70 bg-muted/20 px-3.5 py-2.5" data-testid="effort-picker">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Reasoning effort
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {[DEFAULT_EFFORT_VALUE, ...effortLevels].map((level) => {
+              const isCurrent = level === activeProviderEffort;
+              return (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => void handleSelectEffort(level)}
+                  disabled={Boolean(changingEffort) || isCurrent}
+                  aria-pressed={isCurrent}
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors disabled:cursor-default ${
+                    isCurrent
+                      ? 'border-primary/45 bg-primary/10 font-semibold text-foreground'
+                      : 'border-border/70 bg-background text-muted-foreground hover:border-primary/30 hover:text-foreground'
+                  }`}
+                >
+                  {changingEffort === level && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {level === DEFAULT_EFFORT_VALUE ? 'Default' : level}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+            Default keeps Claude's own setting
+            {lastReplyEffort ? ` (the last reply ran at ${lastReplyEffort})` : ''}.
+          </p>
+        </div>
+      )}
 
       {showSearch && (
         <SearchField value={query} onChange={setQuery} placeholder={`Search ${providerLabel} models...`} />
@@ -381,7 +452,7 @@ function ModelsContent({
                       ) : null}
                     </span>
                   </span>
-                  {option.label !== option.value && (
+                  {option.isCustom && option.label !== option.value && (
                     <span className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{option.value}</span>
                   )}
                   {option.description && (
@@ -507,6 +578,7 @@ function StatusContent({ data }: { data: StatusCommandData }) {
     { label: 'Provider', value: getProviderLabel(data.provider, data.provider || 'Unknown'), icon: Server, tone: 'primary' as const },
     { label: 'Model', value: data.model || 'Unknown', icon: Cpu },
     ...(data.answeringModel ? [{ label: 'Last reply by', value: data.answeringModel, icon: Cpu }] : []),
+    ...(data.answeringEffort ? [{ label: 'Last reply effort', value: data.answeringEffort, icon: Gauge }] : []),
     { label: 'Node.js', value: data.nodeVersion || 'Unknown', icon: TerminalSquare },
     { label: 'Platform', value: data.platform || 'Unknown', icon: Activity },
     { label: 'Memory', value: typeof memoryRssMb === 'number' ? `${memoryRssMb} MB RSS` : 'Unknown', icon: Gauge },
@@ -550,6 +622,8 @@ function CommandResultModal({
   activeProviderModel,
   currentSessionId,
   onSelectProviderModel,
+  activeProviderEffort,
+  onSelectProviderEffort,
 }: CommandResultModalProps) {
   const { t } = useTranslation();
   const isOpen = Boolean(payload);
@@ -640,6 +714,8 @@ function CommandResultModal({
               activeProviderModel={activeProviderModel}
               currentSessionId={currentSessionId}
               onSelectProviderModel={onSelectProviderModel}
+              activeProviderEffort={activeProviderEffort}
+              onSelectProviderEffort={onSelectProviderEffort}
             />
           )}
           {payload?.kind === 'cost' && <CostContent data={payload.data as CostCommandData} />}

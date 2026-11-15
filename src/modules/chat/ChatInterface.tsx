@@ -14,6 +14,7 @@ import SessionAgentsPanel from '@/modules/chat/composer/SessionAgentsPanel';
 import SessionProcessesPanel from '@/modules/chat/composer/SessionProcessesPanel';
 import { readComposerActivity } from '@/modules/chat/utils/backgroundTasks';
 import PermissionModePicker from '@/modules/chat/composer/PermissionModePicker';
+import ComposerModelButton from '@/modules/chat/composer/ComposerModelButton';
 import type { QuestionStep, TuiKey } from '@/modules/chat/utils/tuiPrompt';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
@@ -127,6 +128,7 @@ function ChatInterface({
     providerModelsLoading,
     providerModelActions,
     selectProviderModel,
+    selectProviderEffort,
     resolvePermissionModeForProvider,
     supportsMessageEditing,
     supportsSessionForking,
@@ -237,6 +239,7 @@ function ChatInterface({
     commandModalPayload,
     closeCommandModal,
     showCostModal,
+    showModelsModal,
     beginEditMessage,
   } = useChatComposerState({
     sendWhileBusy: findWindow(selectedSession?.id || currentSessionId)?.location === 'tmux',
@@ -571,6 +574,17 @@ function ChatInterface({
           onAbortSession={handleAbortSession}
           tokenBudget={tokenBudget}
           onShowTokenUsage={showCostModal}
+          modelControl={(
+            <ComposerModelButton
+              provider={provider}
+              sessionId={currentSessionId || selectedSession?.id || null}
+              followsClaudeModel={currentProviderModel === (providerModelCatalog[provider]?.DEFAULT ?? 'default')}
+              selectedModelLabel={providerModelCatalog[provider]?.OPTIONS.find((option) => option.value === currentProviderModel)?.label ?? currentProviderModel}
+              selectedEffort={currentProviderEffort}
+              isLoading={isProcessing}
+              onClick={showModelsModal}
+            />
+          )}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
@@ -628,6 +642,8 @@ function ChatInterface({
         activeProviderModel={currentProviderModel}
         currentSessionId={currentSessionId || selectedSession?.id || null}
         onSelectProviderModel={selectProviderModel}
+        activeProviderEffort={currentProviderEffort}
+        onSelectProviderEffort={selectProviderEffort}
       />
     </PermissionContext.Provider>
   );

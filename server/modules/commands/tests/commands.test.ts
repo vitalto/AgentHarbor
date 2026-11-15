@@ -13,7 +13,11 @@ import { createCommandsRouter } from '../commands.routes.js';
  * session wins, otherwise the client's requested model, otherwise the catalog
  * default.
  */
-function createModelsService(sessionModels: Record<string, string> = {}, answeringModels: Record<string, string> = {}) {
+function createModelsService(
+  sessionModels: Record<string, string> = {},
+  answeringModels: Record<string, string> = {},
+  answeringEfforts: Record<string, string> = {},
+) {
   return {
     getProviderModels: async () => ({
       OPTIONS: [{ value: 'default', label: 'Default' }],
@@ -35,7 +39,10 @@ function createModelsService(sessionModels: Record<string, string> = {}, answeri
       };
     },
     resolveResumeModel: async () => undefined,
-    readAnsweringModel: async (_provider: string, sessionId?: string | null) => (sessionId && answeringModels[sessionId]) || null,
+    readLastReply: async (_provider: string, sessionId?: string | null) => ({
+      model: (sessionId && answeringModels[sessionId]) || null,
+      effort: (sessionId && answeringEfforts[sessionId]) || null,
+    }),
   };
 }
 
@@ -44,6 +51,7 @@ async function executeCommand(
   context: Record<string, unknown>,
   sessionModels: Record<string, string> = {},
   answeringModels: Record<string, string> = {},
+  answeringEfforts: Record<string, string> = {},
 ): Promise<Record<string, unknown>> {
   const router = createCommandsRouter({
     fileSystem: {
@@ -51,7 +59,7 @@ async function executeCommand(
     } as unknown as typeof import('node:fs/promises'),
     homeDirectory: () => '/home/test',
     appRoot: '/app',
-    models: createModelsService(sessionModels, answeringModels) as never,
+    models: createModelsService(sessionModels, answeringModels, answeringEfforts) as never,
     runtime: {
       uptime: () => 0,
       memoryUsage: () => ({ rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 }),
@@ -130,4 +138,16 @@ test('models and status name the model that wrote the last reply, so "default" i
 
   const fresh = await executeCommand('/models', { provider: 'claude', model: 'default' });
   assert.equal((fresh.data as { current: { answeringModel: string | null } }).current.answeringModel, null);
+});
+
+test('models and status name the effort the last reply ran at', async () => {
+  const context = { provider: 'claude', sessionId: 'session-1', model: 'default' };
+  const answeringModels = { 'session-1': 'claude-opus-5-5' };
+  const answeringEfforts = { 'session-1': 'high' };
+
+  const models = await executeCommand('/models', context, {}, answeringModels, answeringEfforts);
+  const status = await executeCommand('/status', context, {}, answeringModels, answeringEfforts);
+
+  assert.equal((models.data as { current: { answeringEffort: string | null } }).current.answeringEffort, 'high');
+  assert.equal((status.data as { answeringEffort: string | null }).answeringEffort, 'high');
 });

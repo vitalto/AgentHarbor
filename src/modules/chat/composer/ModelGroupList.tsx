@@ -140,7 +140,7 @@ export default function ModelGroupList({
                         <Badge className="h-4 shrink-0 rounded-full px-1.5 text-[8px]">Custom</Badge>
                       )}
                     </div>
-                    {model.label !== model.value && (
+                    {model.isCustom && model.label !== model.value && (
                       <div className="truncate font-mono text-[10px] text-muted-foreground">
                         {model.value}
                       </div>

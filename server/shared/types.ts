@@ -165,6 +165,8 @@ export type CustomProviderModelInput = {
  */
 export type ProviderCurrentActiveModel = {
   model: string;
+  /** Reasoning effort the session's latest reply ran at, when the transcript records it. */
+  effort?: string;
 };
 
 /**
