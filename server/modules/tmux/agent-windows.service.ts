@@ -27,7 +27,7 @@ import {
 } from '@/modules/tmux/folder-trust.js';
 import { getSessionMonitor } from '@/modules/tmux/session-monitor.service.js';
 import { tmuxService, TmuxError, type AgentPane } from '@/modules/tmux/tmux.service.js';
-import { readInputBox, type InputBox } from '@/modules/tmux/tui-prompt.js';
+import { readInputBox, withLiteralTrailingBackslash, type InputBox } from '@/modules/tmux/tui-prompt.js';
 
 const REGISTRATION_TIMEOUT_MS = 120_000;
 const INPUT_READY_TIMEOUT_MS = 60_000;
@@ -550,7 +550,7 @@ export async function typeIntoAgent(paneId: string, text: string, imagePaths: st
     boxText = await pasteIntoInputBox(paneId, imagePath);
   }
   if (text.trim()) {
-    boxText = await pasteIntoInputBox(paneId, imagePaths.length > 0 ? ` ${text}` : text);
+    boxText = await pasteIntoInputBox(paneId, withLiteralTrailingBackslash(imagePaths.length > 0 ? ` ${text}` : text));
   }
   for (let attempt = 0; attempt < SUBMIT_ATTEMPTS; attempt += 1) {
     await tmuxService.sendKeys(paneId, ['Enter']);

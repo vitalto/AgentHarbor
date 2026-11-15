@@ -4,7 +4,15 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { isInputReady, keysForOption, parseTuiPrompt, readInputBox, trustFolderOptionIndex, unreadablePrompt } from '@/modules/tmux/tui-prompt.js';
+import {
+  isInputReady,
+  keysForOption,
+  parseTuiPrompt,
+  readInputBox,
+  trustFolderOptionIndex,
+  unreadablePrompt,
+  withLiteralTrailingBackslash,
+} from '@/modules/tmux/tui-prompt.js';
 
 const fixturesDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const screen = (name: string) => readFileSync(path.join(fixturesDirectory, `${name}.txt`), 'utf8').split('\n');
@@ -294,4 +302,11 @@ test('question tabs: only a question set offers switching questions', () => {
   assert.equal(review?.questionTabs, true);
   assert.equal(review?.body[0], 'Review your answers');
   assert.deepEqual(review?.options.map((option) => option.checked), [null, null]);
+});
+
+test('only a trailing backslash gets a space after it', () => {
+  assert.equal(withLiteralTrailingBackslash('path C:\\dir\\'), 'path C:\\dir\\ ');
+  assert.equal(withLiteralTrailingBackslash('a\\b'), 'a\\b');
+  assert.equal(withLiteralTrailingBackslash('ends\\\n'), 'ends\\\n');
+  assert.equal(withLiteralTrailingBackslash(''), '');
 });

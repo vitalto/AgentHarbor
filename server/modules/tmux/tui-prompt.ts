@@ -498,6 +498,16 @@ export function isInputPromptLine(lines: string[], index: number): boolean {
   return index >= 1 && INPUT_PROMPT.test(lines[index]) && INPUT_BOX_TOP_RULE.test(lines[index - 1]);
 }
 
+/**
+ * Claude Code reads Enter right after a backslash as "insert a new line" (in the
+ * prompt box and in a free-text answer slot alike), so text pasted with a trailing
+ * `\` would stay unsent. A space after it keeps the backslash literal; Claude trims
+ * that space from a prompt.
+ */
+export function withLiteralTrailingBackslash(text: string): string {
+  return text.endsWith('\\') ? `${text} ` : text;
+}
+
 export type InputBox = {
   text: string;
   /** The TUI is still absorbing a paste: the box looks empty but the text is about to appear. */

@@ -17,6 +17,7 @@ import {
   type QuestionStep,
   type TuiPrompt,
   unreadablePrompt,
+  withLiteralTrailingBackslash,
 } from '@/modules/tmux/tui-prompt.js';
 
 /** A websocket (or anything with the same surface) watching a session. */
@@ -499,7 +500,7 @@ export function createSessionMonitor(deps: SessionMonitorDependencies) {
         // A paste appends to what the slot already holds, e.g. an answer given before going back.
         await deps.tmux.sendKeys(paneId, ['End', 'C-u']);
       }
-      await deps.tmux.pasteText(paneId, freeText);
+      await deps.tmux.pasteText(paneId, withLiteralTrailingBackslash(freeText));
       if (!(await waitForFreeTextToLand(paneId, freeText))) {
         return false;
       }

@@ -290,6 +290,20 @@ test('a free-text answer is typed into the "Type something." slot before Enter; 
   assert.deepEqual(state.pasted, ['typed so far']);
 });
 
+test('a free-text answer ending in a backslash gets a space, so Enter submits instead of starting a new line', async (t) => {
+  const { monitor, state, cleanup } = await harness();
+  t.after(cleanup);
+  state.activity = 'waiting';
+  state.screen = fixture('ask-question');
+  state.onPaste = (text) => {
+    state.pasted.push(text);
+    state.screen = fixture('ask-question-free-text-typed').map((line) => line.replace('typed so far', 'typed so far\\'));
+  };
+
+  assert.equal(await monitor.chooseOption('app1', 3, 'typed so far\\'), true);
+  assert.deepEqual(state.pasted, ['typed so far\\ ']);
+});
+
 test('a free-text answer whose paste never shows up is not submitted', async (t) => {
   const { monitor, state, cleanup } = await harness();
   t.after(cleanup);
