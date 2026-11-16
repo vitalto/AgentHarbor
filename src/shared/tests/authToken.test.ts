@@ -84,6 +84,36 @@ test('storeAuthToken: a non-token value is rejected and does not overwrite the s
   assert.equal(localStorage.getItem('auth-token'), 'existing');
 });
 
+test('storeAuthToken: an expired token is rejected and does not overwrite the session', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const current = makeToken({ iat: now, exp: now + 600 });
+  localStorage.setItem('auth-token', current);
+
+  assert.equal(storeAuthToken(makeToken({ iat: now - 7200, exp: now - 3600 })), false);
+  assert.equal(localStorage.getItem('auth-token'), current);
+});
+
+test('storeAuthToken: a token that ends the session sooner than the stored one is rejected', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const current = makeToken({ iat: now, exp: now + 600 });
+  localStorage.setItem('auth-token', current);
+
+  assert.equal(storeAuthToken(makeToken({ iat: now - 300, exp: now + 300 })), false);
+  assert.equal(localStorage.getItem('auth-token'), current);
+});
+
+test('storeAuthToken: a token that ends later than the stored one replaces it', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  localStorage.setItem('auth-token', makeToken({ iat: now - 300, exp: now + 300 }));
+  const extended = makeToken({ iat: now, exp: now + 600 });
+
+  assert.equal(storeAuthToken(extended), true);
+  assert.equal(localStorage.getItem('auth-token'), extended);
+});
+
 test('getStoredAuthToken: an expired token is dropped and the expiry is announced once', () => {
   localStorage.clear();
   const now = Math.floor(Date.now() / 1000);

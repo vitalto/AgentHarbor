@@ -87,8 +87,18 @@ export const getStoredAuthToken = (): string | null => {
   return token;
 };
 
+// A refreshed token can be stale: the browser's HTTP cache replays the
+// X-Refreshed-Token header of a days-old API response whenever it revalidates
+// that response with a 304. Storing it would cut the session short, or end it
+// at once when that token has already expired.
+const endsBeforeStoredToken = (token: string): boolean => {
+  const incoming = readTokenClaims(token);
+  const stored = readTokenClaims(localStorage.getItem('auth-token'));
+  return incoming !== null && stored !== null && incoming.expiresAt < stored.expiresAt;
+};
+
 export const storeAuthToken = (token: unknown): boolean => {
-  if (!isValidRefreshedToken(token)) {
+  if (!isValidRefreshedToken(token) || isAuthTokenExpired(token) || endsBeforeStoredToken(token)) {
     return false;
   }
 

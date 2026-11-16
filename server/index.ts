@@ -189,6 +189,16 @@ app.get('/health', (req, res) => {
     });
 });
 
+// API responses carry per-request headers such as X-Refreshed-Token. With an
+// ETag and no Cache-Control the browser cached them and, on every 304, handed
+// the page a days-old refreshed token, which signed the user out once it expired.
+// The etag setting covers res.send/res.json only; express.static keeps its own.
+app.set('etag', false);
+app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+});
+
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);
 

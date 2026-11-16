@@ -154,6 +154,47 @@ test('a refreshed token on the response replaces the stored one', async () => {
   assert.equal(announced, rotated);
 });
 
+test('a refreshed token replayed from the HTTP cache does not replace a newer stored one', async () => {
+  // Chrome revalidates a cached API response with If-None-Match and, on a 304,
+  // hands the page the headers stored days ago, X-Refreshed-Token included.
+  const current = liveToken();
+  localStorage.setItem('auth-token', current);
+  const now = Math.floor(Date.now() / 1000);
+  const replayedFromCache = makeToken({ iat: now - 3000, exp: now + 300 });
+  let expiries = 0;
+  const onExpired = () => {
+    expiries += 1;
+  };
+  window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  respondWith({ 'X-Refreshed-Token': replayedFromCache });
+
+  await (await loadFetch(false))('/api/plugins');
+
+  window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  assert.equal(localStorage.getItem('auth-token'), current);
+  assert.equal(expiries, 0);
+});
+
+test('an expired refreshed token replayed from the HTTP cache does not end the session', async () => {
+  const current = liveToken();
+  localStorage.setItem('auth-token', current);
+  let expiries = 0;
+  const onExpired = () => {
+    expiries += 1;
+  };
+  window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  respondWith({ 'X-Refreshed-Token': expiredToken() });
+
+  const authenticatedFetch = await loadFetch(false);
+  await authenticatedFetch('/api/plugins');
+  await authenticatedFetch('/api/auth/user');
+
+  window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  assert.equal(localStorage.getItem('auth-token'), current);
+  assert.equal(sentHeaders().Authorization, `Bearer ${current}`);
+  assert.equal(expiries, 0);
+});
+
 test('an auth error on the response ends the session', async () => {
   localStorage.setItem('auth-token', liveToken());
   let expiries = 0;
