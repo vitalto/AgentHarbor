@@ -26,6 +26,24 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
+const describeTokenLifetime = (token) => {
+  const claims = jwt.decode(token);
+  if (!claims || typeof claims !== 'object' || typeof claims.exp !== 'number') {
+    return 'token unparsable';
+  }
+  const isoSeconds = (unixSeconds) => new Date(unixSeconds * 1000).toISOString().slice(0, 19);
+  return `token iat ${typeof claims.iat === 'number' ? isoSeconds(claims.iat) : '?'} exp ${isoSeconds(claims.exp)}`;
+};
+
+// Every 401 here makes the web client drop its session and show the login form,
+// so each one is logged: the reason, the request and the token's lifetime (never the token).
+const logRejectedRequest = (req, reason, token) => {
+  const path = String(req.originalUrl || req.url || '').split('?')[0];
+  const tokenDescription = token ? describeTokenLifetime(token) : 'no token';
+  const userAgent = String(req.headers['user-agent'] || '').slice(0, 80);
+  console.warn(`[auth] 401 ${reason}: ${req.method} ${path} from ${req.ip} (${tokenDescription}) ua="${userAgent}"`);
+};
+
 // JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -37,6 +55,7 @@ const authenticateToken = async (req, res, next) => {
   }
 
   if (!token) {
+    logRejectedRequest(req, 'no token', null);
     res.setHeader('X-Auth-Error', 'invalid-token');
     return res.status(401).json({
       error: 'Access denied. No token provided.',
@@ -49,6 +68,7 @@ const authenticateToken = async (req, res, next) => {
     const keyOwner = apiKeysDb.validateApiKey(token);
     const user = keyOwner ? userDb.getUserById(keyOwner.id) : null;
     if (!user) {
+      logRejectedRequest(req, 'invalid API key', null);
       res.setHeader('X-Auth-Error', 'invalid-token');
       return res.status(401).json({ error: 'Invalid API key', code: 'AUTH_TOKEN_INVALID' });
     }
@@ -62,6 +82,7 @@ const authenticateToken = async (req, res, next) => {
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
+      logRejectedRequest(req, 'user not found', token);
       res.setHeader('X-Auth-Error', 'invalid-token');
       return res.status(401).json({
         error: 'Invalid token. User not found.',
@@ -83,6 +104,7 @@ const authenticateToken = async (req, res, next) => {
     next();
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
+      logRejectedRequest(req, 'token expired', token);
       res.setHeader('X-Auth-Error', 'session-expired');
       return res.status(401).json({
         error: 'Session expired. Please log in again.',
@@ -90,10 +112,7 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    console.warn(
-      'Token verification failed:',
-      error instanceof Error ? error.message : String(error),
-    );
+    logRejectedRequest(req, `token verification failed (${error instanceof Error ? error.message : String(error)})`, token);
     res.setHeader('X-Auth-Error', 'invalid-token');
     return res.status(401).json({
       error: 'Invalid token',
@@ -129,12 +148,11 @@ const authenticateWebSocket = (token) => {
     }
     return { userId: user.id, username: user.username };
   } catch (error) {
-    if (!(error instanceof jwt.TokenExpiredError)) {
-      console.warn(
-        'WebSocket token verification failed:',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
+    console.warn(
+      'WebSocket token verification failed:',
+      error instanceof Error ? error.message : String(error),
+      `(${describeTokenLifetime(token)})`,
+    );
     return null;
   }
 };
