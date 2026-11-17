@@ -127,7 +127,9 @@ chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackg
 const chatGateway: ChatWebSocketDependencies = {
     runtime: providerRuntimeService,
     terminal: {
-        watch: (sessionId, socket) => sessionMonitor.watch(sessionId, socket),
+        watch: (sessionId, socket) => {
+            if (sessionsDb.getSessionById(sessionId)?.provider === 'claude') sessionMonitor.watch(sessionId, socket);
+        },
         unwatchSocket: (socket) => sessionMonitor.unwatchSocket(socket),
         chooseOption: (sessionId, optionIndex, freeText) => sessionMonitor.chooseOption(sessionId, optionIndex, freeText),
         switchQuestion: (sessionId, step) => sessionMonitor.switchQuestion(sessionId, step),

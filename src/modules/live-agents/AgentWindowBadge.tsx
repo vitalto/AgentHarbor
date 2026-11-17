@@ -6,6 +6,7 @@ import type { AgentWindow } from '@/shared/hooks/useAgentWindows';
 import type { LLMProvider } from '@/shared/types';
 
 const ACTIVITY_STYLES: Record<AgentWindow['activity'], { className: string; label: string }> = {
+  unknown: { className: 'text-muted-foreground', label: 'activity unavailable' },
   idle: { className: 'text-green-600 dark:text-green-400', label: 'idle' },
   busy: { className: 'animate-pulse text-blue-600 dark:text-blue-400', label: 'working' },
   waiting: { className: 'text-amber-600 dark:text-amber-400', label: 'waiting for your answer' },
@@ -16,7 +17,7 @@ export function describeAgentLocation(agentWindow: AgentWindow): string {
     return `tmux window "${agentWindow.windowName}"`;
   }
   const where = agentWindow.location === 'windows' ? 'a Windows terminal' : 'another terminal';
-  return `${where} (pid ${agentWindow.pid}), watch only`;
+  return `${where}${agentWindow.pid ? ` (pid ${agentWindow.pid})` : ''}, watch only`;
 }
 
 export function describeAgentActivity(agentWindow: AgentWindow): string {

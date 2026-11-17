@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
+import { LLM_PROVIDERS } from '@/shared/constants';
 import type { LLMProvider, ProviderAuthStatusMap } from '@/shared/types';
 import AgentConnectionCard from '@/modules/onboarding/AgentConnectionCard';
 
@@ -7,16 +8,6 @@ type AgentConnectionsStepProps = {
   providerStatuses: ProviderAuthStatusMap;
   onOpenProviderLogin: (provider: LLMProvider) => void;
 };
-
-const providerCards = [
-  {
-    provider: 'claude' as const,
-    title: 'Claude Code',
-    connectedClassName: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',
-    iconContainerClassName: 'bg-blue-100 dark:bg-blue-900/30',
-    loginButtonClassName: 'bg-blue-600 hover:bg-blue-700',
-  },
-];
 
 /** Rendered by Onboarding as its second step, listing every CLI provider the user can log into. */
 export default function AgentConnectionsStep({
@@ -34,16 +25,12 @@ export default function AgentConnectionsStep({
       </div>
 
       <div className="-mr-1 max-h-[38vh] space-y-2 overflow-y-auto pr-1">
-        {providerCards.map((providerCard) => (
+        {LLM_PROVIDERS.map((provider) => (
           <AgentConnectionCard
-            key={providerCard.provider}
-            provider={providerCard.provider}
-            title={providerCard.title}
-            status={providerStatuses[providerCard.provider]}
-            connectedClassName={providerCard.connectedClassName}
-            iconContainerClassName={providerCard.iconContainerClassName}
-            loginButtonClassName={providerCard.loginButtonClassName}
-            onLogin={() => onOpenProviderLogin(providerCard.provider)}
+            key={provider}
+            provider={provider}
+            status={providerStatuses[provider]}
+            onLogin={() => onOpenProviderLogin(provider)}
           />
         ))}
       </div>

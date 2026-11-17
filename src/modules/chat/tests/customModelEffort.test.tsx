@@ -5,7 +5,7 @@ import { beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
-import { resetUserPreferences } from '@/shared/userSettings';
+import { resetUserPreferences, writeUserPreference } from '@/shared/userSettings';
 import type {
   CustomProviderModelInput,
   LLMProvider,
@@ -31,6 +31,10 @@ const CUSTOM_CLAUDE_MODEL: ProviderModelOption = {
 };
 
 const CATALOG: Partial<Record<LLMProvider, ProviderModelsDefinition>> = {
+  codex: {
+    DEFAULT: 'default',
+    OPTIONS: [{ value: 'test-codex', label: 'Test Codex', effort: { values: [{ value: 'low' }, { value: 'ultra' }] } }],
+  },
   claude: {
     OPTIONS: [
       {
@@ -161,4 +165,17 @@ test('the composer offers exactly the declared levels for a selected custom mode
   assert.equal(result.current.provider, 'claude');
   assert.equal(result.current.currentProviderModel, 'my-custom-model');
   assert.deepEqual(result.current.currentProviderEffortOptions, [{ value: 'low' }, { value: 'high' }]);
+});
+
+test('Codex restores a saved model and effort before capabilities arrive', async () => {
+  writeUserPreference('selectedProvider', 'codex');
+  localStorage.setItem('codex-model', 'test-codex');
+  localStorage.setItem('codex-effort', 'ultra');
+  const { useChatProviderState } = await import('@/modules/chat/hooks/useChatProviderState');
+  const { result } = renderHook(() => useChatProviderState({ selectedSession: null, selectedProject: null }));
+  await waitFor(() => assert.equal(result.current.providerModelsLoading, false));
+  assert.equal(result.current.currentProviderModel, 'test-codex');
+  assert.equal(result.current.currentProviderEffort, 'ultra');
+  assert.deepEqual(result.current.currentProviderEffortOptions.map((level) => level.value), ['low', 'ultra']);
+  assert.equal(localStorage.getItem('codex-effort'), 'ultra');
 });

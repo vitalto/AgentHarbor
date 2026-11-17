@@ -175,7 +175,7 @@ function WorkspaceMain({
             <div className="h-full w-full overflow-hidden">
               <StandaloneShell
                 project={selectedProject}
-                session={selectedSession?.__provider === 'codex' || selectedSession?.provider === 'codex' ? null : selectedSession}
+                session={selectedSession}
                 showHeader={false}
                 isActive={activeTab === 'shell'}
               />

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { AgentBusyElsewhereError, AgentWindowError, clearAgentConversation, closeAgentWindow, ensureAgentWindow, getLiveProcessStartTime, moveSessionToTmux, paneRegistry, readClaudeProcesses, readClaudeStatuses, toLocalPath, trustFolderOnNextStart } from '@/modules/tmux/index.js';
+import { AgentBusyElsewhereError, AgentWindowError, clearAgentConversation, closeAgentWindow, closeCodexWindow, ensureAgentWindow, ensureCodexWindow, getLiveProcessStartTime, listCodexLiveThreads, moveSessionToTmux, paneRegistry, readClaudeProcesses, readClaudeStatuses, toLocalPath, trustFolderOnNextStart } from '@/modules/tmux/index.js';
 import { listBackgroundCommands, listRunningBackgroundCommands, type SessionBackgroundCommand } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
@@ -146,6 +146,7 @@ function resolveProjectDisplayName(
 
 /** A live Claude agent as the sidebar lists it. */
 export type LiveAgent = {
+  provider: LLMProvider;
   sessionId: string;
   providerSessionId: string;
   title: string | null;
@@ -154,7 +155,7 @@ export type LiveAgent = {
   location: 'tmux' | 'windows' | 'elsewhere';
   windowName: string | null;
   pid: number | null;
-  activity: 'busy' | 'waiting' | 'idle';
+  activity: 'busy' | 'waiting' | 'idle' | 'unknown';
   /** More than one Claude process holds this session (they would both write its history). */
   duplicateProcesses: boolean;
 };
@@ -209,7 +210,7 @@ export const sessionsService = {
 
     // Turns typed straight into a Claude window (phone, terminal tab) have no
     // chat run until a viewer subscribes; report them from Claude's own status files.
-    const statuses = await readClaudeStatuses();
+    const [statuses, codexThreads] = await Promise.all([readClaudeStatuses(), listCodexLiveThreads()]);
     for (const status of statuses.values()) {
       const runsBackgroundCommand = status.status === 'shell';
       if (status.activity === 'idle' && !runsBackgroundCommand) {
@@ -256,6 +257,17 @@ export const sessionsService = {
         statusText: status.activity === 'waiting' ? 'Waiting for your answer' : 'Working in the terminal',
       });
       runningById.set(session.session_id, entries[entries.length - 1]);
+    }
+
+    for (const thread of codexThreads) {
+      if (thread.activity === 'idle' || thread.activity === 'unknown') continue;
+      const session = sessionsDb.getSessionByProviderSessionId(thread.providerSessionId);
+      if (!session || entries.some((entry) => entry.sessionId === session.session_id)) continue;
+      entries.push({
+        sessionId: session.session_id, provider: 'codex', startedAt: Date.parse(session.updated_at),
+        lastSeq: chatRunRegistry.getRun(session.session_id)?.lastSeq ?? 0, canInterrupt: false,
+        statusText: thread.activity === 'waiting' ? 'Waiting for your answer' : 'Working in the terminal',
+      });
     }
 
     return entries;
@@ -816,16 +828,16 @@ export const sessionsService = {
   },
 
   /**
-   * Every live Claude agent: sessions with a tmux window, plus sessions whose
-   * Claude runs outside tmux (a Windows console, another terminal), which can be
-   * watched but not typed into. Sessions the app has not indexed yet are skipped.
+   * Indexed agents with a live provider process, including ones running outside tmux.
    */
   async listAgentWindows(): Promise<LiveAgent[]> {
-    const [panes, statuses] = await Promise.all([paneRegistry.refresh(), readClaudeStatuses()]);
+    const [panes, statuses, codexThreads] = await Promise.all([
+      paneRegistry.refresh(), readClaudeStatuses(), listCodexLiveThreads(),
+    ]);
     const describe = (providerSessionId: string) => {
       const session = sessionsDb.getSessionByProviderSessionId(providerSessionId);
       return session
-        ? { sessionId: session.session_id, title: session.custom_name, projectPath: session.project_path }
+        ? { sessionId: session.session_id, provider: session.provider as LLMProvider, title: session.custom_name, projectPath: session.project_path }
         : null;
     };
 
@@ -833,7 +845,7 @@ export const sessionsService = {
     const sessionsInTmux = new Set<string>();
     for (const pane of panes) {
       const known = pane.providerSessionId ? describe(pane.providerSessionId) : null;
-      if (!known || !pane.providerSessionId) {
+      if (known?.provider !== 'claude' || !pane.providerSessionId) {
         continue;
       }
       sessionsInTmux.add(pane.providerSessionId);
@@ -863,6 +875,16 @@ export const sessionsService = {
         duplicateProcesses: status.processCount > 1,
       });
     }
+    for (const thread of codexThreads) {
+      const known = describe(thread.providerSessionId);
+      if (known?.provider !== 'codex') continue;
+      const activity = thread.activity === 'working' ? 'busy' : thread.activity;
+      agents.push({
+        ...known, providerSessionId: thread.providerSessionId,
+        location: thread.pane ? 'tmux' : 'elsewhere', windowName: thread.pane?.windowName ?? null,
+        pid: null, activity, duplicateProcesses: false,
+      });
+    }
     return agents;
   },
 
@@ -878,6 +900,9 @@ export const sessionsService = {
     }
     let pane;
     try {
+      if (current.provider === 'codex') {
+        throw new AgentWindowError('Start a new Codex session to keep this conversation in history.');
+      }
       pane = await clearAgentConversation(sessionId);
     } catch (error) {
       if (error instanceof AgentWindowError) {
@@ -902,6 +927,7 @@ export const sessionsService = {
   /** Ends the session's Claude wherever it runs (see closeAgentWindow); busy elsewhere needs force. */
   async closeAgent(sessionId: string, options: { force?: boolean } = {}): Promise<boolean> {
     try {
+      if (sessionsDb.getSessionById(sessionId)?.provider === 'codex') return await closeCodexWindow(sessionId);
       return await closeAgentWindow(sessionId, options);
     } catch (error) {
       if (error instanceof AgentBusyElsewhereError) {
@@ -918,7 +944,8 @@ export const sessionsService = {
   /** Moves a session Claude runs in another terminal into tmux (see moveSessionToTmux). */
   async moveAgentToTmux(sessionId: string, options: { force?: boolean } = {}): Promise<{ sessionId: string; windowName: string }> {
     try {
-      const pane = await moveSessionToTmux(sessionId, options);
+      const pane = sessionsDb.getSessionById(sessionId)?.provider === 'codex'
+        ? await ensureCodexWindow(sessionId) : await moveSessionToTmux(sessionId, options);
       return { sessionId, windowName: pane.pane.windowName };
     } catch (error) {
       if (error instanceof AgentBusyElsewhereError) {
@@ -938,7 +965,8 @@ export const sessionsService = {
   /** Starts (or finds) the session's Claude window: `claude --resume` in its project directory. */
   async openAgentWindow(sessionId: string): Promise<{ sessionId: string; windowName: string }> {
     try {
-      const pane = await ensureAgentWindow(sessionId);
+      const pane = sessionsDb.getSessionById(sessionId)?.provider === 'codex'
+        ? await ensureCodexWindow(sessionId) : await ensureAgentWindow(sessionId);
       return { sessionId, windowName: pane.pane.windowName };
     } catch (error) {
       if (error instanceof AgentWindowError) {

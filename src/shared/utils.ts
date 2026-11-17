@@ -1,7 +1,18 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+import { LLM_PROVIDERS, LLM_PROVIDER_NAMES } from '@/shared/constants';
 import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
+
+//----------------- PROVIDER DISPLAY ------------
+
+/** Older exports can identify a provider outside the current CLI registry. */
+export function getProviderDisplayName(provider: string | undefined, fallback = 'Assistant'): string {
+  const registered = LLM_PROVIDERS.find((id) => id === provider);
+  return registered ? LLM_PROVIDER_NAMES[registered] : fallback;
+}
+
+// ---------------------------
 
 //----------------- DEPLOYMENT MODE ------------
 

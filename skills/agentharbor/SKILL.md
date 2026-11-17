@@ -1,11 +1,11 @@
 ---
 name: agentharbor
-description: Use when work should continue in another project or session run by AgentHarbor, when asked to start, message or read another Claude session, to check how full your own context is, to hand a long task over to a fresh session as the context fills up, or to send the user a push notification to their phone or browser.
+description: Use when work should continue in another project or session run by AgentHarbor, when asked to start, message or read another agent session, to check how full your own context is, to hand a long task over to a fresh session as the context fills up, or to send the user a push notification to their phone or browser.
 ---
 
 # Other sessions through AgentHarbor (`ah`)
 
-AgentHarbor runs Claude in live windows and Codex through its CLI. Use `ah new --provider codex --project P "task"` for Codex. Read its result with `ah read` and continue the same thread with `ah send`. Use `ah ls --recent 20` to list its saved conversations, and wait for a Codex turn to finish before sending another. The `ah` command lists, starts, messages and
+AgentHarbor runs Claude Code and Codex in live tmux windows. Use `ah new --provider codex --project P "task"` for Codex. Read its result with `ah read` and continue the same thread with `ah send`. Use `ah ls --recent 20` for saved conversations, including Codex CLI and editor sessions. Sessions open in a separate Codex process are viewable while it holds the thread. The `ah` command lists, starts, messages and
 reads them. `ah help` prints the full usage.
 
 ```bash

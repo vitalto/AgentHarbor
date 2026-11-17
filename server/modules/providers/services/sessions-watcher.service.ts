@@ -183,13 +183,6 @@ async function onUpdate(
 export async function initializeSessionsWatcher(): Promise<void> {
   console.log('Setting up session watchers');
 
-  const initialSync = await sessionSynchronizerService.synchronizeSessions();
-  console.log('Initial session synchronization complete', {
-    processedByProvider: initialSync.processedByProvider,
-    prunedOrphans: initialSync.prunedOrphans,
-    failures: initialSync.failures,
-  });
-
   for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
     try {
       await fsPromises.mkdir(rootPath, { recursive: true });
@@ -218,6 +211,10 @@ export async function initializeSessionsWatcher(): Promise<void> {
         });
 
       watchers.push(watcher);
+      await new Promise<void>((resolve, reject) => {
+        watcher.once('ready', resolve);
+        watcher.once('error', reject);
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Failed to initialize session watcher for provider "${provider}"`, {
@@ -226,6 +223,13 @@ export async function initializeSessionsWatcher(): Promise<void> {
       });
     }
   }
+
+  const initialSync = await sessionSynchronizerService.synchronizeSessions();
+  console.log('Initial session synchronization complete', {
+    processedByProvider: initialSync.processedByProvider,
+    prunedOrphans: initialSync.prunedOrphans,
+    failures: initialSync.failures,
+  });
 }
 
 /**

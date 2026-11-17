@@ -5,7 +5,7 @@ import { api } from '@/shared/api';
 import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 import { subscribeToUserPreferences } from '@/shared/userSettings';
 import { usePaletteOps } from '@/modules/command-palette';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode, SidebarSessionSelection } from '@/shared/types';
+import type { ServerEvent, ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode, SidebarSessionSelection } from '@/shared/types';
 import {
   filterProjects,
   getAllSessions,
@@ -42,6 +42,7 @@ type RecentConversationsApiPayload = {
 };
 
 type UseSidebarControllerArgs = {
+  subscribe?: (listener: (event: ServerEvent) => void) => () => void;
   projects: Project[];
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -63,6 +64,7 @@ type UseSidebarControllerArgs = {
 };
 
 export function useSidebarController({
+  subscribe,
   projects,
   selectedProject,
   selectedSession: _selectedSession,
@@ -117,7 +119,7 @@ export function useSidebarController({
   const [isArchivedSessionsLoading, setIsArchivedSessionsLoading] = useState(false);
   const [recentConversations, setRecentConversations] = useState<RecentConversationListItem[]>([]);
   const [recentConversationsTotal, setRecentConversationsTotal] = useState(0);
-  const [recentConversationsHasMore, setRecentConversationsHasMore] = useState(false);
+  const recentConversationsHasMore = recentConversations.length < recentConversationsTotal;
   const [isRecentConversationsLoading, setIsRecentConversationsLoading] = useState(false);
   const [isLoadingMoreRecentConversations, setIsLoadingMoreRecentConversations] = useState(false);
   const [recentConversationsError, setRecentConversationsError] = useState(false);
@@ -235,11 +237,11 @@ export function useSidebarController({
     }
   }, []);
 
-  const fetchRecentConversationsPage = useCallback(async (offset: number, append: boolean) => {
+  const fetchRecentConversationsPage = useCallback(async (offset: number, append: boolean, refreshHead = false) => {
     const requestSequence = ++recentConversationsSeqRef.current;
     if (append) {
       setIsLoadingMoreRecentConversations(true);
-    } else {
+    } else if (!refreshHead) {
       setIsRecentConversationsLoading(true);
     }
     setRecentConversationsError(false);
@@ -261,6 +263,13 @@ export function useSidebarController({
 
       setRecentConversations((previous) => {
         if (!append) {
+          if (refreshHead && payload.data?.hasMore && previous.length > conversations.length) {
+            const boundary = previous.findIndex((row) => row.sessionId === conversations.at(-1)?.sessionId);
+            if (boundary >= 0) {
+              const headIds = new Set(conversations.map((row) => row.sessionId));
+              return [...conversations, ...previous.slice(boundary + 1).filter((row) => !headIds.has(row.sessionId))];
+            }
+          }
           return conversations;
         }
 
@@ -271,7 +280,6 @@ export function useSidebarController({
         ];
       });
       setRecentConversationsTotal(Number(payload.data?.total ?? conversations.length));
-      setRecentConversationsHasMore(Boolean(payload.data?.hasMore));
     } catch (error) {
       if (requestSequence !== recentConversationsSeqRef.current) {
         return;
@@ -340,7 +348,24 @@ export function useSidebarController({
     reloadRecentConversations();
   }, [debouncedSearchQuery, reloadRecentConversations, searchMode]);
 
-  // The Conversations list is only fetched when its tab opens, while `projects`
+  useEffect(() => {
+    if (!subscribe || searchMode !== 'conversations' || debouncedSearchQuery.length >= 2) return;
+    let refresh: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = subscribe((event) => {
+      if (event.kind !== 'session_upserted' && event.kind !== 'websocket_reconnected') return;
+      if (refresh) return;
+      refresh = setTimeout(() => {
+        refresh = undefined;
+        void fetchRecentConversationsPage(0, false, true);
+      }, 100);
+    });
+    return () => {
+      clearTimeout(refresh);
+      unsubscribe();
+    };
+  }, [subscribe, searchMode, debouncedSearchQuery, fetchRecentConversationsPage]);
+
+  // The Conversations list is initially fetched when its tab opens, while `projects`
   // is patched the moment a session is renamed from the workspace header. Fold
   // those title changes into the rows already loaded, or a header rename would
   // leave the highlighted conversation on its old name. The loaded rows are
@@ -735,6 +760,10 @@ export function useSidebarController({
 
     return sortedProjects.reduce<Project[]>((acc, project) => {
       const sessions = (project.sessions ?? []).filter((session) => activeSessionIds.has(String(session.id)));
+      for (const agent of liveAgents) {
+        if (agent.projectPath !== project.fullPath || sessions.some((session) => session.id === agent.sessionId)) continue;
+        sessions.push({ id: agent.sessionId, summary: agent.title || agent.sessionId, __provider: agent.provider });
+      }
       const runningCount = sessions.length;
 
       if (runningCount === 0) {
@@ -752,7 +781,7 @@ export function useSidebarController({
       });
       return acc;
     }, []);
-  }, [activeSessionIds, sortedProjects]);
+  }, [activeSessionIds, sortedProjects, liveAgents]);
 
   const filteredProjects = useMemo(
     () => filterProjects(searchMode === 'running' ? runningProjects : sortedProjects, debouncedSearchQuery),

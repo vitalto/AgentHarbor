@@ -5,6 +5,7 @@ import { GitBranchIcon, PencilIcon } from 'lucide-react';
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
 import { formatUsageLimitText } from '@/modules/chat/utils/chatFormatting';
 import { ToolRenderer, ToolErrorDisplay, SubagentPanel, WorkflowPanel, shouldHideToolResult } from '@/modules/chat/tools';
+import { getProviderDisplayName } from '@/shared/utils';
 import { LLMProviderLogo } from '@/shared/ui';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/modules/chat/transcript/Reasoning';
 import ChatMessageImages from '@/modules/chat/transcript/ChatMessageImages';
@@ -196,7 +197,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
           </div>
         </div>
       ) : (
-        /* Claude/Error/Tool messages on the left */
+        /* Assistant, error and tool messages */
         <div className="w-full">
           {!isGrouped && (
             <div className="mb-2 flex items-center space-x-3">
@@ -218,7 +219,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   ? t('messageTypes.error')
                   : message.type === 'tool'
                     ? t('messageTypes.tool')
-                    : t('messageTypes.claude')}
+                    : getProviderDisplayName(provider)}
               </div>
             </div>
           )}

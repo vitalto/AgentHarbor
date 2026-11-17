@@ -15,7 +15,7 @@ import { AppError } from '@/shared/utils.js';
 
 /** Session-row access the service needs, narrowed so tests can stub it. */
 type ProviderModelsSessionStore = {
-  getSessionById(sessionId: string): { model: string | null; effort: string | null } | null;
+  getSessionById(sessionId: string): { provider: string; model: string | null; effort: string | null } | null;
   setSessionModel(sessionId: string, model: string): void;
   setSessionEffort(sessionId: string, effort: string): void;
 };
@@ -77,9 +77,12 @@ const mergeProviderModels = (
   predefined: ProviderModelsDefinition,
   custom: CustomProviderModelRecord[],
 ): ProviderModelsDefinition => {
+  // An upstream catalog can acquire an ID the user previously added by hand.
+  const customIds = new Set(custom.map((row) => row.modelId));
   return {
+    ...(predefined.PARTIAL ? { PARTIAL: true } : {}),
     OPTIONS: [
-      ...predefined.OPTIONS.map((option) => ({ ...option, isCustom: false })),
+      ...predefined.OPTIONS.filter((option) => !customIds.has(option.value)).map((option) => ({ ...option, isCustom: false })),
       ...custom.map(toCustomProviderModelOption),
     ],
     DEFAULT: predefined.DEFAULT,
@@ -135,10 +138,7 @@ const isUniqueConstraintError = (error: unknown): boolean => (
  * Creates the provider model application service used by Providers routes,
  * Commands, and provider runtimes.
  *
- * Curated adapter definitions stay source-controlled and are merged at read
- * time with custom SQLite rows. This deliberately has no predefined-model
- * persistence, memory cache, disk cache, TTL, or provider-native discovery.
- * Tests inject a small custom-model store through the same boundary.
+ * Adapter catalogs are merged at read time with custom SQLite rows.
  */
 export const createProviderModelsService = (dependencies: ProviderModelsServiceDependencies = {}) => {
   const resolveProvider = dependencies.resolveProvider ?? providerRegistry.resolveProvider;
@@ -224,9 +224,9 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     input: CustomProviderModelInput,
   ): Promise<{ model: ProviderModelOption; models: ProviderModelsDefinition }> => {
     const predefined = await resolveProvider(provider).models.getSupportedModels();
-    readCustomModel(provider, recordId);
+    const existing = readCustomModel(provider, recordId);
     const normalized = normalizeCustomModelInput(input);
-    assertModelIdAvailable(provider, predefined, normalized.id, recordId);
+    if (normalized.id !== existing.modelId) assertModelIdAvailable(provider, predefined, normalized.id, recordId);
     assertEffortLevelsSupported(provider, normalized);
 
     try {
@@ -274,11 +274,15 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
   };
 
   const readRecordedSessionSelection = (
+    provider: LLMProvider,
     sessionId: string,
   ): { model: string | null; effort: string | null } | null => {
     const session = sessions.getSessionById(sessionId);
     if (!session) {
       return null;
+    }
+    if (session.provider !== provider) {
+      throw new AppError('Session does not belong to this provider.', { code: 'SESSION_PROVIDER_MISMATCH', statusCode: 409 });
     }
 
     return {
@@ -307,7 +311,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       return null;
     }
 
-    const recordedSelection = readRecordedSessionSelection(normalizedSessionId);
+    const recordedSelection = readRecordedSessionSelection(provider, normalizedSessionId);
     if (!recordedSelection) {
       return null;
     }
@@ -340,7 +344,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       return null;
     }
 
-    if (!readRecordedSessionSelection(normalizedSessionId)) {
+    if (!readRecordedSessionSelection(provider, normalizedSessionId)) {
       return null;
     }
 
@@ -372,7 +376,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       : '';
 
     if (normalizedSessionId) {
-      const recordedSelection = readRecordedSessionSelection(normalizedSessionId);
+      const recordedSelection = readRecordedSessionSelection(provider, normalizedSessionId);
       if (recordedSelection?.model) {
         return {
           provider,
@@ -391,7 +395,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
           provider,
           sessionId: normalizedSessionId,
           model: resolvedProviderModel,
-          effort: recordedSelection?.effort ?? null,
+          effort: recordedSelection?.effort ?? providerModel.effort?.trim() ?? null,
           source: 'provider',
         };
       }
@@ -436,14 +440,13 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     sessionId: string | undefined,
     requestedModel?: string | null,
   ): Promise<string | undefined> => {
-    void provider;
     const normalizedRequestedModel = typeof requestedModel === 'string' ? requestedModel.trim() : '';
     const normalizedSessionId = sessionId?.trim();
     if (!normalizedSessionId) {
       return normalizedRequestedModel || undefined;
     }
 
-    const recordedModel = readRecordedSessionSelection(normalizedSessionId)?.model;
+    const recordedModel = readRecordedSessionSelection(provider, normalizedSessionId)?.model;
     return recordedModel || normalizedRequestedModel || undefined;
   };
 

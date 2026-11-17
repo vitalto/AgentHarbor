@@ -65,6 +65,12 @@ describe('markdown export', () => {
     expect(markdown).toContain('const renamed = 1;');
   });
 
+  it('uses the session provider for Codex replies in Markdown and HTML', async () => {
+    const codex = { ...input, provider: 'codex', messages: [assistantMessage] };
+    expect(await buildTranscriptExport('markdown', codex, exportedAt)).toContain('### Codex');
+    expect(await buildTranscriptExport('html', codex, exportedAt)).toMatch(/>Codex</);
+  });
+
   it('fences content that already contains a fence', async () => {
     const markdown = await buildTranscriptExport('markdown', {
       ...input,

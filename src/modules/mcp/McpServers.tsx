@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { McpProject, McpProvider, McpScope, ProviderMcpServer } from '@/shared/types';
 import { ActionMenu, Badge, Button } from '@/shared/ui';
-import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES } from '@/shared/constants';
+import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, LLM_PROVIDER_NAMES } from '@/shared/constants';
 import { useMcpServers } from '@/modules/mcp/hooks/useMcpServers';
 import { maskSecret } from '@/modules/mcp/utils/mcpFormatting';
 import McpServerFormModal from '@/modules/mcp/McpServerFormModal';
@@ -84,15 +84,16 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
     deleteServer,
   } = useMcpServers({ selectedProvider, currentProjects });
 
-  const providerName = MCP_PROVIDER_NAMES[selectedProvider];
+  const providerName = LLM_PROVIDER_NAMES[selectedProvider];
   const description = t(`mcpServers.description.${selectedProvider}`, {
     defaultValue: `Model Context Protocol servers provide additional tools and data sources to ${providerName}`,
   });
   const globalButtonLabel = t('mcpServersAdd.globalButtonLabel');
   const providerButtonLabel = t('mcpServersAdd.providerButtonLabel', { provider: providerName });
-  const globalAddDescription = t('mcpServersAdd.globalAddDescription');
+  const providers = Object.values(LLM_PROVIDER_NAMES).join(', ');
+  const globalAddDescription = t('mcpServersAdd.globalAddDescription', { providers });
   const providerAddDescription = t('mcpServersAdd.providerAddDescription', { button: providerButtonLabel, provider: providerName });
-  const globalModalDescription = t('mcpServersAdd.globalModalDescription');
+  const globalModalDescription = t('mcpServersAdd.globalModalDescription', { providers });
 
   return (
     <div className="space-y-4">

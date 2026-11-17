@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
 
+import { readCodexUsage } from '@/modules/providers/list/codex/codex-usage.js';
 import { sessionsDb } from '@/modules/database/index.js';
 import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
@@ -185,6 +186,21 @@ function extractCodexTextContent(content: unknown): string {
     })
     .filter(Boolean)
     .join('\n');
+}
+
+export function extractCodexSearchableMessage(entry: AnyRecord): { role: 'user' | 'assistant'; text: string } | null {
+  const payload = readObjectRecord(entry.payload);
+  if (!payload) return null;
+  if (entry.type === 'event_msg') {
+    if (isVisibleCodexUserMessage(payload)) return { role: 'user', text: payload.message };
+    if (payload.type === 'item_completed' && payload.item?.type === 'UserMessage') {
+      return { role: 'user', text: extractCodexTextContent(payload.item.content) };
+    }
+  }
+  if (entry.type === 'response_item' && payload.type === 'message' && payload.role === 'assistant') {
+    return { role: 'assistant', text: readCodexMemoryCitations(extractCodexTextContent(payload.content)).text };
+  }
+  return null;
 }
 
 /** Reads image inputs from a typed UserMessage item. */
@@ -1236,11 +1252,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
     // в”Ђв”Ђ event_msg в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     if (entry.type === 'event_msg') {
       if (payload.type === 'token_count' && payload.info) {
-        const info = payload.info as AnyRecord;
-        if (info.total_token_usage) {
-          const usage = info.total_token_usage as AnyRecord;
-          tokenUsage = { used: usage.total_tokens || 0, total: info.model_context_window || 200000 };
-        }
+        tokenUsage = readCodexUsage(entry) ?? tokenUsage;
         continue;
       }
 

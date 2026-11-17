@@ -1,11 +1,14 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import { sessionsDb } from '@/modules/database/index.js';
 import {
+  getCodexCliConfig,
+  ensureCodexWindow,
   getAgentConfig,
   startAgentWindow,
   toLocalPath,
@@ -22,6 +25,7 @@ type ShellIncomingMessage = {
   projectPath?: string;
   sessionId?: string | null;
   isPlainShell?: boolean;
+  loginProvider?: string;
 };
 
 type ShellTmuxGateway = {
@@ -29,7 +33,7 @@ type ShellTmuxGateway = {
   ensureAgentWindow: (appSessionId: string) => Promise<{ pane: AgentPane }>;
   hasSession: () => Promise<boolean>;
   listPanes: () => Promise<AgentPane[]>;
-  newWindow: (input: { cwd: string; name: string; command: string }) => Promise<AgentPane>;
+  newWindow: (input: { cwd: string; name: string; command: string; env?: Record<string, string> }) => Promise<AgentPane>;
   countViewers: (windowId: string) => Promise<number>;
   killWindow: (windowId: string) => Promise<void>;
   sessionName: () => string;
@@ -42,7 +46,7 @@ type ShellWebSocketDependencies = {
 };
 
 const defaultTmuxGateway: ShellTmuxGateway = {
-  ensureAgentWindow: startAgentWindow,
+  ensureAgentWindow: (id) => sessionsDb.getSessionById(id)?.provider === 'codex' ? ensureCodexWindow(id) : startAgentWindow(id),
   hasSession: () => tmuxService.hasSession(),
   listPanes: () => tmuxService.listPanes(),
   newWindow: (input) => tmuxService.newWindow(input),
@@ -122,8 +126,20 @@ async function closeShellWindowIfIdle(gateway: ShellTmuxGateway, windowId: strin
 }
 
 /** Reuses the project's shell window so reconnecting lands in the same shell; two racing inits share one creation. */
-async function ensurePlainShellWindow(gateway: ShellTmuxGateway, cwd: string): Promise<string> {
-  const name = plainShellWindowName(cwd);
+async function ensurePlainShellWindow(gateway: ShellTmuxGateway, cwd: string, loginProvider?: string): Promise<string> {
+  let name = plainShellWindowName(cwd);
+  let env: Record<string, string> | undefined;
+  if (loginProvider === 'codex') {
+    const { executable, env: profile } = getCodexCliConfig();
+    env = {
+      AH_CODEX_CMD: executable,
+      ...(profile.CODEX_HOME && { CODEX_HOME: profile.CODEX_HOME }),
+      ...(profile.WSLENV && { WSLENV: profile.WSLENV }),
+    };
+    // A reconfigured CLI must not reuse a shell opened under the previous profile.
+    const profileId = createHash('sha256').update(JSON.stringify([cwd, env])).digest('hex').slice(0, 16);
+    name = `sh:login:codex:${profileId}`;
+  }
   const pending = pendingShellWindows.get(name);
   if (pending) {
     return pending;
@@ -134,7 +150,7 @@ async function ensurePlainShellWindow(gateway: ShellTmuxGateway, cwd: string): P
     if (existing) {
       return existing.windowId;
     }
-    const created = await gateway.newWindow({ cwd, name, command: LOGIN_SHELL_COMMAND });
+    const created = await gateway.newWindow({ cwd, name, command: LOGIN_SHELL_COMMAND, ...(env && { env }) });
     return created.windowId;
   })();
   pendingShellWindows.set(name, lookupOrCreate);
@@ -162,7 +178,7 @@ async function resolveTargetWindow(
     throw new Error(`tmux session "${gateway.sessionName()}" is not running.`);
   }
   const cwd = toLocalPath(readString(message.projectPath), getAgentConfig()) || os.homedir();
-  return ensurePlainShellWindow(gateway, cwd);
+  return ensurePlainShellWindow(gateway, cwd, message.loginProvider);
 }
 
 /**

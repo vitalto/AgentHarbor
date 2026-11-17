@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '@/shared/api';
-import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES } from '@/shared/constants';
+import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, LLM_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES } from '@/shared/constants';
 import type { McpFormState, McpProject, McpProvider, McpScope, McpTransport, ProviderMcpServer, UpsertProviderMcpServerPayload } from '@/shared/types';
 import {
   createMcpPayloadFromForm,
@@ -211,15 +211,6 @@ const saveGlobalServer = async (
   return data.data.results || [];
 };
 
-const didServerIdentityChange = (
-  editingServer: ProviderMcpServer,
-  payload: UpsertProviderMcpServerPayload,
-): boolean => (
-  editingServer.name !== payload.name
-  || editingServer.scope !== payload.scope
-  || (editingServer.workspacePath || '') !== (payload.workspacePath || '')
-);
-
 const getServerIdentity = (server: ProviderMcpServer): string => (
   `${server.provider}:${server.scope}:${server.workspacePath || 'global'}:${server.name}`
 );
@@ -231,7 +222,7 @@ const getCacheKey = (provider: McpProvider, projects: ProjectTarget[]): string =
 
 const formatGlobalAddFailures = (failures: GlobalMcpServerResult[], t: (key: string) => string): string => (
   failures
-    .map((failure) => `${MCP_PROVIDER_NAMES[failure.provider]}: ${failure.error || t('mcpServersAddErrors.unknownError')}`)
+    .map((failure) => `${LLM_PROVIDER_NAMES[failure.provider]}: ${failure.error || t('mcpServersAddErrors.unknownError')}`)
     .join('; ')
 );
 
@@ -434,11 +425,7 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
         throw new Error(t('mcpServersAddErrors.selectProjectRequired'));
       }
 
-      await saveProviderServer(selectedProvider, payload);
-
-      if (serverBeingEdited && didServerIdentityChange(serverBeingEdited, payload)) {
-        await deleteProviderServer(selectedProvider, serverBeingEdited);
-      }
+      await saveProviderServer(selectedProvider, { ...payload, previousName: serverBeingEdited?.name });
 
       mcpServersCache.delete(cacheKey);
       await refreshServers({ force: true });

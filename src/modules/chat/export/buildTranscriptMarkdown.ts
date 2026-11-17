@@ -1,3 +1,4 @@
+import { getProviderDisplayName } from '@/shared/utils';
 import type { ChatMessage, DiffLine, LLMProvider } from '@/shared/types';
 import { getToolConfig } from '@/modules/chat/tools';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
@@ -8,10 +9,6 @@ type BuildTranscriptMarkdownInput = {
   provider: LLMProvider | string;
   exportedAt: Date;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
-};
-
-const PROVIDER_LABELS: Record<string, string> = {
-  claude: 'Claude',
 };
 
 /** Fenced blocks need a longer fence than anything they contain. */
@@ -88,7 +85,7 @@ function renderToolCall(
  * on any Markdown host, with tool calls, diffs and thinking blocks intact.
  */
 export function buildTranscriptMarkdown(input: BuildTranscriptMarkdownInput): string {
-  const providerLabel = PROVIDER_LABELS[String(input.provider)] ?? 'Assistant';
+  const providerLabel = getProviderDisplayName(input.provider);
   const sections: string[] = [
     `# ${input.sessionTitle}`,
     '',

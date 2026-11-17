@@ -2,7 +2,7 @@
  <img src="public/logo.svg" alt="AgentHarbor" width="64" height="64">
  <h1>AgentHarbor</h1>
  <p><b>Web UI for your live AI CLI agents.</b><br>
- Run any number of Claude Code agents in tmux and drive them from a browser on your desktop or phone,
+ Run Claude Code and Codex agents in tmux and drive them from a browser on your desktop or phone,
  without giving up the real terminal.</p>
 </div>
 
@@ -27,15 +27,19 @@ chat UI on top of it:
 
 ## Codex chat
 
-In a new chat, open the model picker and select **OpenAI Codex → Codex CLI default**.
-AgentHarbor streams the turn from `codex exec`, stores the native thread ID and resumes that
-thread on the next message. History comes from the Codex rollout. Choose the model in Codex
-or add a model in the AgentHarbor picker.
+Choose **OpenAI Codex** in the model picker. The picker lists the models and reasoning
+effort levels reported by the local Codex CLI. Each AgentHarbor session uses a native
+Codex thread on the local app server. The Terminal tab attaches to its interactive
+Codex window in tmux, and the web composer sends turns to the same thread.
 
-Install Codex CLI and run `codex login` as the account that runs it. The server uses
-`codex` on PATH by default. For Windows Codex through WSL, set `AH_CODEX_CMD` to the
-absolute WSL path of `codex.exe`, and `AH_CODEX_HOME` to the WSL path of its existing
-Codex home. The Terminal tab opens the project shell for a Codex chat.
+Conversations includes sessions started in Codex CLI or the editor. AgentHarbor indexes
+the native rollout files and follows new activity. Sessions held by another Codex
+process can be read in the browser while that process owns the thread.
+
+Install a Codex CLI with local app-server daemon, proxy and remote TUI support (tested
+with 0.169.0). Run `codex login` under the account that runs Codex. For Windows Codex
+through WSL, set `AH_CODEX_CMD` to the absolute WSL path of `codex.exe` and
+`AH_CODEX_HOME` to the WSL path of its Codex home.
 
 ```bash
 ah new --provider codex --project P "task"
@@ -130,7 +134,7 @@ ah ls [--project P] [--recent N]              # live agents with busy/idle, or r
 ah new [--project P] [--model M --effort E] "task"   # project defaults to the current directory
 ah send <session> [--model M --effort E] "text"      # a busy session queues it
 ah read <session> [--last N]                  # last N messages
-ah usage [session]                            # context use; default: the calling Claude session
+ah usage [session]                            # context use; default: the calling agent session
 ah models                                     # values for --model / --effort
 ah notify [--title T] "text"                  # push to subscribed browsers; opens the caller's chat
 ```

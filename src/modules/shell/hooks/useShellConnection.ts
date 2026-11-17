@@ -3,7 +3,7 @@ import type { MutableRefObject } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 
-import type { Project, ProjectSession } from '@/shared/types';
+import type { LLMProvider, Project, ProjectSession } from '@/shared/types';
 import { TERMINAL_INIT_DELAY_MS } from '@/shared/constants';
 import { getShellWebSocketUrl, parseShellMessage, sendSocketMessage } from '@/modules/shell/utils/socket';
 
@@ -14,6 +14,7 @@ type UseShellConnectionOptions = {
   selectedProjectRef: MutableRefObject<Project | null | undefined>;
   selectedSessionRef: MutableRefObject<ProjectSession | null | undefined>;
   isPlainShellRef: MutableRefObject<boolean>;
+  loginProvider?: LLMProvider;
   isInitialized: boolean;
   autoConnect: boolean;
   closeSocket: () => void;
@@ -36,6 +37,7 @@ export function useShellConnection({
   selectedProjectRef,
   selectedSessionRef,
   isPlainShellRef,
+  loginProvider,
   isInitialized,
   autoConnect,
   closeSocket,
@@ -117,6 +119,7 @@ export function useShellConnection({
               projectPath: currentProject.fullPath || currentProject.path || '',
               sessionId,
               isPlainShell: sessionId === null,
+              loginProvider,
               cols: currentTerminal.cols,
               rows: currentTerminal.rows,
             });
@@ -153,6 +156,7 @@ export function useShellConnection({
       isConnected,
       isConnecting,
       isPlainShellRef,
+      loginProvider,
       selectedProjectRef,
       selectedSessionRef,
       terminalRef,

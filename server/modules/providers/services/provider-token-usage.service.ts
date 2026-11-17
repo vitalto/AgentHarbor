@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { readCodexUsage } from '@/modules/providers/list/codex/codex-usage.js';
 import { sessionsDb } from '@/modules/database/index.js';
 import { toClaudePath } from '@/modules/tmux/index.js';
 import type { AnyRecord } from '@/shared/types.js';
@@ -176,7 +177,7 @@ export function summarizeClaudeTokenUsage(
   };
 }
 
-function parseClaudeUsageEntries(fileContent: string): AnyRecord[] {
+function parseUsageEntries(fileContent: string): AnyRecord[] {
   const entries: AnyRecord[] = [];
   for (const line of fileContent.trim().split('\n')) {
     try {
@@ -186,6 +187,14 @@ function parseClaudeUsageEntries(fileContent: string): AnyRecord[] {
     }
   }
   return entries;
+}
+
+function latestCodexUsage(entries: AnyRecord[]) {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const usage = readCodexUsage(entries[index]);
+    if (usage) return usage;
+  }
+  return null;
 }
 
 function claudeEntriesHaveUsage(entries: AnyRecord[]): boolean {
@@ -238,7 +247,7 @@ export function createProviderTokenUsageService(
 
       let sessionFilePath = session.jsonl_path;
       if (!sessionFilePath) {
-        if (!session.project_path) {
+        if (session.provider !== 'claude' || !session.project_path) {
           throw new AppError(`Session file for "${sessionId}" was not found.`, {
             code: 'SESSION_FILE_NOT_FOUND',
             statusCode: 404,
@@ -267,9 +276,16 @@ export function createProviderTokenUsageService(
       }
 
       const tail = await dependencies.readTextFileTail(sessionFilePath, TOKEN_USAGE_TAIL_BYTES);
-      let entries = parseClaudeUsageEntries(tail.content);
+      let entries = parseUsageEntries(tail.content);
+      if (session.provider === 'codex') {
+        let usage = latestCodexUsage(entries);
+        if (!usage && !tail.isComplete) {
+          usage = latestCodexUsage(parseUsageEntries(await dependencies.readTextFile(sessionFilePath)));
+        }
+        return usage ?? { used: 0, inputTokens: 0, outputTokens: 0, breakdown: { input: 0, output: 0 } };
+      }
       if (!claudeEntriesHaveUsage(entries) && !tail.isComplete) {
-        entries = parseClaudeUsageEntries(await dependencies.readTextFile(sessionFilePath));
+        entries = parseUsageEntries(await dependencies.readTextFile(sessionFilePath));
       }
       return summarizeClaudeTokenUsage(entries, dependencies.getClaudeContextWindow());
     },

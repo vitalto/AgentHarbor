@@ -25,6 +25,7 @@ import {
   Input,
 } from '@/shared/ui';
 import { useProviderSkills } from '@/modules/skills/hooks/useProviderSkills';
+import { LLM_PROVIDER_NAMES } from '@/shared/constants';
 import type { ProviderSkill, ProviderSkillCreateEntryPayload, SkillsProject, SkillsProvider, SkillsScope } from '@/shared/types';
 
 type ProviderSkillsProps = {
@@ -48,11 +49,6 @@ type QueuedSkillFile = {
 
 const MAX_SKILL_FOLDER_FILES = 500;
 const MAX_SKILL_FOLDER_BYTES = 30 * 1024 * 1024;
-
-const PROVIDER_NAMES: Record<SkillsProvider, string> = {
-  claude: 'Claude',
-  codex: 'Codex',
-};
 
 const PROVIDER_SKILL_PATHS: Record<SkillsProvider, string> = {
   claude: '~/.claude/skills/<skill-name>/SKILL.md',
@@ -202,7 +198,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
 
-  const providerName = PROVIDER_NAMES[selectedProvider];
+  const providerName = LLM_PROVIDER_NAMES[selectedProvider];
   const providerPath = PROVIDER_SKILL_PATHS[selectedProvider];
 
   useEffect(() => {

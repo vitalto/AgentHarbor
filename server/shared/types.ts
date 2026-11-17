@@ -92,6 +92,8 @@ export type ProviderModelOption = {
  * Provider model catalog returned by `GET /api/providers/:provider/models`.
  */
 export type ProviderModelsDefinition = {
+  /** The native catalog was unavailable, so missing entries cannot invalidate saved choices. */
+  PARTIAL?: true;
   OPTIONS: ProviderModelOption[];
   DEFAULT: string;
   /**
@@ -891,6 +893,7 @@ export type ProviderMcpServer = {
  */
 export type UpsertProviderMcpServerInput = {
   name: string;
+  previousName?: string;
   scope?: McpScope;
   transport: McpTransport;
   workspacePath?: string;

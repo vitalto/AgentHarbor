@@ -4,13 +4,19 @@ import { createNotificationEvent, notifyUserIfEnabled } from '@/modules/notifica
 import { createPowerControl } from '@/modules/power/power-control.js';
 import { createPowerRouter } from '@/modules/power/power.routes.js';
 import { createShutdownWhenIdle } from '@/modules/power/shutdown-when-idle.service.js';
-import { findUnfinishedAgents, type UnfinishedAgent } from '@/modules/tmux/index.js';
+import { findUnfinishedAgents, listCodexLiveThreads, type UnfinishedAgent } from '@/modules/tmux/index.js';
 
 /** An unfinished agent as Settings lists it: by the chat it belongs to, when AgentHarbor knows that chat. */
 type WatchedAgent = UnfinishedAgent & { sessionId: string | null; title: string | null };
 
 async function findWatchedAgents(): Promise<WatchedAgent[]> {
-  return (await findUnfinishedAgents()).map((agent) => {
+  const [agents, threads] = await Promise.all([findUnfinishedAgents(), listCodexLiveThreads()]);
+  for (const thread of threads) {
+    if (thread.activity === 'working' || thread.activity === 'unknown') {
+      agents.push({ providerSessionId: thread.providerSessionId, cwd: thread.pane?.cwd ?? null, work: 'turn' });
+    }
+  }
+  return agents.map((agent) => {
     const session = sessionsDb.getSessionByProviderSessionId(agent.providerSessionId);
     return { ...agent, sessionId: session?.session_id ?? null, title: session?.custom_name ?? null };
   });

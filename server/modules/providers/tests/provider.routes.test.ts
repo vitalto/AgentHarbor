@@ -202,6 +202,27 @@ test('conversation search finds a session whose messages hold the words separate
   });
 });
 
+test('search returns visible Codex messages under their AgentHarbor session id', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    const transcript = path.join(path.dirname(workspacePath), 'rollout-native.jsonl');
+    await writeFile(transcript, [
+      { type: 'event_msg', payload: { type: 'user_message', message: 'check turbine' } },
+      { type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'turbine ready' }] } },
+      { type: 'response_item', payload: { type: 'message', role: 'developer', content: [{ type: 'input_text', text: 'internalmarker' }] } },
+    ].map(row => JSON.stringify(row)).join('\n'));
+    sessionsDb.createAppSession('app-id', 'codex', workspacePath, 'Fixture');
+    sessionsDb.assignProviderSessionId('app-id', 'native-id');
+    sessionsDb.createSession('native-id', 'codex', workspacePath, undefined, undefined, undefined, transcript);
+    const search = async (term: string) => (await fetch(baseUrl + '/api/providers/search/sessions?q=' + term)).text();
+    const visible = await search('turbine');
+    assert.ok(visible.includes('"sessionId":"app-id"'));
+    assert.ok(visible.includes('"provider":"codex"'));
+    assert.ok(visible.includes('"role":"user"'));
+    assert.ok(visible.includes('"role":"assistant"'));
+    assert.ok(!(await search('internalmarker')).includes('"sessionId":"app-id"'));
+  });
+});
+
 test('reasoning effort is persisted and returned with the active session model', async () => {
   await withProviderServer(async (baseUrl, workspacePath) => {
     sessionsDb.createAppSession('effort-session', 'claude', workspacePath);

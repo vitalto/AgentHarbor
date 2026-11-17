@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
 import { Button, Input } from '@/shared/ui';
-import { MCP_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES, MCP_SUPPORTED_TRANSPORTS, MCP_SUPPORTS_WORKING_DIRECTORY } from '@/shared/constants';
+import { LLM_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES, MCP_SUPPORTED_TRANSPORTS, MCP_SUPPORTS_WORKING_DIRECTORY } from '@/shared/constants';
 import { useMcpServerForm } from '@/modules/mcp/hooks/useMcpServerForm';
 import type { McpFormState, McpProject, McpProvider, McpScope, McpTransport, ProviderMcpServer } from '@/shared/types';
 
@@ -97,11 +97,12 @@ export default function McpServerFormModal({
     onSubmit,
   });
 
-  const providerName = MCP_PROVIDER_NAMES[provider];
+  const providerName = LLM_PROVIDER_NAMES[provider];
   const modalTitle = title ?? (isEditing ? t('mcpForm.title.edit') : t('mcpForm.title.add'));
   const addButtonLabel = submitLabel ?? t('mcpForm.addToProvider', { action: t('mcpForm.actions.addServer'), provider: providerName });
   const showProjectSelector = formData.scope !== 'user';
   const supportsHttpHeaders = formData.transport === 'http' || formData.transport === 'sse';
+  const showCodexFields = !isGlobalMode && provider === 'codex' && formData.importMode === 'form';
   const supportsWorkingDirectory = !isGlobalMode && MCP_SUPPORTS_WORKING_DIRECTORY[provider];
 
   return createPortal(
@@ -308,6 +309,18 @@ export default function McpServerFormModal({
                 />
               </div>
 
+              {showCodexFields && (
+                <label className="block space-y-2 text-sm font-medium text-foreground">
+                  <span>{t('mcpForm.envVarNames')}</span>
+                  <textarea
+                    value={multilineText.envVars}
+                    onChange={(event) => updateMultilineText('envVars', event.target.value)}
+                    className="block w-full rounded-lg border border-border bg-background p-2"
+                    rows={2}
+                    placeholder="API_KEY"
+                  />
+                </label>
+              )}
               {supportsWorkingDirectory && (
                 <div>
                   <label className="mb-2 block text-sm font-medium text-foreground">
@@ -338,7 +351,26 @@ export default function McpServerFormModal({
             </div>
           )}
 
-          {formData.importMode === 'form' && (
+          {showCodexFields && supportsHttpHeaders && (
+            <>
+              <label className="block space-y-2 text-sm font-medium text-foreground">
+                <span>{t('mcpForm.bearerTokenEnvVar')}</span>
+                <Input value={formData.bearerTokenEnvVar} onChange={(event) => updateForm('bearerTokenEnvVar', event.target.value)} />
+              </label>
+              <label className="block space-y-2 text-sm font-medium text-foreground">
+                <span>{t('mcpForm.envHttpHeaders')}</span>
+                <textarea
+                  value={multilineText.envHttpHeaders}
+                  onChange={(event) => updateMultilineText('envHttpHeaders', event.target.value)}
+                  className="block w-full rounded-lg border border-border bg-background p-2"
+                  rows={2}
+                  placeholder="X-API-Key=API_KEY"
+                />
+              </label>
+            </>
+          )}
+
+          {formData.importMode === 'form' && (!showCodexFields || formData.transport === 'stdio') && (
             <div>
               <label className="mb-2 block text-sm font-medium text-foreground">
                 {t('mcpForm.fields.envVars')}

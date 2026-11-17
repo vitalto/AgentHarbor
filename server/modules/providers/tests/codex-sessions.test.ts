@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { CodexSessionSynchronizer } from '@/modules/providers/list/codex/codex-session-synchronizer.provider.js';
 import { CodexSessionsProvider, parseCodexExecScript, readCodexMemoryCitations } from '@/modules/providers/list/codex/codex-sessions.provider.js';
@@ -82,6 +83,29 @@ test('Codex synchronizer preserves the title assigned when CloudCLI creates a se
       await synchronizer.synchronize();
 
       assert.equal(sessionsDb.getSessionById('app-1')?.custom_name, 'Fix the login redirect');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Codex indexes existing external sessions even with a newer global cursor and follows native renames', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-backfill-'));
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    const file = await writeCodexTranscript(tempRoot, 'external-thread', tempRoot);
+    const namesFile = path.join(tempRoot, '.codex', 'session_index.jsonl');
+    await writeFile(namesFile, JSON.stringify({ id: 'external-thread', thread_name: 'First title' }));
+    await withIsolatedDatabase(async () => {
+      const synchronizer: IProviderSessionSynchronizer = new CodexSessionSynchronizer();
+      assert.equal(await synchronizer.synchronize(new Date(Date.now() + 100_000)), 1);
+      assert.equal(sessionsDb.getSessionById('external-thread')?.jsonl_path, file);
+      assert.equal(await synchronizer.synchronize(), 0);
+      await writeFile(namesFile, ['First title', 'Native rename'].map(thread_name =>
+        JSON.stringify({ id: 'external-thread', thread_name })).join('\n'));
+      assert.equal(await synchronizer.synchronize(), 1);
+      assert.equal(sessionsDb.getSessionById('external-thread')?.custom_name, 'Native rename');
     });
   } finally {
     restoreHomeDir();

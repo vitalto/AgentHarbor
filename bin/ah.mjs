@@ -13,10 +13,10 @@ const HELP = `Usage: ah <command> [options]
                                    Start a session (project defaults to the current directory)
   send <session> [text]            Send a message; a busy session queues it
   read <session> [--last N]        Last N messages (default 10)
-  usage [session]                  Context use (default: the calling Claude session)
+  usage [session]                  Context use (default: the calling agent session)
   models [--provider claude|codex]  Models and effort levels for --model / --effort
   notify [--title T] [text]        Push a notification to the user's subscribed browsers;
-                                   inside a Claude session it opens that session's chat
+                                   inside an agent session it opens that session's chat
 
 new and send take --model M --effort E (applied when the session starts its turn;
 a busy session keeps its model for a queued message). Without [text] the message is
@@ -104,17 +104,17 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+function callingThreadId() {
+  return process.env.CODEX_THREAD_ID || process.env.CODEX_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID;
+}
+
 async function findOwnSessionId(config) {
-  const providerSessionId = process.env.CLAUDE_CODE_SESSION_ID;
+  const providerSessionId = callingThreadId();
   if (!providerSessionId) {
-    fail('Name a session: this shell is not inside a Claude session.');
+    fail('Name a session: this shell is not inside a provider session.');
   }
-  const windows = await api(config, 'GET', '/providers/agents/windows');
-  const own = windows.find((window) => window.providerSessionId === providerSessionId);
-  if (!own) {
-    fail(`This Claude session (${providerSessionId}) is not an AgentHarbor session.`);
-  }
-  return own.sessionId;
+  const session = await api(config, 'GET', `/providers/sessions/${encodeURIComponent(providerSessionId)}`);
+  return session.sessionId;
 }
 
 function sendBody(content, values) {
@@ -194,7 +194,7 @@ const commands = {
     const { devices } = await api(config, 'POST', '/notifications/send', {
       message: await readMessageText(positionals),
       title: values.title,
-      sessionId: process.env.CLAUDE_CODE_SESSION_ID,
+      sessionId: callingThreadId(),
     });
     if (devices === 0) {
       fail('Not delivered: no browser takes messages from agents (Settings -> Notifications).');

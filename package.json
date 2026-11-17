@@ -2,7 +2,7 @@
   "name": "agentharbor",
   "version": "0.1.0",
   "productName": "AgentHarbor",
-  "description": "Web UI for your live AI CLI agents (Claude Code in tmux)",
+  "description": "Web UI for live Claude Code and Codex agents in tmux",
   "type": "module",
   "main": "dist-server/server/index.js",
   "bin": {
@@ -76,7 +76,7 @@
     "@codemirror/merge": "^6.11.1",
     "@codemirror/theme-one-dark": "^6.1.2",
     "@iarna/toml": "^2.2.5",
-    "@openai/codex-sdk": "^0.169.0",
+    "@openai/codex": "0.169.0",
     "@replit/codemirror-minimap": "^0.5.2",
     "@tailwindcss/typography": "^0.5.16",
     "@uiw/react-codemirror": "^4.23.13",

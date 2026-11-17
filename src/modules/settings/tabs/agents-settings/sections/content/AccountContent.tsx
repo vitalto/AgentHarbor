@@ -1,6 +1,7 @@
 import { AlertTriangle, LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { LLM_PROVIDER_NAMES } from '@/shared/constants';
 import { Badge, Button, LLMProviderLogo } from '@/shared/ui';
 import type { AgentProvider, ProviderAuthStatus, ProviderAuthSubscriptionOverride } from '@/shared/types';
 
@@ -8,27 +9,6 @@ type AccountContentProps = {
   agent: AgentProvider;
   authStatus: ProviderAuthStatus;
   onLogin: () => void;
-};
-
-type AgentVisualConfig = {
-  name: string;
-  bgClass: string;
-  borderClass: string;
-  textClass: string;
-  subtextClass: string;
-  buttonClass: string;
-  description?: string;
-};
-
-const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
-  claude: {
-    name: 'Claude',
-    bgClass: 'bg-blue-50 dark:bg-blue-900/20',
-    borderClass: 'border-blue-200 dark:border-blue-800',
-    textClass: 'text-blue-900 dark:text-blue-100',
-    subtextClass: 'text-blue-700 dark:text-blue-300',
-    buttonClass: 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800',
-  },
 };
 
 type SubscriptionOverrideNoticeProps = {
@@ -72,32 +52,34 @@ function SubscriptionOverrideNotice({ override }: SubscriptionOverrideNoticeProp
 /** Rendered by AgentCategoryContentSection for the "account" category to show sign-in state for one provider. */
 export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {
   const { t } = useTranslation('settings');
-  const config = agentConfig[agent];
+  const name = LLM_PROVIDER_NAMES[agent];
 
   return (
     <div className="space-y-6">
       <div className="mb-4 flex items-center gap-3">
         <LLMProviderLogo provider={agent} className="h-6 w-6" />
         <div>
-          <h3 className="text-lg font-medium text-foreground">{config.name}</h3>
+          <h3 className="text-lg font-medium text-foreground">{name}</h3>
           <p className="text-sm text-muted-foreground">
-            {t(`agents.account.${agent}.description`, {
-              defaultValue: config.description || `${config.name} CLI assistant`,
-            })}
+            {t(`agents.account.${agent}.description`)}
           </p>
         </div>
       </div>
 
-      <div className={`${config.bgClass} border ${config.borderClass} rounded-lg p-4`}>
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <div className="flex-1">
-              <div className={`font-medium ${config.textClass}`}>
+              <div className="font-medium text-blue-900 dark:text-blue-100">
                 {t('agents.connectionStatus')}
               </div>
-              <div className={`text-sm ${config.subtextClass}`}>
+              <div className="text-sm text-blue-700 dark:text-blue-300">
                 {authStatus.loading ? (
                   t('agents.authStatus.checkingAuth')
+                ) : authStatus.installed === false ? (
+                  t('agents.authStatus.cliMissing', { agent: name })
+                ) : authStatus.authenticated && authStatus.method === 'api_key' && !authStatus.email ? (
+                  t('agents.authStatus.apiKey')
                 ) : authStatus.authenticated ? (
                   t('agents.authStatus.loggedInAs', {
                     email: authStatus.email || t('agents.authStatus.authenticatedUser'),
@@ -132,18 +114,18 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
             <div className="border-t border-border/50 pt-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className={`font-medium ${config.textClass}`}>
+                  <div className="font-medium text-blue-900 dark:text-blue-100">
                     {authStatus.authenticated ? t('agents.login.reAuthenticate') : t('agents.login.title')}
                   </div>
-                  <div className={`text-sm ${config.subtextClass}`}>
+                  <div className="text-sm text-blue-700 dark:text-blue-300">
                     {authStatus.authenticated
                       ? t('agents.login.reAuthDescription')
-                      : t('agents.login.description', { agent: config.name })}
+                      : t('agents.login.description', { agent: name })}
                   </div>
                 </div>
                 <Button
                   onClick={onLogin}
-                  className={`${config.buttonClass} text-white`}
+                  className="bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800"
                   size="sm"
                 >
                   <LogIn className="mr-2 h-4 w-4" />
@@ -153,7 +135,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
             </div>
           )}
 
-          {authStatus.error && (
+          {authStatus.error && authStatus.installed !== false && (
             <div className="border-t border-border/50 pt-4">
               <div className="text-sm text-red-600 dark:text-red-400">
                 {t('agents.error', { error: authStatus.error })}

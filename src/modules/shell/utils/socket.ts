@@ -1,3 +1,4 @@
+import type { LLMProvider } from '@/shared/types';
 import { IS_PLATFORM } from '@/shared/utils';
 import { getStoredAuthToken } from '@/shared/authToken';
 
@@ -8,6 +9,7 @@ type ShellInitMessage = {
   projectPath: string;
   sessionId: string | null;
   isPlainShell: boolean;
+  loginProvider?: LLMProvider;
   cols: number;
   rows: number;
 };

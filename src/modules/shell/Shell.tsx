@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import '@xterm/xterm/css/xterm.css';
-import type { Project, ProjectSession } from '@/shared/types';
+import type { LLMProvider, Project, ProjectSession } from '@/shared/types';
 import { useShellRuntime } from '@/modules/shell/hooks/useShellRuntime';
 import { sendSocketMessage } from '@/modules/shell/utils/socket';
 import { getSessionTitle } from '@/shared/utils';
@@ -26,6 +26,7 @@ type CliPromptOption = { number: string; label: string };
 type ShellProps = {
   selectedProject?: Project | null;
   selectedSession?: ProjectSession | null;
+  loginProvider?: LLMProvider;
   isPlainShell?: boolean;
   minimal?: boolean;
   autoConnect?: boolean;
@@ -36,6 +37,7 @@ type ShellProps = {
 export default function Shell({
   selectedProject = null,
   selectedSession = null,
+  loginProvider,
   isPlainShell = false,
   minimal = false,
   autoConnect = false,
@@ -61,6 +63,7 @@ export default function Shell({
   } = useShellRuntime({
     selectedProject,
     selectedSession,
+    loginProvider,
     isPlainShell,
     minimal,
     autoConnect,

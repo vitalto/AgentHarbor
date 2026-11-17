@@ -5,6 +5,7 @@ import { ArrowDownIcon } from 'lucide-react';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { useNavigate } from 'react-router-dom';
 
+import { LLM_PROVIDER_NAMES } from '@/shared/constants';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import { useAgentWindows } from '@/shared/hooks/useAgentWindows';
 import { useTuiSessionState } from '@/modules/chat/hooks/useTuiSessionState';
@@ -438,7 +439,7 @@ function ChatInterface({
   const composerActivity = readComposerActivity(sessionActivity);
   const hasActivityIndicator = Boolean(composerActivity && !viewedTui.prompt);
 
-  const selectedProviderLabel = provider === 'codex' ? 'Codex' : t('messageTypes.claude');
+  const selectedProviderLabel = LLM_PROVIDER_NAMES[provider];
 
   if (!selectedProject) {
     return (
@@ -567,7 +568,7 @@ function ChatInterface({
           onTuiChoose={chooseTuiOption}
           onTuiKey={pressTuiKey}
           onTuiQuestionStep={switchTuiQuestion}
-          hasLiveWindow={findWindow(viewedSessionId)?.location === 'tmux'}
+          hasLiveWindow={provider === 'claude' && findWindow(viewedSessionId)?.location === 'tmux'}
           permissionModeControl={viewedSessionId ? <PermissionModePicker sessionId={viewedSessionId} /> : null}
           activity={composerActivity}
           isLoading={isProcessing}

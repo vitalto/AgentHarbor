@@ -82,6 +82,17 @@ async function executeCommand(
   }
 }
 
+test('Codex commands use project instructions and Codex skills', async () => {
+  const context = { provider: 'codex', projectPath: '/fixture/project' };
+  const memory = await executeCommand('/memory', context);
+  assert.match((memory.data as { path: string }).path, /[\\/]AGENTS\.md$/);
+  const help = await executeCommand('/help', context);
+  const content = (help.data as { content: string }).content;
+  assert.match(content, /AGENTS\.md/);
+  assert.match(content, /\$skill-name/);
+  assert.doesNotMatch(content, /Claude|\.claude/i);
+});
+
 test('models command returns models only for the active provider using injected catalog', async () => {
   const result = await executeCommand('/models', { provider: 'claude' });
   const data = result.data as Record<string, unknown>;

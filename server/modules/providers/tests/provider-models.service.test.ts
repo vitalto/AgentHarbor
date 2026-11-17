@@ -25,7 +25,7 @@ const createSessionStore = (
 ) => {
   const sessions = new Map(Object.entries(rows).map(([sessionId, model]) => [
     sessionId,
-    { model, effort: efforts[sessionId] ?? null },
+    { provider: 'claude', model, effort: efforts[sessionId] ?? null },
   ]));
   return {
     sessions,
@@ -428,4 +428,12 @@ test('resolveResumeModel never consults provider-global state', async () => {
 
   assert.equal(model, 'sonnet');
   assert.equal(providerLookups, 0);
+});
+
+test('a model or effort selection cannot overwrite another provider session', () => {
+  const { service, sessions } = createTestService({ sessions: createSessionStore({ session: 'opus' }, { session: 'high' }) });
+  assert.throws(() => service.setSessionModel('codex', 'session', 'other'), { code: 'SESSION_PROVIDER_MISMATCH' });
+  assert.throws(() => service.setSessionEffort('codex', 'session', 'low'), { code: 'SESSION_PROVIDER_MISMATCH' });
+  assert.equal(sessions.getSessionById('session')?.model, 'opus');
+  assert.equal(sessions.getSessionById('session')?.effort, 'high');
 });

@@ -1,571 +1,134 @@
-/**
- * OpenAI Codex SDK Integration
- * =============================
- *
- * This module provides integration with the OpenAI Codex SDK for non-interactive
- * chat sessions. It mirrors the Claude runtime adapter for consistency.
- *
- * ## Usage
- *
- * - codexRuntime.run(command, options, writer, context) - Execute a streamed prompt
- * - codexRuntime.abort(sessionId) - Cancel an active session
- */
-
-import { getAgentConfig, toClaudePath } from '@/modules/tmux/index.js';
-import { Codex } from '@openai/codex-sdk';
-import type { ModelReasoningEffort, Thread, ThreadOptions } from '@openai/codex-sdk';
-
-import {
-  appendFilesInputTag,
-  normalizeAttachmentDescriptors,
-  normalizeImageDescriptors,
-  createCompleteMessage,
-  createNormalizedMessage,
-} from '@/shared/index.js';
+import { sessionsDb } from '@/modules/database/index.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
+import { connectCodexDaemon, ensureCodexWindow, toNativeCodexPath, waitForCodexPrompt } from '@/modules/tmux/index.js';
+import { appendFilesInputTag, createCompleteMessage, createNormalizedMessage, normalizeAttachmentDescriptors, normalizeImageDescriptors } from '@/shared/index.js';
 import type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/index.js';
 
-type ActiveCodexSession = {
-  thread: Thread;
-  codex: Codex;
-  status: 'running' | 'aborted' | 'completed';
-  abortController: AbortController;
-  startedAt: string;
+const turns = new Map<string, () => Promise<boolean>>();
+
+export function interruptCodexTurn(sessionId: string) {
+  return turns.get(sessionId)?.() ?? false;
+}
+
+function normalizeItem(item: AnyRecord): AnyRecord | null {
+  const base = { type: 'item', itemId: item.id, uuid: item.id, status: item.status === 'inProgress' ? 'in_progress' : item.status };
+  switch (item.type) {
+    case 'agentMessage': return { ...base, itemType: 'agent_message', message: { role: 'assistant', content: item.text } };
+    case 'reasoning': return { ...base, itemType: 'reasoning', message: { role: 'assistant', content: (item.summary?.length ? item.summary : item.content)?.join('\n'), isReasoning: true } };
+    case 'commandExecution': return { ...base, itemType: 'command_execution', command: item.command, output: item.aggregatedOutput, exitCode: item.exitCode };
+    case 'fileChange': return { ...base, itemType: 'file_change', changes: item.changes?.map((change: AnyRecord) => ({ ...change, kind: change.kind?.type ?? change.kind })) };
+    case 'mcpToolCall': return { ...item, ...base, itemType: 'mcp_tool_call' };
+    case 'webSearch': return { ...item, ...base, itemType: 'web_search' };
+    default: return null;
+  }
+}
+
+const runtimeDependencies = {
+  connect: connectCodexDaemon, window: ensureCodexWindow, waitForPrompt: waitForCodexPrompt,
+  effort: (id: string) => sessionsDb.getSessionById(id)?.effort,
+  stopped: notifyRunStopped, failed: notifyRunFailed,
 };
 
-const activeCodexSessions = new Map<string, ActiveCodexSession>();
-
-// Codex CLI requires non-whitespace stdin even when --image arguments are
-// present, so attachment-only turns need a small text instruction.
-const CODEX_IMAGE_ONLY_PROMPT = 'Please analyze the attached image(s).';
-
-/**
- * Item types whose in-flight updates are worth showing. These are the ones a
- * user waits on — a shell command's output, an MCP call, and the running plan.
- */
-const PROGRESSIVE_CODEX_ITEM_TYPES = new Set(['command_execution', 'mcp_tool_call', 'todo_list']);
-
-function readUsageNumber(value: unknown) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function extractCodexTokenBudget(event: AnyRecord) {
-  const info = event?.info || event?.payload?.info || event?.usage?.info;
-  const usage = info?.total_token_usage || event?.usage?.total_token_usage || event?.usage;
-  if (!usage || typeof usage !== 'object') {
-    return null;
-  }
-
-  const inputTokens = readUsageNumber(usage.input_tokens);
-  const outputTokens = readUsageNumber(usage.output_tokens);
-  const used = readUsageNumber(usage.total_tokens) || inputTokens + outputTokens;
-
-  return {
-    used,
-    total: readUsageNumber(info?.model_context_window || event?.usage?.model_context_window) || 200000,
-    inputTokens,
-    outputTokens,
-    breakdown: {
-      input: inputTokens,
-      output: outputTokens,
-    },
-  };
-}
-
-/**
- * Transform Codex SDK event to WebSocket message format
- * @param {object} event - SDK event
- * @returns {object} - Transformed event for WebSocket
- */
-function transformCodexEvent(event: AnyRecord): AnyRecord {
-  // Map SDK event types to a consistent format
-  switch (event.type) {
-    case 'item.started':
-    case 'item.updated':
-    case 'item.completed':
-      const item = event.item;
-      if (!item) {
-        return { type: event.type, item: null };
-      }
-
-      // `itemId` is the SDK's stable per-item id. Carrying it through means an
-      // in-progress row and its later completion normalize to the same message
-      // id, so the client updates one transcript entry instead of appending a
-      // new one for every progress tick.
-      switch (item.type) {
-        case 'agent_message':
-          return {
-            type: 'item',
-            itemType: 'agent_message',
-            itemId: item.id,
-            message: {
-              role: 'assistant',
-              content: item.text
-            }
-          };
-
-        case 'reasoning':
-          return {
-            type: 'item',
-            itemType: 'reasoning',
-            itemId: item.id,
-            message: {
-              role: 'assistant',
-              content: item.text,
-              isReasoning: true
-            }
-          };
-
-        case 'command_execution':
-          return {
-            type: 'item',
-            itemType: 'command_execution',
-            itemId: item.id,
-            command: item.command,
-            output: item.aggregated_output,
-            exitCode: item.exit_code,
-            status: item.status
-          };
-
-        case 'file_change':
-          return {
-            type: 'item',
-            itemType: 'file_change',
-            itemId: item.id,
-            changes: item.changes,
-            status: item.status
-          };
-
-        case 'mcp_tool_call':
-          return {
-            type: 'item',
-            itemType: 'mcp_tool_call',
-            itemId: item.id,
-            server: item.server,
-            tool: item.tool,
-            arguments: item.arguments,
-            result: item.result,
-            error: item.error,
-            status: item.status
-          };
-
-        case 'web_search':
-          return {
-            type: 'item',
-            itemType: 'web_search',
-            itemId: item.id,
-            query: item.query
-          };
-
-        case 'todo_list':
-          return {
-            type: 'item',
-            itemType: 'todo_list',
-            itemId: item.id,
-            items: item.items
-          };
-
-        case 'error':
-          return {
-            type: 'item',
-            itemType: 'error',
-            itemId: item.id,
-            message: {
-              role: 'error',
-              content: item.message
-            }
-          };
-
-        default:
-          return {
-            type: 'item',
-            itemType: item.type,
-            itemId: item.id,
-            item: item
-          };
-      }
-
-    case 'turn.started':
-      return {
-        type: 'turn_started'
-      };
-
-    case 'turn.completed':
-      return {
-        type: 'turn_complete',
-        usage: event.usage
-      };
-
-    case 'turn.failed':
-      return {
-        type: 'turn_failed',
-        error: event.error
-      };
-
-    case 'thread.started':
-      return {
-        type: 'thread_started',
-        threadId: event.thread_id || event.id
-      };
-
-    case 'error':
-      return {
-        type: 'error',
-        message: event.message
-      };
-
-    default:
-      return {
-        type: event.type,
-        data: event
-      };
-  }
-}
-
-/**
- * Map permission mode to Codex SDK options
- * @param {string} permissionMode - 'default', 'acceptEdits', or 'bypassPermissions'
- * @returns {object} - { sandboxMode, approvalPolicy }
- */
-function mapPermissionModeToCodexOptions(permissionMode: string): Pick<ThreadOptions, 'sandboxMode' | 'approvalPolicy'> {
-  switch (permissionMode) {
-    case 'acceptEdits':
-      return {
-        sandboxMode: 'workspace-write',
-        approvalPolicy: 'never'
-      };
-    case 'bypassPermissions':
-      return {
-        sandboxMode: 'danger-full-access',
-        approvalPolicy: 'never'
-      };
-    case 'default':
-    default:
-      return {
-        sandboxMode: 'workspace-write',
-        // Current Codex CLI versions reject the retired `untrusted` policy.
-        // Keep sandboxing enabled; exec cannot grant interactive approval requests.
-        approvalPolicy: 'on-request'
-      };
-  }
-}
-
-/**
- * Execute a Codex query with streaming
- * @param {string} command - The prompt to send
- * @param {object} options - Options including cwd, sessionId, model, permissionMode
- * @param {WebSocket|object} ws - WebSocket connection or response writer
- */
-async function queryCodex(
-  command: string,
-  options: AnyRecord = {},
-  ws: ProviderRuntimeWriter,
-  context: ProviderRuntimeContext,
+export async function runCodexTmuxTurn(
+  command: string, options: AnyRecord, writer: ProviderRuntimeWriter, context: ProviderRuntimeContext,
+  dependencies = runtimeDependencies,
 ) {
-  const {
-    sessionId,
-    sessionSummary,
-    cwd,
-    projectPath,
-    model,
-    effort,
-    images,
-    files,
-    permissionMode = 'default'
-  } = options;
-
-  // Callers pass the stable app session id; the SDK resumes threads with the
-  // provider-native id recorded on the session row.
-  const providerSessionId = context.resolveProviderSessionId(sessionId);
-
-  const resolvedModel = await context.resolveResumeModel(sessionId, model);
-
-  const config = { ...getAgentConfig(), windowsClaude: process.platform === 'linux' && /\.exe$/i.test(process.env.AH_CODEX_CMD ?? '') };
-  const nativePath = (value: string) => toClaudePath(value, config);
-  const workingDirectory = nativePath(projectPath || cwd || process.cwd());
-  const { sandboxMode, approvalPolicy } = mapPermissionModeToCodexOptions(permissionMode);
-  const catalog = await context.getProviderModels();
-  const selectedModel = catalog.OPTIONS.find((option) => option.value === resolvedModel) || null;
-  const allowedEfforts = selectedModel?.effort?.values?.map((value) => value.value) || [];
-  const resolvedEffort = typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
-    ? effort as ModelReasoningEffort
-    : undefined;
-
-  let codex: Codex;
-  let thread: Thread;
-  // Provider-native thread id (starts as the resume id, or is captured from
-  // the stream for brand-new sessions).
-  let capturedSessionId = providerSessionId;
-  let sessionCreatedSent = false;
-  let terminalFailure: { message: string } | null = null;
-  // Codex surfaces API failures as streamed error items/turn.failed events, and
-  // then the SDK also throws "Codex Exec exited with code N: <stderr>" once the
-  // process dies. Showing both means the rendered error is followed by a raw
-  // stderr dump of unrelated CLI log lines, so the thrown wrapper is dropped
-  // when the stream already reported the failure.
-  let errorSurfaced = false;
-  const abortController = new AbortController();
-  // Session-map key: the app session id when the caller supplied one, else
-  // the provider-native thread id once captured (legacy/direct API callers).
-  const sessionKey = () => sessionId || capturedSessionId || null;
-
+  const appId: string = options.sessionId;
+  if (!appId) throw new Error('A Codex turn requires an AgentHarbor session id.');
+  const emit = (message: unknown) => writer.send(writer.isWebSocketWriter ? message : JSON.stringify(message));
+  const note = (kind: 'error' | 'status' | 'stream_delta', fields: AnyRecord) =>
+    emit(createNormalizedMessage({ sessionId: appId, provider: 'codex', kind, ...fields }));
+  const notification = { userId: writer.userId ?? null, provider: 'codex', sessionId: options.sessionId, sessionName: options.sessionSummary };
+  let client: Awaited<ReturnType<typeof connectCodexDaemon>> | undefined;
+  let abortRequested = false;
   try {
-    codex = new Codex({ codexPathOverride: process.env.AH_CODEX_CMD || 'codex' });
-
-    const threadOptions: ThreadOptions = {
-      workingDirectory,
-      skipGitRepoCheck: true,
-      sandboxMode,
-      approvalPolicy,
-      model: resolvedModel === 'default' ? undefined : resolvedModel,
-      modelReasoningEffort: resolvedEffort,
+    const { providerSessionId: threadId, pane } = await dependencies.window(appId, false);
+    await dependencies.waitForPrompt(pane);
+    writer.setSessionId?.(threadId);
+    client = await dependencies.connect();
+    const { thread, sandbox, approvalPolicy } = await client.request('thread/resume', { threadId, excludeTurns: true });
+    if (thread?.status?.type === 'active') throw new Error('Codex already has a turn in progress in this session.');
+    const model = await context.resolveResumeModel(appId, options.model);
+    const catalog = await context.getProviderModels();
+    const selected = catalog.OPTIONS.find((entry) => entry.value === (model === 'default' ? catalog.DEFAULT : model));
+    const requestedEffort = options.effort ?? dependencies.effort(appId);
+    const effort = requestedEffort === 'default' ? selected?.effort?.default
+      : selected?.effort?.values?.some((entry) => entry.value === requestedEffort) ? requestedEffort : undefined;
+    const prompt = appendFilesInputTag(command, normalizeAttachmentDescriptors(options.files)
+      .map((file) => ({ ...file, path: toNativeCodexPath(file.path) })));
+    const input = [...(prompt.trim() ? [{ type: 'text', text: prompt, text_elements: [] }] : []),
+      ...normalizeImageDescriptors(options.images).map((image) => ({ type: 'localImage', path: toNativeCodexPath(image.path) }))];
+    const commands = new Map<string, AnyRecord>();
+    const publishItem = (item: AnyRecord) => {
+      const raw = normalizeItem(item);
+      if (raw) for (const message of context.normalizeMessage(raw, appId)) emit(message);
     };
-
-    if (providerSessionId) {
-      thread = codex.resumeThread(providerSessionId, threadOptions);
-    } else {
-      thread = codex.startThread(threadOptions);
-    }
-
-    const registerSession = (id: string | null) => {
-      if (!id) {
-        return;
+    let settle!: (turn: AnyRecord) => void;
+    let fail!: (error: Error) => void;
+    const completion = new Promise<AnyRecord>((resolve, reject) => { settle = resolve; fail = reject; });
+    // The proxy can disconnect before turn/start has returned its response.
+    void completion.catch(() => {});
+    let turnId: string | undefined;
+    let waitingForInput = false;
+    const early: Array<[string, AnyRecord]> = [];
+    const onEvent = (method: string, params: AnyRecord) => {
+      if (params.threadId !== threadId) return;
+      if (!turnId) { early.push([method, params]); return; }
+      if (method === 'thread/status/changed' && params.status?.type === 'active') {
+        const waiting = Boolean(params.status.activeFlags?.length);
+        if (waiting !== waitingForInput) {
+          waitingForInput = waiting;
+          note('status', { text: waiting ? 'Codex is waiting for your response in Terminal.' : 'Working', canInterrupt: true });
+        }
       }
-      activeCodexSessions.set(id, {
-        thread,
-        codex,
-        status: 'running',
-        abortController,
-        startedAt: new Date().toISOString()
-      });
+      if ((params.turnId ?? params.turn?.id) !== turnId) return;
+      if (method === 'turn/completed') { settle(params.turn); return; }
+      if (method === 'item/agentMessage/delta') note('stream_delta', { content: params.delta });
+      if (method === 'thread/tokenUsage/updated') {
+        const usage = params.tokenUsage;
+        if (usage?.last) note('status', { text: 'token_budget', tokenBudget: { used: usage.last.totalTokens, total: usage.modelContextWindow, inputTokens: usage.last.inputTokens, outputTokens: usage.last.outputTokens } });
+      }
+      if (method === 'item/started' && params.item?.type === 'commandExecution') commands.set(params.item.id, params.item);
+      if (method === 'item/commandExecution/outputDelta') {
+        const item = commands.get(params.itemId);
+        if (item) { item.aggregatedOutput = (item.aggregatedOutput || '') + params.delta; publishItem(item); }
+      }
+      if (method === 'item/completed' || method === 'item/started') {
+        if (params.item) publishItem(params.item);
+        if (method === 'item/completed') commands.delete(params.item?.id);
+      }
     };
-
-    if (sessionKey()) {
-      registerSession(sessionKey());
-    }
-
-    // Execute with streaming. Turns with image attachments send structured
-    // input items so Codex reads the images from their local asset paths.
-    const promptWithFiles = appendFilesInputTag(command, normalizeAttachmentDescriptors(files).map(file => ({ ...file, path: nativePath(file.path) })));
-    const normalizedImages = normalizeImageDescriptors(images);
-    const promptWithImageFallback = !promptWithFiles.trim() && normalizedImages.length > 0
-      ? CODEX_IMAGE_ONLY_PROMPT
-      : promptWithFiles;
-    const turnInput = normalizedImages.length > 0
-      ? [{ type: 'text' as const, text: promptWithImageFallback }, ...normalizedImages.map(image => ({ type: 'local_image' as const, path: nativePath(image.path) }))]
-      : promptWithFiles;
-    const streamedTurn = await thread.runStreamed(turnInput, {
-      signal: abortController.signal
+    client.observe(onEvent, fail);
+    const sandboxPolicy = sandbox?.type === 'readOnly' || sandbox?.type === 'workspaceWrite' ? sandbox
+      : { type: 'workspaceWrite', writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false };
+    const result = await client.request('turn/start', { threadId, input, sandboxPolicy,
+      approvalPolicy: approvalPolicy ?? 'on-request',
+      ...(model && model !== 'default' ? { model } : model === 'default' && catalog.DEFAULT !== 'default' ? { model: catalog.DEFAULT } : {}),
+      ...(effort ? { effort } : {}),
     });
-
-    for await (const event of streamedTurn.events) {
-      // Capture thread/session id lazily from the stream (Codex emits this asynchronously).
-      if (event.type === 'thread.started') {
-        const discoveredSessionId = event.thread_id || null;
-        if (discoveredSessionId && !capturedSessionId) {
-          capturedSessionId = discoveredSessionId;
-          registerSession(sessionKey());
-
-          if (ws.setSessionId && typeof ws.setSessionId === 'function') {
-            ws.setSessionId(capturedSessionId);
-          }
-
-          if (!providerSessionId && !sessionCreatedSent) {
-            sessionCreatedSent = true;
-            sendMessage(ws, createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'codex' }));
-          }
-        }
-      }
-
-      // Check if session was aborted
-      if (abortController.signal.aborted) {
-        break;
-      }
-      if (sessionKey()) {
-        const session = activeCodexSessions.get(sessionKey() || '');
-        if (session?.status === 'aborted') {
-          break;
-        }
-      }
-
-      // Progress events used to be dropped, so a long shell command or a
-      // growing plan showed nothing until it finished. They are forwarded now;
-      // every item carries a stable id, so the client replaces the row it
-      // already has rather than stacking a new one per tick. Text items are
-      // still skipped mid-flight because assistant prose arrives through the
-      // separate streaming path.
-      if (
-        (event.type === 'item.started' || event.type === 'item.updated')
-        && !PROGRESSIVE_CODEX_ITEM_TYPES.has(event.item?.type)
-      ) {
-        continue;
-      }
-
-      const transformed = transformCodexEvent(event);
-      if (transformed.type === 'error' || transformed.itemType === 'error') {
-        errorSurfaced = true;
-      }
-
-      // Normalize the transformed event into NormalizedMessage(s) via adapter
-      const normalizedMsgs = context.normalizeMessage(transformed, capturedSessionId || sessionId || null);
-      for (const msg of normalizedMsgs) {
-        sendMessage(ws, msg);
-      }
-
-      if (event.type === 'turn.failed' && !terminalFailure) {
-        terminalFailure = event.error || new Error('Turn failed');
-        errorSurfaced = true;
-        // Notifications are app-facing, so they carry the app session id.
-        notifyRunFailed({
-          userId: ws?.userId || null,
-          provider: 'codex',
-          sessionId: sessionId || capturedSessionId || null,
-          sessionName: sessionSummary,
-          error: terminalFailure
-        });
-      }
-
-      // Extract and send token usage if available (normalized to match Claude format)
-      if (event.type === 'turn.completed') {
-        const tokenBudget = extractCodexTokenBudget(event);
-        if (tokenBudget) {
-          sendMessage(ws, createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget, sessionId: capturedSessionId || sessionId || null, provider: 'codex' }));
-        }
-      }
+    turnId = result.turn?.id;
+    if (!turnId) throw new Error('Codex did not return a turn id.');
+    const connection = client;
+    turns.set(appId, async () => {
+      abortRequested = true;
+      try { await connection.request('turn/interrupt', { threadId, turnId }); return true; }
+      catch { abortRequested = false; return false; }
+    });
+    for (const [method, params] of early) onEvent(method, params);
+    const turn = await completion;
+    if (turn.status === 'failed') throw new Error(turn.error?.message || 'Codex turn failed.');
+    if (!abortRequested) {
+      emit(createCompleteMessage({ provider: 'codex', sessionId: appId, actualSessionId: threadId, exitCode: 0, aborted: turn.status === 'interrupted' }));
+      dependencies.stopped({ ...notification, stopReason: turn.status });
     }
-
-    // Send the terminal completion event — skipped for aborted runs, whose
-    // terminal `complete` (aborted: true) was already sent by abort-session.
-    const runSession = activeCodexSessions.get(sessionKey() || '');
-    const runAborted = runSession?.status === 'aborted' || abortController.signal.aborted;
-    if (!runAborted) {
-      sendMessage(ws, createCompleteMessage({
-        provider: 'codex',
-        sessionId: capturedSessionId || sessionId || null,
-        actualSessionId: capturedSessionId || thread.id || sessionId || null,
-        exitCode: terminalFailure ? 1 : 0,
-      }));
-      if (!terminalFailure) {
-        notifyRunStopped({
-          userId: ws?.userId || null,
-          provider: 'codex',
-          sessionId: sessionId || capturedSessionId || null,
-          sessionName: sessionSummary,
-          stopReason: 'completed'
-        });
-      }
-    }
-
   } catch (error) {
-    const session = activeCodexSessions.get(sessionKey() || '');
-    const runError = error instanceof Error ? error : new Error(String(error));
-    const wasAborted =
-      session?.status === 'aborted' ||
-      runError.name === 'AbortError' ||
-      runError.message.toLowerCase().includes('aborted');
-
-    if (!wasAborted) {
-      console.error('[Codex] Error:', error);
-
-      if (!errorSurfaced) {
-        // Check if Codex SDK is available for a clearer error message
-        const installed = await context.isProviderInstalled();
-        const errorContent = !installed
-          ? 'Codex CLI is not configured. Please set up authentication first.'
-          : runError.message;
-
-        sendMessage(ws, createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'codex' }));
-      }
-      sendMessage(ws, createCompleteMessage({
-        provider: 'codex',
-        sessionId: capturedSessionId || sessionId || null,
-        exitCode: 1,
-      }));
-      if (!terminalFailure) {
-        notifyRunFailed({
-          userId: ws?.userId || null,
-          provider: 'codex',
-          sessionId: sessionId || capturedSessionId || null,
-          sessionName: sessionSummary,
-          error
-        });
-      }
-    }
-
+    note('error', { content: error instanceof Error ? error.message : String(error) });
+    emit(createCompleteMessage({ provider: 'codex', sessionId: appId, exitCode: 1 }));
+    dependencies.failed({ ...notification, error });
   } finally {
-    // Update session status
-    if (sessionKey()) {
-      const session = activeCodexSessions.get(sessionKey() || '');
-      if (session) {
-        session.status = session.status === 'aborted' ? 'aborted' : 'completed';
-      }
-    }
+    turns.delete(appId);
+    client?.close();
   }
 }
 
-/**
- * Abort an active Codex session
- * @param {string} sessionId - Session ID to abort
- * @returns {boolean} - Whether abort was successful
- */
-function abortCodexSession(sessionId: string) {
-  const session = activeCodexSessions.get(sessionId);
-
-  if (!session) {
-    return false;
-  }
-
-  session.status = 'aborted';
-  try {
-    session.abortController?.abort();
-  } catch (error) {
-    console.warn(`[Codex] Failed to abort session ${sessionId}:`, error);
-  }
-
-  return true;
-}
-
-/** Used by the providers module's CodexProvider to run and abort SDK turns. */
-export const codexRuntime = {
-  run: queryCodex,
-  abort: abortCodexSession,
-};
-
-/**
- * Helper to send message via WebSocket or writer
- * @param {WebSocket|object} ws - WebSocket or response writer
- * @param {object} data - Data to send
- */
-function sendMessage(ws: ProviderRuntimeWriter, data: unknown) {
-  try {
-    if (ws.isWebSocketWriter) {
-      // The gateway writer handles stringification
-      ws.send(data);
-    } else if (typeof ws.send === 'function') {
-      // Raw WebSocket - stringify here
-      ws.send(JSON.stringify(data));
-    }
-  } catch (error) {
-    console.error('[Codex] Error sending message:', error);
-  }
-}
-
-// Clean up old completed sessions periodically
-const completedSessionCleanupTimer = setInterval(() => {
-  const now = Date.now();
-  const maxAge = 30 * 60 * 1000; // 30 minutes
-
-  for (const [id, session] of activeCodexSessions.entries()) {
-    if (session.status !== 'running') {
-      const startedAt = new Date(session.startedAt).getTime();
-      if (now - startedAt > maxAge) {
-        activeCodexSessions.delete(id);
-      }
-    }
-  }
-}, 5 * 60 * 1000); // Every 5 minutes
-
-// Runtime cleanup should not keep focused tests or one-off scripts alive after
-// their provider work has completed.
-completedSessionCleanupTimer.unref?.();
+export const codexRuntime = { run: runCodexTmuxTurn, abort: interruptCodexTurn };

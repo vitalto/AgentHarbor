@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { TFunction } from 'i18next';
 import { beforeEach, test, vi } from 'vitest';
 
-import type { Project, RecentConversationListItem } from '@/shared/types';
+import type { Project, RecentConversationListItem, ServerEvent } from '@/shared/types';
 
 /**
  * The Conversations list keeps its own copy of each session's title and is
@@ -46,8 +46,15 @@ const buildProject = (summaries: Record<string, string>): Project => ({
   sessionMeta: { hasMore: false, total: Object.keys(summaries).length },
 });
 
+let emitEvent: (event: ServerEvent) => void;
+const subscribe = (listener: typeof emitEvent) => {
+  emitEvent = listener;
+  return () => {};
+};
+
 const renderController = (initialProjects: Project[]) => renderHook(
   ({ projects }: { projects: Project[] }) => useSidebarController({
+    subscribe,
     projects,
     selectedProject: null,
     selectedSession: null,
@@ -111,4 +118,19 @@ test('rows keep their identity, and an unnamed session keeps its id, when nothin
   rerender({ projects: [buildProject({ 'session-1': 'Original title', 'session-2': '' })] });
 
   assert.equal(result.current.recentConversations, rowsBefore);
+});
+
+test('an externally indexed Codex conversation appears while the Conversations tab is open', async () => {
+  const { result } = await openConversationsTab([buildProject({ 'session-1': 'Original title', 'session-2': '' })]);
+  const external = { ...conversation('external', 'Editor session'), provider: 'codex' as const };
+  recentConversationsResponse.mockResolvedValue({
+    ok: true,
+    json: async () => ({ data: {
+      conversations: [external, conversation('session-1', 'Original title'), conversation('session-2', 'session-2')],
+      total: 3, hasMore: false,
+    } }),
+  });
+  act(() => emitEvent({ kind: 'session_upserted', sessionId: 'external' }));
+  await waitFor(() => assert.equal(result.current.recentConversations[0]?.sessionId, 'external'));
+  assert.equal(result.current.recentConversations[0].provider, 'codex');
 });

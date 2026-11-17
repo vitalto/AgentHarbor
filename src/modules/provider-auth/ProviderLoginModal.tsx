@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
 import { StandaloneShell } from '@/modules/standalone-shell';
+import { LLM_PROVIDER_NAMES } from '@/shared/constants';
 import { IS_PLATFORM } from '@/shared/utils';
 import type { LLMProvider } from '@/shared/types';
 
@@ -30,15 +31,13 @@ type ProviderLoginModalProps = {
   isAuthenticated?: boolean;
 };
 
-const CLAUDE_LOGIN_TITLE = 'Claude CLI Login';
-const CLAUDE_LOGIN_HINT = 'Run "claude /login" in this shell, or type /login inside any Claude session window.';
-
 /**
  * Used by the onboarding and settings modules to open a login shell (a tmux window in the home
  * directory). Commands are no longer launched for the user, so the modal only explains what to run.
  */
 export default function ProviderLoginModal({
   isOpen,
+  provider = 'claude',
   onClose,
   onComplete,
 }: ProviderLoginModalProps) {
@@ -59,7 +58,7 @@ export default function ProviderLoginModal({
     >
       <div className="flex h-3/4 w-full max-w-4xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-800 max-md:m-0 max-md:h-full max-md:max-w-none max-md:rounded-none md:m-4 md:h-3/4 md:max-w-4xl md:rounded-lg">
         <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{CLAUDE_LOGIN_TITLE}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{t('auth:providerLogin.title', { provider: LLM_PROVIDER_NAMES[provider] })}</h3>
           <button
             onClick={handleClose}
             className="text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300"
@@ -69,10 +68,10 @@ export default function ProviderLoginModal({
           </button>
         </div>
 
-        <p className="border-b border-gray-200 px-4 py-2 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-300">{CLAUDE_LOGIN_HINT}</p>
+        <p className="border-b border-gray-200 px-4 py-2 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-300">{t(`auth:providerLogin.${provider}`)}</p>
 
         <div className="flex-1 overflow-hidden">
-          <StandaloneShell project={DEFAULT_PROJECT_FOR_EMPTY_SHELL} isPlainShell={true} minimal={true} />
+          <StandaloneShell project={DEFAULT_PROJECT_FOR_EMPTY_SHELL} isPlainShell loginProvider={provider} minimal />
         </div>
       </div>
     </div>

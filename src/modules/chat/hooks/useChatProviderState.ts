@@ -184,7 +184,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setProviderModelsLoading(true);
 
     try {
-      const results = await Promise.all(
+      const results = await Promise.allSettled(
         PROVIDERS.map(async (p) => {
           const response = await api.providers.models(p);
           const body = (await response.json()) as ProviderModelsApiResponse;
@@ -203,7 +203,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       const nextCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>> = {};
 
       PROVIDERS.forEach((p, i) => {
-        const entry = results[i];
+        const result = results[i];
+        const entry = result.status === 'fulfilled' && result.value;
         if (!entry) {
           return;
         }
@@ -274,8 +275,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     if (typeof capabilitySupport === 'boolean') {
       return capabilitySupport;
     }
-    return Boolean(FALLBACK_PROVIDER_EFFORT_VALUES[targetProvider]?.length);
-  }, [providerCapabilities]);
+    return Boolean(providerModelCatalog[targetProvider]?.OPTIONS.some((option) => option.effort?.values.length)
+      || FALLBACK_PROVIDER_EFFORT_VALUES[targetProvider]?.length);
+  }, [providerCapabilities, providerModelCatalog]);
 
   const pickStoredOrCurrent = (
     storageKey: string,
@@ -283,6 +285,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     def: ProviderModelsDefinition,
   ): string => {
     const stored = localStorage.getItem(storageKey);
+    if (def.PARTIAL) return stored || current || def.DEFAULT;
     if (stored && def.OPTIONS.some((o) => o.value === stored)) {
       return stored;
     }
@@ -332,6 +335,10 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     model: string,
     currentEffort: string,
   ): string => {
+    const catalog = providerModelCatalog[targetProvider];
+    if (!catalog || (catalog.PARTIAL && !getModelOption(targetProvider, model)?.effort)) {
+      return currentEffort || DEFAULT_EFFORT_VALUE;
+    }
     const allowedValues = getAllowedEffortValues(targetProvider, model);
     if (allowedValues.length === 0) {
       return DEFAULT_EFFORT_VALUE;
@@ -346,7 +353,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     }
 
     return DEFAULT_EFFORT_VALUE;
-  }, [getAllowedEffortValues]);
+  }, [getAllowedEffortValues, getModelOption, providerModelCatalog]);
 
   // One reconciliation pass over every provider, mirroring the effort effect
   // below. This was four copy-pasted eleven-line effects, one per provider.

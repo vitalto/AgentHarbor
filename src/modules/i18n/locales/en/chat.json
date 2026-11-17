@@ -329,7 +329,7 @@
       "models": "Browse available models for the active provider.",
       "cost": "Review token usage for the active session.",
       "status": "Inspect runtime, version, provider, and environment status.",
-      "memory": "Open the project CLAUDE.md memory file.",
+      "memory": "Open the project memory file.",
       "config": "Open settings and configuration.",
       "help": "Show command documentation and syntax."
     },

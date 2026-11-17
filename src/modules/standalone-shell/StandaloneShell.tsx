@@ -1,4 +1,4 @@
-import type { Project, ProjectSession } from '@/shared/types';
+import type { LLMProvider, Project, ProjectSession } from '@/shared/types';
 import { Shell } from '@/modules/shell';
 import StandaloneShellEmptyState from '@/modules/standalone-shell/StandaloneShellEmptyState';
 import StandaloneShellHeader from '@/modules/standalone-shell/StandaloneShellHeader';
@@ -6,6 +6,7 @@ import StandaloneShellHeader from '@/modules/standalone-shell/StandaloneShellHea
 type StandaloneShellProps = {
   project?: Project | null;
   session?: ProjectSession | null;
+  loginProvider?: LLMProvider;
   isPlainShell?: boolean | null;
   isActive?: boolean;
   autoConnect?: boolean;
@@ -25,6 +26,7 @@ type StandaloneShellProps = {
 export default function StandaloneShell({
   project = null,
   session = null,
+  loginProvider,
   isPlainShell = null,
   isActive = true,
   autoConnect = true,
@@ -54,6 +56,7 @@ export default function StandaloneShell({
         <Shell
           selectedProject={project}
           selectedSession={session}
+          loginProvider={loginProvider}
           isPlainShell={shouldUsePlainShell}
           isActive={isActive}
           minimal={minimal}

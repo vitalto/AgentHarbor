@@ -63,7 +63,7 @@ function createHarness(overrides: {
   const killedWindows: string[] = [];
   const spawns: SpawnCall[] = [];
   const ptys: Array<ReturnType<typeof createFakePty>> = [];
-  const newWindows: Array<{ cwd: string; name: string; command: string }> = [];
+  const newWindows: Array<{ cwd: string; name: string; command: string; env?: Record<string, string> }> = [];
   const tmux = {
     ensureAgentWindow: overrides.ensureAgentWindow ?? (async (appSessionId: string): Promise<PaneSession> => ({
       pane: pane('@5', 'project', { cwd: '/mnt/d/Develop/X' }),
@@ -74,7 +74,7 @@ function createHarness(overrides: {
     })),
     hasSession: async () => overrides.hasSession ?? true,
     listPanes: async () => overrides.panes ?? [],
-    newWindow: async (input: { cwd: string; name: string; command: string }) => {
+    newWindow: async (input: { cwd: string; name: string; command: string; env?: Record<string, string> }) => {
       newWindows.push(input);
       return pane('@9', input.name, { cwd: input.cwd });
     },
@@ -107,6 +107,28 @@ function viewerArgsFor(windowId: string, viewerName: string): string[] {
     ';', 'select-window', '-t', windowId,
   ];
 }
+
+test('Codex login opens a shell in the runtime profile and waits for the user', async () => {
+  const originalHome = process.env.AH_CODEX_HOME;
+  const originalCommand = process.env.AH_CODEX_CMD;
+  try {
+    process.env.AH_CODEX_HOME = '/tmp/test-profile';
+    process.env.AH_CODEX_CMD = '/opt/test cli/codex.exe';
+    const { socket, newWindows } = createHarness();
+    socket.emit('message', JSON.stringify({ type: 'init', isPlainShell: true, loginProvider: 'codex' }));
+    await settle();
+    const [window] = newWindows;
+    assert.match(window.name, /^sh:login:codex:/);
+    assert.equal(window.env?.AH_CODEX_CMD, process.env.AH_CODEX_CMD);
+    assert.equal(window.env?.CODEX_HOME, process.env.AH_CODEX_HOME);
+    assert.equal(window.command, 'exec "${SHELL:-/bin/bash}" -l');
+  } finally {
+    if (originalHome === undefined) delete process.env.AH_CODEX_HOME;
+    else process.env.AH_CODEX_HOME = originalHome;
+    if (originalCommand === undefined) delete process.env.AH_CODEX_CMD;
+    else process.env.AH_CODEX_CMD = originalCommand;
+  }
+});
 
 test('a session terminal attaches a grouped tmux viewer to the session window', async () => {
   const previousTmux = process.env.TMUX;

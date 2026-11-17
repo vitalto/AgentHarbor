@@ -29,6 +29,8 @@ export type ProviderModelOption = {
  * library; the server derives it from the provider, not from the options, and it is empty without effort support.
  */
 export type ProviderModelsDefinition = {
+  /** The native catalog was unavailable, so missing entries cannot invalidate saved choices. */
+  PARTIAL?: true;
   OPTIONS: ProviderModelOption[];
   DEFAULT: string;
   EFFORT_LEVELS?: string[];
@@ -746,6 +748,7 @@ export type StatusCommandData = {
 
 /** Result payload of the chat `/help` slash command, carrying either pre-rendered help content or the list of available commands for the command modal's help view. */
 export type HelpCommandData = {
+  provider?: LLMProvider;
   content?: string;
   format?: string;
   commands?: Array<{
@@ -1208,6 +1211,7 @@ export type McpFormState = {
 /** The request body sent when creating or updating a provider's MCP server, built from McpFormState so only the fields valid for the chosen transport are included. */
 export type UpsertProviderMcpServerPayload = {
   name: string;
+  previousName?: string;
   scope: McpScope;
   transport: McpTransport;
   workspacePath?: string;
@@ -1311,6 +1315,7 @@ export type ProviderAuthSubscriptionOverride = {
 
 /** Sign-in state of one LLM provider CLI - whether it is authenticated, the account email and method, plus in-flight loading and error state - polled by the provider-auth module and rendered by the settings and onboarding account views. `subscriptionOverride` is only present when an API key is bypassing a valid subscription login. */
 export type ProviderAuthStatus = {
+  installed?: boolean;
   authenticated: boolean;
   email: string | null;
   method: string | null;
@@ -1345,20 +1350,11 @@ export type QuickSettingsHandleStyle = CSSProperties;
 
 //----------------- SETTINGS ------------
 
-/** The per-provider agent context the agents settings tab builds once and hands to each of its sections. */
-export type AgentContextByProvider = Record<AgentProvider, AgentContext>;
-
-/** The per-provider data the agents settings tab hands to its sections: that provider's auth status and the callback that starts its login flow. */
-export type AgentContext = {
-  authStatus: ProviderAuthStatus;
-  onLogin: () => void;
-};
-
 /** Identifier of a top-level section in the settings dialog; use it whenever a tab is stored, compared or requested so deep links, the sidebar and the command palette all agree on the same set of names. */
 export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'notifications' | 'plugins' | 'about';
 
 /** The coding-agent CLI a settings screen is configuring, aliasing LLMProvider so agent-scoped settings read as being about an agent rather than a chat model. */
-export type AgentProvider = 'claude';
+export type AgentProvider = LLMProvider;
 
 /** One category of per-agent configuration in the agents settings tab (account, permissions, MCP servers or skills); use it to key which panel the tab renders. */
 export type AgentCategory = 'account' | 'permissions' | 'runtime' | 'mcp' | 'skills';

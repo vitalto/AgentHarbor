@@ -311,7 +311,7 @@
       "models": "Telusuri model yang tersedia untuk provider aktif.",
       "cost": "Tinjau penggunaan token untuk sesi aktif.",
       "status": "Periksa status runtime, versi, provider, dan environment.",
-      "memory": "Buka file memori CLAUDE.md proyek.",
+      "memory": "Buka file memori proyek.",
       "config": "Buka pengaturan dan konfigurasi.",
       "help": "Tampilkan dokumentasi dan sintaks perintah."
     },

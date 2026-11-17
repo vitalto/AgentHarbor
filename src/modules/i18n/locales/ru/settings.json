@@ -1,4 +1,12 @@
 {
+  "mcpServersAdd": {
+    "menuLabel": "Добавить MCP-сервер",
+    "globalButtonLabel": "Добавить для всех агентов",
+    "providerButtonLabel": "Добавить для {{provider}}",
+    "globalAddDescription": "Добавляет один MCP-сервер stdio или HTTP для всех агентов ({{providers}}).",
+    "providerAddDescription": "Изменяет конфигурацию {{provider}}.",
+    "globalModalDescription": "Конфигурация будет записана для всех агентов ({{providers}}). Поддерживаются транспорты stdio и HTTP."
+  },
   "title": "Настройки",
   "tabs": {
     "account": "Аккаунт",
@@ -206,6 +214,10 @@
     }
   },
   "mcpForm": {
+    "workingDirectory": "Рабочий каталог",
+    "envVarNames": "Имена переменных окружения, по одному на строку",
+    "bearerTokenEnvVar": "Имя переменной окружения для токена Bearer",
+    "envHttpHeaders": "HTTP-заголовки из окружения (Заголовок=ИМЯ_ПЕРЕМЕННОЙ)",
     "title": {
       "add": "Добавить MCP сервер",
       "edit": "Редактировать MCP сервер"
@@ -331,6 +343,8 @@
   },
   "agents": {
     "authStatus": {
+      "cliMissing": "CLI {{agent}} не установлен или не найден на сервере",
+      "apiKey": "Вход по ключу API",
       "checking": "Проверка...",
       "connected": "Подключен",
       "notConnected": "Не подключен",
@@ -340,6 +354,9 @@
       "authenticatedUser": "аутентифицированный пользователь"
     },
     "account": {
+      "codex": {
+        "description": "CLI-ассистент OpenAI Codex"
+      },
       "claude": {
         "description": "AI-ассистент Anthropic Claude"
       }
@@ -481,6 +498,7 @@
   "mcpServers": {
     "title": "MCP серверы",
     "description": {
+      "codex": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Codex",
       "claude": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Claude"
     },
     "addButton": "Добавить MCP сервер",

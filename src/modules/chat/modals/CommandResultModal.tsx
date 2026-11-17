@@ -26,6 +26,7 @@ import type {
   ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,StatusCommandData
 } from '@/shared/types';
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
+import { getProviderDisplayName } from '@/shared/utils';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
 
 type CommandResultModalProps = {
@@ -62,11 +63,6 @@ type CommandEntry = {
   namespace?: string;
 };
 
-const PROVIDER_LABELS: Record<string, string> = {
-  claude: 'Claude',
-  codex: 'Codex',
-};
-
 const FALLBACK_COMMANDS: CommandEntry[] = [
   { name: '/models', descriptionKey: 'chat:misc.fallbackCommands.models' },
   { name: '/cost', descriptionKey: 'chat:misc.fallbackCommands.cost' },
@@ -75,14 +71,6 @@ const FALLBACK_COMMANDS: CommandEntry[] = [
   { name: '/config', descriptionKey: 'chat:misc.fallbackCommands.config' },
   { name: '/help', descriptionKey: 'chat:misc.fallbackCommands.help' },
 ];
-
-const getProviderLabel = (provider: string | undefined, fallback = 'Unknown') => {
-  if (!provider) {
-    return fallback;
-  }
-
-  return PROVIDER_LABELS[provider] || provider;
-};
 
 const formatNumber = (value: number) => {
   if (!Number.isFinite(value)) {
@@ -214,9 +202,15 @@ function HelpContent({ data }: { data: HelpCommandData }) {
           </div>
           <div className="space-y-2 text-sm text-muted-foreground">
             <p><code className="text-foreground">/command arg1 arg2</code></p>
-            <p><code className="text-foreground">$ARGUMENTS</code> passes all args.</p>
-            <p><code className="text-foreground">$1</code>, <code className="text-foreground">$2</code> pass positional args.</p>
-            <p><code className="text-foreground">@file</code> includes file contents.</p>
+            {data.provider === 'codex' ? (
+              <p><code className="text-foreground">$skill-name</code></p>
+            ) : (
+              <>
+                <p><code className="text-foreground">$ARGUMENTS</code> passes all args.</p>
+                <p><code className="text-foreground">$1</code>, <code className="text-foreground">$2</code> pass positional args.</p>
+                <p><code className="text-foreground">@file</code> includes file contents.</p>
+              </>
+            )}
           </div>
         </div>
 
@@ -261,11 +255,11 @@ function ModelsContent({
   const [pendingSessionModel, setPendingSessionModel] = useState<string | null>(null);
   const [selectionNotice, setSelectionNotice] = useState<string | null>(null);
   const [managingModels, setManagingModels] = useState(false);
-  const currentProvider = (data?.current?.provider || 'claude') as LLMProvider;
+  const currentProvider = (data?.current?.provider || activeProvider) as LLMProvider;
   const currentModel = activeProvider === currentProvider
     ? activeProviderModel
     : pendingSessionModel ?? data?.current?.model ?? 'Unknown';
-  const providerLabel = data?.current?.providerLabel || getProviderLabel(currentProvider);
+  const providerLabel = data?.current?.providerLabel || getProviderDisplayName(currentProvider, currentProvider || 'Unknown');
   const liveDefinition = providerModelCatalog[currentProvider];
   const availableOptions = useMemo<ProviderModelOption[]>(() => {
     if (liveDefinition?.OPTIONS && liveDefinition.OPTIONS.length > 0) {
@@ -301,7 +295,7 @@ function ModelsContent({
 
   const handleSelectEffort = async (effort: string) => {
     setChangingEffort(effort);
-    const effortName = effort === DEFAULT_EFFORT_VALUE ? "Claude's own setting" : effort;
+    const effortName = effort === DEFAULT_EFFORT_VALUE ? `${providerLabel}'s own setting` : effort;
     try {
       const result = await onSelectProviderEffort(currentProvider, effort, currentSessionId);
       setSelectionNotice(result.scope === 'session'
@@ -409,7 +403,7 @@ function ModelsContent({
             })}
           </div>
           <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-            Default keeps Claude's own setting
+            Default keeps {providerLabel}'s own setting
             {lastReplyEffort ? ` (the last reply ran at ${lastReplyEffort})` : ''}.
           </p>
         </div>
@@ -496,7 +490,7 @@ function CostContent({ data }: { data: CostCommandData }) {
   const used = Number(data.tokenUsage?.used ?? 0);
   const total = Number(data.tokenUsage?.total ?? 0);
   const model = data.model || 'Unknown';
-  const provider = getProviderLabel(data.provider, data.provider || 'Unknown');
+  const provider = getProviderDisplayName(data.provider, data.provider || 'Unknown');
   const hasBreakdown =
     typeof data.tokenBreakdown?.input === 'number' ||
     typeof data.tokenBreakdown?.output === 'number';
@@ -576,7 +570,7 @@ function StatusContent({ data }: { data: StatusCommandData }) {
     { label: 'Package', value: data.packageName || 'agentharbor', icon: Package },
     { label: 'Version', value: data.version || 'Unknown', icon: BadgeCheck, tone: 'success' as const },
     { label: 'Uptime', value: data.uptime || 'Unknown', icon: Timer },
-    { label: 'Provider', value: getProviderLabel(data.provider, data.provider || 'Unknown'), icon: Server, tone: 'primary' as const },
+    { label: 'Provider', value: getProviderDisplayName(data.provider, data.provider || 'Unknown'), icon: Server, tone: 'primary' as const },
     { label: 'Model', value: data.model || 'Unknown', icon: Cpu },
     ...(data.answeringModel ? [{ label: 'Last reply by', value: data.answeringModel, icon: Cpu }] : []),
     ...(data.answeringEffort ? [{ label: 'Last reply effort', value: data.answeringEffort, icon: Gauge }] : []),

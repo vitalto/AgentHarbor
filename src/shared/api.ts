@@ -3,7 +3,7 @@ import {
   getStoredAuthToken,
   storeAuthToken,
 } from '@/shared/authToken';
-import type { NotificationCategories } from '@/shared/types';
+import type { LLMProvider, NotificationCategories } from '@/shared/types';
 import { IS_PLATFORM } from '@/shared/utils';
 
 // Headers are a plain record rather than the full `HeadersInit` union so the
@@ -488,7 +488,7 @@ export const api = {
   commands: {
     // `projectPath` stays optional: a workspace without a resolved path omits
     // the field entirely, which is what the server expects.
-    list: (projectPath: string | undefined) => post('/api/commands/list', { projectPath }),
+    list: (projectPath: string | undefined, provider: LLMProvider) => post('/api/commands/list', { projectPath, provider }),
     execute: (payload: unknown) => post('/api/commands/execute', payload),
   },
 

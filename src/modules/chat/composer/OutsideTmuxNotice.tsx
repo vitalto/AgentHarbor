@@ -37,7 +37,12 @@ export default function OutsideTmuxNotice({ agent, hasPendingMessage, onMove, on
     }
   };
 
-  const message = agent.duplicateProcesses
+  const codex = agent.provider === 'codex';
+  const readOnly = codex && agent.activity === 'unknown';
+  const codexMessage = readOnly
+    ? 'Codex has this conversation open in another client. You can read it here and continue here after closing that session.'
+    : 'This conversation is open on the local Codex app server. Attach a terminal to continue here.';
+  const message = codex ? codexMessage : agent.duplicateProcesses
     ? 'Two Claude processes hold this session, so both write its history. Close the copy outside tmux to keep only this one.'
     : hasPendingMessage
       ? `This session runs in ${where} (pid ${agent.pid}). Move it to tmux to send your message from here? Claude there is closed first, only if it is idle.`
@@ -50,7 +55,7 @@ export default function OutsideTmuxNotice({ agent, hasPendingMessage, onMove, on
     >
       <span className="min-w-0 flex-1">{message}</span>
       {moveError && <span className="basis-full text-red-600 dark:text-red-400">{moveError}</span>}
-      <div className="flex shrink-0 gap-2">
+      {!readOnly && <div className="flex shrink-0 gap-2">
         {canForce && (
           <button
             type="button"
@@ -68,7 +73,7 @@ export default function OutsideTmuxNotice({ agent, hasPendingMessage, onMove, on
             onClick={() => void run(onMoveAndSend)}
             className="rounded-md bg-primary px-2.5 py-1 font-medium text-primary-foreground disabled:opacity-50"
           >
-            Move to tmux and send
+            {codex ? 'Attach and send' : 'Move to tmux and send'}
           </button>
         )}
         <button
@@ -77,9 +82,9 @@ export default function OutsideTmuxNotice({ agent, hasPendingMessage, onMove, on
           onClick={() => void run(onMove)}
           className="rounded-md border border-border bg-background px-2.5 py-1 font-medium disabled:opacity-50"
         >
-          {isMoving ? 'Moving…' : agent.duplicateProcesses ? 'Close the other copy' : 'Move to tmux'}
+          {isMoving ? 'Connecting…' : codex ? 'Attach terminal' : agent.duplicateProcesses ? 'Close the other copy' : 'Move to tmux'}
         </button>
-      </div>
+      </div>}
     </div>
   );
 }

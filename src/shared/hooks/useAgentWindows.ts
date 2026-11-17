@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import type { LLMProvider } from '@/shared/types';
 import { api } from '@/shared/api';
 
-export type AgentWindowActivity = 'busy' | 'waiting' | 'idle';
+export type AgentWindowActivity = 'busy' | 'waiting' | 'idle' | 'unknown';
 
 /**
  * A session whose Claude is running right now. `tmux` agents are fully
@@ -10,6 +11,7 @@ export type AgentWindowActivity = 'busy' | 'waiting' | 'idle';
  * be watched (typing into them is not possible from here).
  */
 export type AgentWindow = {
+  provider?: LLMProvider;
   sessionId: string;
   providerSessionId: string;
   title: string | null;
@@ -82,7 +84,7 @@ export function useAgentWindows() {
     const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } | string };
     await refreshAgentWindows();
     if (!response.ok) {
-      throw new Error(typeof body.error === 'string' ? body.error : body.error?.message ?? 'Could not open the Claude window');
+      throw new Error(typeof body.error === 'string' ? body.error : body.error?.message ?? 'Could not open the agent window');
     }
   }, []);
 

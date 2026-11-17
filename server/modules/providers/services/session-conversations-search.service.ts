@@ -1,6 +1,7 @@
 import fsSync from 'node:fs';
 import path from 'node:path';
 
+import { extractCodexSearchableMessage } from '@/modules/providers/list/codex/codex-sessions.provider.js';
 import { stripAnsiSequences } from '@/shared/utils.js';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import {
@@ -13,7 +14,7 @@ import {
 import { scanTranscriptLines } from '@/modules/providers/services/transcript-line-scanner.js';
 
 type AnyRecord = Record<string, any>;
-type SearchableProvider = 'claude';
+type SearchableProvider = 'claude' | 'codex';
 
 type SessionConversationMatch = {
   role: string;
@@ -86,7 +87,7 @@ type ProjectBucket = {
   sessions: SearchableSessionRow[];
 };
 
-const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude']);
+const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude', 'codex']);
 const MAX_MATCHES_PER_SESSION = 2;
 const UNKNOWN_PROJECT_KEY = '__unknown_project__';
 
@@ -258,7 +259,7 @@ function buildClaudeLocalCommandDisplayText(payload: ClaudeLocalCommandPayload):
   return commandArgs ? `${baseCommand} ${commandArgs}` : baseCommand;
 }
 
-type ClaudeSearchableMessage = {
+type SearchableMessage = {
   text: string;
   role: 'user' | 'assistant';
 };
@@ -268,7 +269,7 @@ type ClaudeSearchableMessage = {
  * the same transcript stream. Search should operate on the user-visible meaning
  * of those rows rather than the raw wrapper syntax.
  */
-function extractClaudeSearchableMessage(entry: AnyRecord): ClaudeSearchableMessage | null {
+function extractClaudeSearchableMessage(entry: AnyRecord): SearchableMessage | null {
   // Conversation turns only: Claude Code 2.1.302 also logs each API request as
   // an `api-request-blob` row whose `message` repeats the prompt together with
   // every system reminder sent with it.
@@ -496,11 +497,11 @@ function keepBestSessionMatches(
 }
 
 /**
- * Turns the matching lines of one Claude transcript into per-session results.
+ * Turns the matching lines of one transcript into per-session results.
  * Only lines that hold a query term reach this function, so session summaries
  * fall back to the matched messages when a session has no name.
  */
-function collectClaudeSessionMatches(
+function collectSessionMatches(
   lines: string[],
   sessionsForFile: SearchableSessionRow[],
   query: ConversationSearchQuery,
@@ -517,7 +518,7 @@ function collectClaudeSessionMatches(
     customNameBySessionId.set(providerId, candidate.custom_name ?? null);
   }
 
-  type ClaudeSessionSearchState = {
+  type SessionSearchState = {
     matches: RankedSessionMatch[];
     matchedTermIndexes: Set<number>;
     fallbackUserText: string | null;
@@ -525,8 +526,8 @@ function collectClaudeSessionMatches(
     resolvedSummary: string | null;
   };
 
-  const sessionStateById = new Map<string, ClaudeSessionSearchState>();
-  const getSessionState = (sessionId: string): ClaudeSessionSearchState => {
+  const sessionStateById = new Map<string, SessionSearchState>();
+  const getSessionState = (sessionId: string): SessionSearchState => {
     let state = sessionStateById.get(sessionId);
     if (!state) {
       const titleMatch = matchQueryTerms(query, customNameBySessionId.get(sessionId) ?? '');
@@ -542,6 +543,8 @@ function collectClaudeSessionMatches(
     return state;
   };
 
+  const provider = sessionsForFile[0].provider;
+  const codexThread = sessionsForFile[0].provider_session_id || sessionsForFile[0].session_id;
   for (const line of lines) {
     let entry: AnyRecord;
     try {
@@ -550,12 +553,12 @@ function collectClaudeSessionMatches(
       continue;
     }
 
-    const entrySessionId = entry.sessionId ? String(entry.sessionId) : null;
+    const entrySessionId = provider === 'codex' ? codexThread : entry.sessionId;
     if (!entrySessionId || !providerToInternalId.has(entrySessionId)) {
       continue;
     }
 
-    const searchableMessage = extractClaudeSearchableMessage(entry);
+    const searchableMessage = provider === 'codex' ? extractCodexSearchableMessage(entry) : extractClaudeSearchableMessage(entry);
     if (!searchableMessage) {
       continue;
     }
@@ -587,7 +590,7 @@ function collectClaudeSessionMatches(
       snippet,
       highlights,
       timestamp: entry.timestamp ? String(entry.timestamp) : null,
-      provider: 'claude',
+      provider,
       messageUuid: entry.uuid ? String(entry.uuid) : null,
     });
   }
@@ -602,7 +605,7 @@ function collectClaudeSessionMatches(
     const internalSessionId = providerToInternalId.get(sessionId) ?? sessionId;
     fileResults.set(internalSessionId, {
       sessionId: internalSessionId,
-      provider: 'claude',
+      provider,
       sessionSummary: toSummaryText(
         customNameBySessionId.get(sessionId) ?? null,
         state.resolvedSummary || state.fallbackUserText || state.fallbackAssistantText,
@@ -681,12 +684,11 @@ export async function searchConversations(
     searchablePathEntries,
     parsedQuery,
     (fileKey, lines) => {
-      const sessionsForFile = (sessionsByPathKey.get(fileKey) ?? [])
-        .filter((session) => session.provider === 'claude');
+      const sessionsForFile = sessionsByPathKey.get(fileKey) ?? [];
       if (sessionsForFile.length === 0 || !linesContainEveryPrefilterString(parsedQuery, lines)) {
         return;
       }
-      resultsByFileKey.set(fileKey, collectClaudeSessionMatches(lines, sessionsForFile, parsedQuery));
+      resultsByFileKey.set(fileKey, collectSessionMatches(lines, sessionsForFile, parsedQuery));
     },
     signal ?? undefined,
   );

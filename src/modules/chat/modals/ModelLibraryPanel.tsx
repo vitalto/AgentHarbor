@@ -221,7 +221,7 @@ export default function ModelLibraryPanel({
                 {editing ? 'Edit custom model' : 'Add a custom model'}
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                The ID is sent to Claude exactly as written.
+                The provider receives this ID exactly as written.
               </p>
             </div>
             {editing && (

@@ -277,7 +277,8 @@
     "unsupportedTransport": "Add MCP Server supports only stdio and http across all providers, not {{transport}}.",
     "addToProvider": "{{action}} to {{provider}}",
     "workingDirectory": "Working Directory",
-    "envVarNames": "Environment Variable Names",
+    "envVarNames": "Environment variable names (one per line)",
+    "envHttpHeaders": "HTTP headers from the environment (Header=VARIABLE_NAME)",
     "bearerTokenEnvVar": "Bearer Token Environment Variable"
   },
   "saveStatus": {
@@ -357,6 +358,8 @@
   },
   "agents": {
     "authStatus": {
+      "cliMissing": "{{agent}} CLI is missing on the server",
+      "apiKey": "Authenticated with an API key",
       "checking": "Checking...",
       "connected": "Connected",
       "notConnected": "Not connected",
@@ -366,6 +369,9 @@
       "authenticatedUser": "authenticated user"
     },
     "account": {
+      "codex": {
+        "description": "OpenAI Codex CLI assistant"
+      },
       "claude": {
         "description": "Anthropic Claude AI assistant"
       }
@@ -518,6 +524,7 @@
   "mcpServers": {
     "title": "MCP Servers",
     "description": {
+      "codex": "Model Context Protocol servers provide additional tools and data sources to Codex",
       "claude": "Model Context Protocol servers provide additional tools and data sources to Claude"
     },
     "addButton": "Add MCP Server",
@@ -714,9 +721,9 @@
     "menuLabel": "Add MCP Server",
     "globalButtonLabel": "Add Global MCP Server",
     "providerButtonLabel": "Add {{provider}} MCP Server",
-    "globalAddDescription": "Add Global MCP Server writes one common stdio or HTTP server to Claude.",
+    "globalAddDescription": "Adds one stdio or HTTP server to every provider ({{providers}}).",
     "providerAddDescription": "{{button}} only changes {{provider}}.",
-    "globalModalDescription": "Adds this MCP server to every provider: Claude. Only stdio and HTTP transports are supported because the same config must work across all providers.",
+    "globalModalDescription": "Writes this MCP server to every provider ({{providers}}). The shared configuration supports stdio and HTTP.",
     "refreshingScopes": "Refreshing project scopes...",
     "loadingServers": "Loading MCP servers...",
     "configCwd": "Cwd",

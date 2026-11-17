@@ -23,6 +23,7 @@ const normalizeServerName = (name: string): string => {
  * Shared MCP provider for provider-specific config readers/writers.
  */
 export abstract class McpProvider implements IProviderMcp {
+  private pendingMutation = Promise.resolve();
   protected readonly provider: LLMProvider;
   protected readonly supportedScopes: McpScope[];
   protected readonly supportedTransports: McpTransport[];
@@ -66,15 +67,34 @@ export abstract class McpProvider implements IProviderMcp {
       .filter((entry): entry is ProviderMcpServer => entry !== null);
   }
 
-  async upsertServer(input: UpsertProviderMcpServerInput): Promise<ProviderMcpServer> {
+  // A user's local and global scopes can share a config file. Keep each read-modify-write together.
+  private serializeMutation<T>(mutate: () => Promise<T>): Promise<T> {
+    const result = this.pendingMutation.then(mutate);
+    this.pendingMutation = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  upsertServer(input: UpsertProviderMcpServerInput): Promise<ProviderMcpServer> {
+    return this.serializeMutation(() => this.writeServer(input));
+  }
+
+  private async writeServer(input: UpsertProviderMcpServerInput): Promise<ProviderMcpServer> {
     const scope = input.scope ?? 'project';
     this.assertScopeAndTransport(scope, input.transport);
 
     const workspacePath = resolveWorkspacePath(input.workspacePath);
     const normalizedName = normalizeServerName(input.name);
     const scopedServers = await this.readScopedServers(scope, workspacePath);
-    scopedServers[normalizedName] = this.buildServerConfig(input);
-    await this.writeScopedServers(scope, workspacePath, scopedServers);
+    const previousName = input.previousName ? normalizeServerName(input.previousName) : normalizedName;
+    if (input.previousName && !Object.hasOwn(scopedServers, previousName)) {
+      throw new AppError('The MCP server being edited no longer exists.', { code: 'MCP_SERVER_NOT_FOUND', statusCode: 404 });
+    }
+    if (previousName !== normalizedName && Object.hasOwn(scopedServers, normalizedName)) {
+      throw new AppError('Another MCP server already uses this name.', { code: 'MCP_NAME_CONFLICT', statusCode: 409 });
+    }
+    const config = this.buildServerConfig(input, scopedServers[previousName]);
+    if (previousName !== normalizedName) delete scopedServers[previousName];
+    await this.writeScopedServers(scope, workspacePath, { ...scopedServers, [normalizedName]: config });
 
     return {
       provider: this.provider,
@@ -93,9 +113,11 @@ export abstract class McpProvider implements IProviderMcp {
     };
   }
 
-  async removeServer(
-    input: { name: string; scope?: McpScope; workspacePath?: string },
-  ): Promise<{ removed: boolean; provider: LLMProvider; name: string; scope: McpScope }> {
+  removeServer(input: { name: string; scope?: McpScope; workspacePath?: string }) {
+    return this.serializeMutation(() => this.deleteScopedServer(input));
+  }
+
+  private async deleteScopedServer(input: { name: string; scope?: McpScope; workspacePath?: string }) {
     const scope = input.scope ?? 'project';
     this.assertScope(scope);
 
@@ -122,7 +144,7 @@ export abstract class McpProvider implements IProviderMcp {
     servers: Record<string, unknown>,
   ): Promise<void>;
 
-  protected abstract buildServerConfig(input: UpsertProviderMcpServerInput): Record<string, unknown>;
+  protected abstract buildServerConfig(input: UpsertProviderMcpServerInput, previous?: unknown): Record<string, unknown>;
 
   protected abstract normalizeServerConfig(
     scope: McpScope,

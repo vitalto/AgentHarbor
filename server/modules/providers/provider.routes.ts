@@ -797,7 +797,9 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const payload = parseMcpUpsertPayload(req.body);
-    const server = await providerMcpService.upsertProviderMcpServer(provider, payload);
+    const server = await providerMcpService.upsertProviderMcpServer(provider, {
+      ...payload, previousName: readOptionalQueryString(req.body.previousName),
+    });
     res.status(201).json(createApiSuccessResponse({ server }));
   }),
 );

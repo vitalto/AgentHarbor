@@ -1,4 +1,4 @@
-import type { AgentCategory, AgentContextByProvider, AgentProvider, AgentSettingsProject, ClaudePermissionsState, McpProject, SkillsProject } from '@/shared/types';
+import type { AgentCategory, ProviderAuthStatus, AgentProvider, AgentSettingsProject, ClaudePermissionsState, McpProject, SkillsProject } from '@/shared/types';
 import { McpServers } from '@/modules/mcp';
 import { ProviderSkills } from '@/modules/skills';
 import AccountContent from '@/modules/settings/tabs/agents-settings/sections/content/AccountContent';
@@ -8,7 +8,8 @@ import RuntimeContent from '@/modules/settings/tabs/agents-settings/sections/con
 type AgentCategoryContentSectionProps = {
   selectedAgent: AgentProvider;
   selectedCategory: AgentCategory;
-  agentContextById: AgentContextByProvider;
+  authStatus: ProviderAuthStatus;
+  onLogin: () => void;
   claudePermissions: ClaudePermissionsState;
   onClaudePermissionsChange: (value: ClaudePermissionsState) => void;
   projects: AgentSettingsProject[];
@@ -18,7 +19,8 @@ type AgentCategoryContentSectionProps = {
 export default function AgentCategoryContentSection({
   selectedAgent,
   selectedCategory,
-  agentContextById,
+  authStatus,
+  onLogin,
   claudePermissions,
   onClaudePermissionsChange,
   projects,
@@ -28,12 +30,12 @@ export default function AgentCategoryContentSection({
       {selectedCategory === 'account' && (
         <AccountContent
           agent={selectedAgent}
-          authStatus={agentContextById[selectedAgent].authStatus}
-          onLogin={agentContextById[selectedAgent].onLogin}
+          authStatus={authStatus}
+          onLogin={onLogin}
         />
       )}
 
-      {selectedCategory === 'permissions' && (
+      {selectedAgent === 'claude' && selectedCategory === 'permissions' && (
         <PermissionsContent
           agent="claude"
           skipPermissions={claudePermissions.skipPermissions}
@@ -51,7 +53,7 @@ export default function AgentCategoryContentSection({
         />
       )}
 
-      {selectedCategory === 'runtime' && <RuntimeContent />}
+      {selectedAgent === 'claude' && selectedCategory === 'runtime' && <RuntimeContent />}
 
       {selectedCategory === 'mcp' && (
         // AgentSettingsProject.name is populated from the DB projectId by

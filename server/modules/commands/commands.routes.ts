@@ -23,7 +23,6 @@ type CommandsRouterDependencies = {
 /** Creates Commands routes around explicit filesystem, model-catalog, and runtime adapters. */
 export function createCommandsRouter(dependencies: CommandsRouterDependencies): express.Router {
 const fs = dependencies.fileSystem;
-const os = { homedir: dependencies.homeDirectory };
 const APP_ROOT = dependencies.appRoot;
 const providerModelsService = dependencies.models;
 const process = dependencies.runtime;
@@ -73,6 +72,7 @@ const executeModelsCommand = async (args, context, modelsService) => {
     description: option.description,
     recordId: option.recordId,
     isCustom: option.isCustom,
+    ...(option.effort ? { effort: option.effort } : {}),
   }));
 
   return {
@@ -172,10 +172,11 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
 /**
  * Built-in commands that are always available
  */
-const builtInCommands = [
+const instructionFileName = (provider: string) => provider === "codex" ? "AGENTS.md" : "CLAUDE.md";
+const getBuiltInCommands = (provider: string) => [
   {
     name: "/help",
-    description: "Show help documentation for Claude Code",
+    description: "Show available commands",
     namespace: "builtin",
     metadata: { type: "builtin" },
   },
@@ -193,7 +194,7 @@ const builtInCommands = [
   },
   {
     name: "/memory",
-    description: "Open CLAUDE.md memory file for editing",
+    description: `Open the project ${instructionFileName(provider)} file for editing`,
     namespace: "builtin",
     metadata: { type: "builtin" },
   },
@@ -217,7 +218,9 @@ const builtInCommands = [
  */
 const builtInHandlers = {
   "/help": async (args, context) => {
-    const helpText = `# Claude Code Commands
+    const provider = readModelProvider(context?.provider);
+    const builtInCommands = getBuiltInCommands(provider);
+    const helpText = `# ${MODEL_PROVIDER_LABELS[provider]} Commands
 
 ## Built-in Commands
 
@@ -229,7 +232,7 @@ ${cmd.description}
   )
   .join("\n")}
 
-## Custom Commands
+${provider === "codex" ? "## Skills\n\nMention a skill with `$skill-name` in the composer." : `## Custom Commands
 
 Custom commands can be created in:
 - Project: \`.claude/commands/\` (project-specific)
@@ -245,13 +248,14 @@ Custom commands can be created in:
 
 \`\`\`markdown
 /mycommand arg1 arg2
-\`\`\`
+\`\`\``}
 `;
 
     return {
       type: "builtin",
       action: "help",
       data: {
+        provider,
         content: helpText,
         format: "markdown",
         commands: builtInCommands.map((command) => ({
@@ -400,6 +404,7 @@ Custom commands can be created in:
 
   "/memory": async (args, context) => {
     const projectPath = context?.projectPath;
+    const filename = instructionFileName(readModelProvider(context?.provider));
 
     if (!projectPath) {
       return {
@@ -407,17 +412,15 @@ Custom commands can be created in:
         action: "memory",
         data: {
           error: "No project selected",
-          message: "Please select a project to access its CLAUDE.md file",
+          message: `Please select a project to access its ${filename} file`,
         },
       };
     }
 
-    const claudeMdPath = path.join(projectPath, "CLAUDE.md");
-
-    // Check if CLAUDE.md exists
+    const instructionsPath = path.join(projectPath, filename);
     let exists = false;
     try {
-      await fs.access(claudeMdPath);
+      await fs.access(instructionsPath);
       exists = true;
     } catch (err) {
       // File doesn't exist
@@ -427,11 +430,11 @@ Custom commands can be created in:
       type: "builtin",
       action: "memory",
       data: {
-        path: claudeMdPath,
+        path: instructionsPath,
         exists,
         message: exists
-          ? `Opening CLAUDE.md at ${claudeMdPath}`
-          : `CLAUDE.md not found at ${claudeMdPath}. Create it to store project-specific instructions.`,
+          ? `Opening ${filename} at ${instructionsPath}`
+          : `${filename} not found at ${instructionsPath}. Create it to store project-specific instructions.`,
       },
     };
   },
@@ -454,6 +457,11 @@ Custom commands can be created in:
 router.post("/list", async (req, res) => {
   try {
     const { projectPath } = req.body;
+    const provider = readModelProvider(req.body.provider);
+    const builtInCommands = getBuiltInCommands(provider);
+    if (provider === "codex") {
+      return res.json({ builtIn: builtInCommands, custom: [], count: builtInCommands.length });
+    }
     const allCommands = [...builtInCommands];
 
     // Scan project-level commands (.claude/commands/)
@@ -468,7 +476,6 @@ router.post("/list", async (req, res) => {
     }
 
     // Scan user-level commands (~/.claude/commands/)
-    const homeDir = os.homedir();
     const userCommandsDir = path.join(getClaudeConfigDir(), "commands");
     const userCommands = await scanCommandsDirectory(
       userCommandsDir,
@@ -535,6 +542,10 @@ router.post("/execute", async (req, res) => {
           command: commandName,
         });
       }
+    }
+
+    if (readModelProvider(context?.provider) === "codex") {
+      return res.status(400).json({ error: "Codex uses skills instead of Claude custom commands." });
     }
 
     // Handle custom commands

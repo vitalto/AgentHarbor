@@ -1,5 +1,4 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { getCodexHome } from '@/shared/utils.js';
 import path from 'node:path';
 
 import TOML from '@iarna/toml';
@@ -8,6 +7,7 @@ import { McpProvider } from '@/modules/providers/shared/mcp/mcp.provider.js';
 import type { McpScope, ProviderMcpServer, UpsertProviderMcpServerInput } from '@/shared/types.js';
 import {
   AppError,
+  getCodexHome,
   readObjectRecord,
   readOptionalString,
   readStringArray,
@@ -60,7 +60,13 @@ export class CodexMcpProvider extends McpProvider {
     await writeTomlConfig(filePath, config);
   }
 
-  protected buildServerConfig(input: UpsertProviderMcpServerInput): Record<string, unknown> {
+  protected buildServerConfig(input: UpsertProviderMcpServerInput, previous?: unknown): Record<string, unknown> {
+    // Timeouts, tool allowlists and other native settings aren't editable in the form.
+    const existing = readObjectRecord(previous);
+    const unmanaged = { ...existing };
+    for (const key of ['command', 'args', 'env', 'env_vars', 'cwd', 'url', 'bearer_token_env_var', 'http_headers', 'env_http_headers']) {
+      delete unmanaged[key];
+    }
     if (input.transport === 'stdio') {
       if (!input.command?.trim()) {
         throw new AppError('command is required for stdio MCP servers.', {
@@ -69,12 +75,15 @@ export class CodexMcpProvider extends McpProvider {
         });
       }
 
+      // Global updates omit native fields; an edit from the provider form can explicitly clear them.
+      const sameCommand = !input.previousName && existing?.command === input.command;
       return {
+        ...unmanaged,
         command: input.command,
         args: input.args ?? [],
         env: input.env ?? {},
-        env_vars: input.envVars ?? [],
-        cwd: input.cwd,
+        env_vars: input.envVars ?? (sameCommand ? existing?.env_vars : undefined) ?? [],
+        cwd: input.cwd ?? (sameCommand ? existing?.cwd : undefined),
       };
     }
 
@@ -85,11 +94,13 @@ export class CodexMcpProvider extends McpProvider {
       });
     }
 
+    const sameEndpoint = !input.previousName && existing?.url === input.url;
     return {
+      ...unmanaged,
       url: input.url,
-      bearer_token_env_var: input.bearerTokenEnvVar,
+      bearer_token_env_var: input.bearerTokenEnvVar ?? (sameEndpoint ? existing?.bearer_token_env_var : undefined),
       http_headers: input.headers ?? {},
-      env_http_headers: input.envHttpHeaders ?? {},
+      env_http_headers: input.envHttpHeaders ?? (sameEndpoint ? existing?.env_http_headers : undefined) ?? {},
     };
   }
 

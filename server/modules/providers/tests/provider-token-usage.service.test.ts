@@ -211,3 +211,19 @@ test('Claude token usage falls back to the whole file when the tail has no usage
     await rm(tempDirectory, { recursive: true, force: true });
   }
 });
+
+test('Codex uses the current context and window from its latest token count', async () => {
+  const current = { input_tokens: 1200, cached_input_tokens: 200, output_tokens: 50, total_tokens: 1250 };
+  const row = { type: 'event_msg', payload: { type: 'token_count', info: {
+    model_context_window: 150000, last_token_usage: current, total_token_usage: { total_tokens: 800000 },
+  } } };
+  const service = createProviderTokenUsageService({
+    getSessionById: () => createSessionRow({ provider: 'codex', jsonl_path: 'rollout.jsonl' }),
+    fileExists: () => true,
+    readTextFileTail: async () => ({ content: JSON.stringify(row), isComplete: true }),
+  });
+  const result = await service.getSessionTokenUsage('app-session');
+  assert.equal(result.used, 1250);
+  assert.equal(result.total, 150000);
+  assert.equal(result.cacheReadTokens, 200);
+});

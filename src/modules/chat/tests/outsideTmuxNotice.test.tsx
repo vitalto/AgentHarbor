@@ -33,3 +33,10 @@ test('other failures do not offer forcing', async () => {
   await act(async () => { fireEvent.click(screen.getByText('Close the other copy')); });
   assert.equal(screen.queryByText('Close it anyway'), null);
 });
+
+test('a Codex session owned by another client offers read-only history', () => {
+  render(<OutsideTmuxNotice agent={{ ...duplicate, provider: 'codex', duplicateProcesses: false, location: 'elsewhere', activity: 'unknown' }}
+    hasPendingMessage onMove={vi.fn()} onMoveAndSend={vi.fn()} />);
+  assert.ok(screen.getByText(/Codex has this conversation open/));
+  assert.equal(screen.queryByRole('button'), null);
+});

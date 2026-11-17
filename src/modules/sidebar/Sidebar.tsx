@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useWebSocket } from '@/shared/context/WebSocketContext';
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
 import { useVersionCheck } from '@/shared/hooks/useVersionCheck';
 import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
@@ -56,6 +57,7 @@ function Sidebar({
   onCloseSettings,
   isMobile,
 }: SidebarProps) {
+  const { subscribe } = useWebSocket();
   const { t } = useTranslation(['sidebar', 'common']);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
   const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo } = useVersionCheck(
@@ -139,6 +141,7 @@ function Sidebar({
     setPendingDeletion,
     setShowVersionModal,
   } = useSidebarController({
+    subscribe,
     projects,
     selectedProject,
     selectedSession,

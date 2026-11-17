@@ -330,7 +330,7 @@
       "models": "Navegar modelos disponíveis para o provedor ativo.",
       "cost": "Revisar uso de tokens para a sessão ativa.",
       "status": "Inspecionar runtime, versão, provedor e detalhes do ambiente em um só lugar.",
-      "memory": "Abrir o arquivo CLAUDE.md de memória do projeto.",
+      "memory": "Abrir o arquivo de memória do projeto.",
       "config": "Abrir configurações e ajustes.",
       "help": "Mostrar documentação e sintaxe de comandos."
     },

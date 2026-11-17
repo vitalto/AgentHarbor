@@ -108,13 +108,20 @@ export const FILE_STATUS_GROUPS: GitStatusGroupEntry[] = [
 
 // ---------------------------
 
-//----------------- MCP SERVER CAPABILITIES ------------
+//----------------- PROVIDER IDENTITIES ------------
 
-/** Display name for each provider that can host MCP servers, used in headings and buttons. */
-export const MCP_PROVIDER_NAMES: Record<McpProvider, string> = {
+/** Display names used throughout provider selection, configuration and transcripts. */
+export const LLM_PROVIDER_NAMES: Record<LLMProvider, string> = {
   claude: 'Claude',
   codex: 'Codex',
 };
+
+/** CLI provider IDs in display order, used by account, onboarding and status checks. */
+export const LLM_PROVIDERS = Object.keys(LLM_PROVIDER_NAMES) as LLMProvider[];
+
+// ---------------------------
+
+//----------------- MCP SERVER CAPABILITIES ------------
 
 /** Scopes each provider can install an MCP server into; drives the scope selector and validation. */
 export const MCP_SUPPORTED_SCOPES: Record<McpProvider, McpScope[]> = {
@@ -134,7 +141,7 @@ export const MCP_GLOBAL_SUPPORTED_TRANSPORTS: McpTransport[] = ['stdio', 'http']
 /** Whether a provider honours an MCP server's working-directory setting; the form hides the field when it does not. */
 export const MCP_SUPPORTS_WORKING_DIRECTORY: Record<McpProvider, boolean> = {
   claude: false,
-  codex: false,
+  codex: true,
 };
 
 // ---------------------------

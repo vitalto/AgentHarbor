@@ -1,94 +1,43 @@
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import test from 'node:test';
 
-import { Codex } from '@openai/codex-sdk';
-import type { Thread, ThreadOptions } from '@openai/codex-sdk';
+import { runCodexTmuxTurn } from '@/modules/providers/list/codex/codex-runtime.provider.js';
+import type { AnyRecord, ProviderRuntimeContext } from '@/shared/index.js';
 
-import { codexRuntime } from '@/modules/providers/list/codex/codex-runtime.provider.js';
-import type { ProviderRuntimeContext } from '@/shared/index.js';
-
-for (const resumed of [false, true]) {
-  for (const permissionMode of [undefined, 'default', 'unknown', 'acceptEdits', 'bypassPermissions']) {
-    test(`Codex ${resumed ? 'resumes' : 'starts'} with supported permissions (${permissionMode ?? 'omitted'})`, async (t) => {
-      let capturedOptions: ThreadOptions | undefined;
-      let capturedPrompt: unknown;
-      const messages: unknown[] = [];
-      const thread = {
-        id: 'native-thread',
-        async runStreamed(prompt: unknown) {
-          capturedPrompt = prompt;
-          return { events: (async function* () {
-            yield { type: 'thread.started', thread_id: 'native-thread' };
-          })() };
-        },
-      } as unknown as Thread;
-
-      const start = t.mock.method(Codex.prototype, 'startThread', (options?: ThreadOptions) => {
-        capturedOptions = options;
-        return thread;
-      });
-      const resume = t.mock.method(Codex.prototype, 'resumeThread', (id: string, options?: ThreadOptions) => {
-        assert.equal(id, 'native-thread');
-        capturedOptions = options;
-        return thread;
-      });
-      const context: ProviderRuntimeContext = {
-        resolveProviderSessionId: () => resumed ? 'native-thread' : null,
-        resolveResumeModel: async () => 'test-model',
-        getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'test-model' }),
-        normalizeMessage: () => [],
-        isProviderInstalled: async () => true,
-      };
-
-      await codexRuntime.run('hey there', {
-        sessionId: resumed ? 'app-session' : undefined,
-        permissionMode,
-        cwd: process.cwd(),
-      }, { isWebSocketWriter: true, send: (message) => messages.push(message) }, context);
-
-      assert.equal(start.mock.callCount(), resumed ? 0 : 1);
-      assert.equal(resume.mock.callCount(), resumed ? 1 : 0);
-      assert.equal(capturedPrompt, 'hey there');
-      assert.equal(capturedOptions?.sandboxMode, permissionMode === 'bypassPermissions' ? 'danger-full-access' : 'workspace-write');
-      assert.equal(capturedOptions?.approvalPolicy, permissionMode === 'acceptEdits' || permissionMode === 'bypassPermissions' ? 'never' : 'on-request');
-      assert.ok(messages.some((message: any) => message.kind === 'complete' && message.exitCode === 0));
-      assert.ok(!messages.some((message: any) => message.kind === 'error'));
-    });
-  }
-}
-
-for (const command of ['', '  \n\t']) {
-  test(`Codex supplies a prompt for an image-only turn (${JSON.stringify(command)})`, async (t) => {
-    let capturedPrompt: unknown;
-    const imagePath = path.join(process.cwd(), 'public', 'favicon.png');
-    const thread = {
-      id: 'native-thread',
-      async runStreamed(prompt: unknown) {
-        capturedPrompt = prompt;
-        return { events: (async function* () {
-          yield { type: 'thread.started', thread_id: 'native-thread' };
-        })() };
-      },
-    } as unknown as Thread;
-
-    t.mock.method(Codex.prototype, 'startThread', () => thread);
+for (const requested of ['default', 'acceptEdits', 'bypassPermissions']) {
+  test(`Interactive Codex resumes its exact thread with native restrictions for ${requested}`, async () => {
+    const calls: Array<[string, AnyRecord]> = [];
+    const messages: AnyRecord[] = [];
+    let notify: (method: string, params: AnyRecord) => void = () => {};
+    const sandbox = { type: 'readOnly', networkAccess: false };
     const context: ProviderRuntimeContext = {
-      resolveProviderSessionId: () => null,
+      resolveProviderSessionId: () => 'native-thread',
       resolveResumeModel: async () => 'test-model',
-      getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'test-model' }),
-      normalizeMessage: () => [],
-      isProviderInstalled: async () => true,
+      getProviderModels: async () => ({ OPTIONS: [{ value: 'test-model', label: 'Test', effort: { default: 'low', values: [{ value: 'high', label: 'High' }] } }], DEFAULT: 'test-model' }),
+      normalizeMessage: () => [], isProviderInstalled: async () => true,
     };
-
-    await codexRuntime.run(command, {
-      cwd: process.cwd(),
-      images: [{ path: imagePath, mimeType: 'image/png' }],
-    }, { isWebSocketWriter: true, send: () => {} }, context);
-
-    assert.deepEqual(capturedPrompt, [
-      { type: 'text', text: 'Please analyze the attached image(s).' },
-      { type: 'local_image', path: imagePath },
-    ]);
+    await runCodexTmuxTurn('hello', { sessionId: 'app-id', permissionMode: requested }, {
+      isWebSocketWriter: true, send: (event) => messages.push(event as AnyRecord),
+    }, context, {
+      window: async (id, attach) => {
+        assert.equal(id, 'app-id'); assert.equal(attach, false);
+        return { providerSessionId: 'native-thread', pane: { windowId: '@1', windowName: 'codex-app-id', paneId: '%1', panePid: 1, dead: false, cwd: '', command: 'codex', currentCommand: 'codex' } };
+      },
+      waitForPrompt: async () => {}, effort: () => 'high', stopped: () => {}, failed: () => {},
+      connect: async () => ({
+        close: () => {}, observe: (listener) => { notify = listener; },
+        request: async (method: string, params: AnyRecord) => {
+          calls.push([method, params]);
+          if (method === 'thread/resume') return { thread: { status: { type: 'idle' } }, sandbox, approvalPolicy: 'on-request' };
+          notify('turn/completed', { threadId: 'other-thread', turn: { id: 'ignored', status: 'failed' } });
+          notify('turn/completed', { threadId: 'native-thread', turn: { id: 'turn-id', status: 'completed' } });
+          return { turn: { id: 'turn-id' } };
+        },
+      }),
+    });
+    assert.deepEqual(calls[0], ['thread/resume', { threadId: 'native-thread', excludeTurns: true }]);
+    assert.deepEqual(calls[1], ['turn/start', { threadId: 'native-thread', input: [{ type: 'text', text: 'hello', text_elements: [] }], model: 'test-model', effort: 'high', approvalPolicy: 'on-request', sandboxPolicy: sandbox }]);
+    assert.deepEqual(messages.map((message) => message.kind), ['complete']);
+    assert.equal(messages[0].success, true);
   });
 }

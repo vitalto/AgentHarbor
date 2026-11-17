@@ -3,7 +3,7 @@ import type { MutableRefObject, RefObject } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 
-import type { Project, ProjectSession } from '@/shared/types';
+import type { LLMProvider, Project, ProjectSession } from '@/shared/types';
 import { useShellConnection } from '@/modules/shell/hooks/useShellConnection';
 import { useShellTerminal } from '@/modules/shell/hooks/useShellTerminal';
 
@@ -11,6 +11,7 @@ type UseShellRuntimeOptions = {
   selectedProject: Project | null | undefined;
   selectedSession: ProjectSession | null | undefined;
   isPlainShell: boolean;
+  loginProvider?: LLMProvider;
   minimal: boolean;
   autoConnect: boolean;
   isRestarting: boolean;
@@ -32,6 +33,7 @@ export function useShellRuntime({
   selectedProject,
   selectedSession,
   isPlainShell,
+  loginProvider,
   minimal,
   autoConnect,
   isRestarting,
@@ -93,6 +95,7 @@ export function useShellRuntime({
     selectedProjectRef,
     selectedSessionRef,
     isPlainShellRef,
+    loginProvider,
     isInitialized,
     autoConnect,
     closeSocket,

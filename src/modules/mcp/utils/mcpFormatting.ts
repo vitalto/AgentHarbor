@@ -99,6 +99,7 @@ export const parseJsonMcpPayload = (
   formData: McpFormState,
   options?: CreateMcpPayloadOptions,
 ): UpsertProviderMcpServerPayload => {
+  const includeProviderSpecificFields = options?.includeProviderSpecificFields ?? provider === 'codex';
   const parsed = JSON.parse(formData.jsonInput) as unknown;
   if (!isRecord(parsed)) {
     throw new Error('JSON configuration must be an object');
@@ -133,13 +134,13 @@ export const parseJsonMcpPayload = (
       : undefined,
     url: readString(parsed.url),
     headers: readStringRecord(parsed.headers ?? parsed.http_headers) ?? {},
-    envVars: options?.includeProviderSpecificFields
+    envVars: includeProviderSpecificFields
       ? readStringArray(parsed.envVars ?? parsed.env_vars) ?? []
       : undefined,
-    bearerTokenEnvVar: options?.includeProviderSpecificFields
+    bearerTokenEnvVar: includeProviderSpecificFields
       ? readString(parsed.bearerTokenEnvVar ?? parsed.bearer_token_env_var)
       : undefined,
-    envHttpHeaders: options?.includeProviderSpecificFields
+    envHttpHeaders: includeProviderSpecificFields
       ? readStringRecord(parsed.envHttpHeaders ?? parsed.env_http_headers) ?? {}
       : undefined,
   };
@@ -157,7 +158,7 @@ export const createMcpPayloadFromForm = (
   assertSupportedTransport(provider, formData.transport, options);
 
   const supportsWorkingDirectory = options?.supportsWorkingDirectory ?? MCP_SUPPORTS_WORKING_DIRECTORY[provider];
-  const includeProviderSpecificFields = options?.includeProviderSpecificFields ?? false;
+  const includeProviderSpecificFields = options?.includeProviderSpecificFields ?? provider === 'codex';
 
   return {
     name: formData.name.trim(),

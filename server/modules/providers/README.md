@@ -39,7 +39,7 @@ The services that consume them are:
 Live execution is consumed through `providerRuntimeService`, which resolves the
 provider-owned runtime through the same `providerRegistry` as every other facet.
 
-The registered providers are `claude` and `codex`. Codex chat uses the installed CLI through the SDK, with optional `AH_CODEX_CMD` and `AH_CODEX_HOME` for WSL interoperability. Its session synchronizer indexes native rollout JSONL files.
+The registered providers are `claude` and `codex`. Codex chat shares a native thread between the local app server and an interactive Codex client in tmux. `AH_CODEX_CMD` selects the CLI and `AH_CODEX_HOME` selects its home, including Windows homes mounted in WSL. Its synchronizer indexes native rollout files, including threads opened outside AgentHarbor.
 
 Provider ids in the original upstream contract were:
 
@@ -161,7 +161,7 @@ Current skill discovery roots are:
 | Provider | User Roots | Project / Repo Roots | Prefix | Notes |
 | --- | --- | --- | --- | --- |
 | Claude | `~/.claude/skills` | `<workspace>/.claude/skills` | `/` | Also discovers Claude plugin skills from enabled plugin installs. Command skills live under `commands/`; markdown skills live under `skills/` and are scanned recursively. |
-| Codex | `~/.agents/skills`, `~/.codex/skills/.system`, `/etc/codex/skills` | `<workspace>/.agents/skills`, `path.dirname(workspacePath)/.agents/skills`, topmost git root `.agents/skills` | `$` | Overlapping roots are deduplicated before scanning. |
+| Codex | `~/.agents/skills`, `~/.codex/skills/.system`, `/etc/codex/skills` | `<workspace>/.agents/skills` | `$` | Overlapping roots are deduplicated before scanning. |
 | Cursor | `~/.cursor/skills` | `<workspace>/.cursor/skills`, `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
 | OpenCode | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | Cwd-to-topmost-git-root `.opencode/skills`, `.claude/skills`, and `.agents/skills` | `/` | Reuses OpenCode, Claude, and Agents skill locations. Overlapping roots are deduplicated before scanning. |
 

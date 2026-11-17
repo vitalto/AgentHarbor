@@ -352,7 +352,7 @@
       "models": "Procházet dostupné modely aktivního provideru.",
       "cost": "Zkontrolovat využití tokenů v aktivní relaci.",
       "status": "Zkontrolovat běhové prostředí, verzi, provider a stav prostředí.",
-      "memory": "Otevřít paměťový soubor projektu CLAUDE.md.",
+      "memory": "Otevřít paměťový soubor projektu.",
       "config": "Otevřít nastavení a konfiguraci.",
       "help": "Zobrazit dokumentaci a syntaxi příkazů."
     },
