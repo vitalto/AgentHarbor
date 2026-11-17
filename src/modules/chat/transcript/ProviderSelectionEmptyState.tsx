@@ -27,6 +27,7 @@ import { writeSelectedProvider } from '@/shared/selectedProvider';
 
 const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "claude", name: "Anthropic" },
+  { id: "codex", name: "OpenAI Codex" },
 ];
 
 const MOD_KEY =
@@ -171,7 +172,7 @@ export default function ProviderSelectionEmptyState({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1">
                       <span className="text-xs font-semibold text-foreground">
-                        Claude
+                        {provider === "codex" ? "Codex" : "Claude"}
                       </span>
                       <span className="text-xs text-muted-foreground">·</span>
                       <span className="truncate text-xs text-foreground">
@@ -271,8 +272,9 @@ export default function ProviderSelectionEmptyState({
           </Dialog>
 
           <p className="mt-4 text-center text-sm text-muted-foreground/70">
-            {t("providerSelection.readyPrompt.claude", {
-              model: providerModels.claude,
+            {t(`providerSelection.readyPrompt.${provider}`, {
+              model: currentModelLabel,
+              defaultValue: "{{model}}",
             })}
           </p>
 

@@ -113,16 +113,19 @@ export const FILE_STATUS_GROUPS: GitStatusGroupEntry[] = [
 /** Display name for each provider that can host MCP servers, used in headings and buttons. */
 export const MCP_PROVIDER_NAMES: Record<McpProvider, string> = {
   claude: 'Claude',
+  codex: 'Codex',
 };
 
 /** Scopes each provider can install an MCP server into; drives the scope selector and validation. */
 export const MCP_SUPPORTED_SCOPES: Record<McpProvider, McpScope[]> = {
   claude: ['user', 'project', 'local'],
+  codex: ['user', 'project'],
 };
 
 /** Transports each provider can talk to an MCP server over; drives the transport selector and validation. */
 export const MCP_SUPPORTED_TRANSPORTS: Record<McpProvider, McpTransport[]> = {
   claude: ['stdio', 'http', 'sse'],
+  codex: ['stdio', 'http'],
 };
 
 /** Transports offered when configuring a global (provider-agnostic) MCP server. */
@@ -131,6 +134,7 @@ export const MCP_GLOBAL_SUPPORTED_TRANSPORTS: McpTransport[] = ['stdio', 'http']
 /** Whether a provider honours an MCP server's working-directory setting; the form hides the field when it does not. */
 export const MCP_SUPPORTS_WORKING_DIRECTORY: Record<McpProvider, boolean> = {
   claude: false,
+  codex: false,
 };
 
 // ---------------------------
@@ -195,4 +199,5 @@ export const CODE_EDITOR_DEFAULTS = {
  */
 export const PROVIDER_PERMISSION_PREFERENCE_KEYS: Record<LLMProvider, UserPreferenceKey> = {
   claude: 'claudePermissions',
+  codex: 'codexPermissions',
 };

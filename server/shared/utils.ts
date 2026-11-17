@@ -240,6 +240,11 @@ export function findForbiddenWorkspaceAncestor(normalizedPath: string): string |
   return null;
 }
 
+/** Server-visible directory containing the Codex CLI configuration and rollouts. */
+export function getCodexHome(): string {
+  return process.env.AH_CODEX_HOME || process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+}
+
 /**
  * Claude Code's config directory (projects/, sessions/, settings.json,
  * commands/). `CLAUDE_CONFIG_DIR` is the CLI's own override; AgentHarbor also
@@ -283,7 +288,7 @@ export function getClaudeGlobalConfigPath(): string {
  * Being a read-only root grants reads only: the file-tree write paths resolve
  * against the project root alone, so nothing under these can be changed
  * through the file API. Whether one may become a workspace is decided
- * separately by `validateWorkspacePath` — the temp directories are on
+ * separately by `validateWorkspacePath` вЂ” the temp directories are on
  * `FORBIDDEN_WORKSPACE_PATHS`; the Claude projects directory is not, it is
  * simply wherever `WORKSPACES_ROOT` puts it.
  */
@@ -313,7 +318,7 @@ export function windowsClaudeTempRoot(env: NodeJS.ProcessEnv = process.env): str
  *
  * Symlinks are resolved before the comparison, so a link planted under a root
  * cannot be used to read somewhere else through it. Each root is resolved on
- * its own, so one that does not exist on this machine — `/tmp` on Windows — is
+ * its own, so one that does not exist on this machine вЂ” `/tmp` on Windows вЂ” is
  * skipped and the roots after it are still checked.
  */
 export async function resolvePathUnderRoots(targetPath: string, roots: string[]): Promise<string | null> {
@@ -571,13 +576,13 @@ export function createNormalizedMessage(fields: NormalizedMessageInput): Normali
  * must NOT emit their own). The frontend treats `complete` as the only
  * terminal signal and never needs provider-specific handling:
  *
- * - `sessionId`     — the id the client knows this run by ('' if never discovered)
- * - `actualSessionId` — canonical id after the run; equals `sessionId` unless
+ * - `sessionId`     вЂ” the id the client knows this run by ('' if never discovered)
+ * - `actualSessionId` вЂ” canonical id after the run; equals `sessionId` unless
  *                       the provider rewrote it mid-run
- * - `exitCode`      — 0 on success; a missing/null code (e.g. killed process)
+ * - `exitCode`      вЂ” 0 on success; a missing/null code (e.g. killed process)
  *                     is reported as failure
- * - `success`       — exitCode === 0 and not aborted
- * - `aborted`       — run was cancelled by the user
+ * - `success`       вЂ” exitCode === 0 and not aborted
+ * - `aborted`       вЂ” run was cancelled by the user
  */
 export function createCompleteMessage(opts: {
   provider: NormalizedMessage['provider'];
@@ -617,7 +622,7 @@ function truncateForPreview(value: string | undefined): string | undefined {
     return value;
   }
   const omitted = value.length - MAX_SUBAGENT_ACTIVITY_CONTENT;
-  return `${value.slice(0, MAX_SUBAGENT_ACTIVITY_CONTENT)}\n… ${omitted} more characters`;
+  return `${value.slice(0, MAX_SUBAGENT_ACTIVITY_CONTENT)}\nвЂ¦ ${omitted} more characters`;
 }
 
 /**
@@ -1311,7 +1316,7 @@ export async function extractFirstValidJsonlData<T>(
 /**
  * Matches the escape sequences a CLI emits when it believes it is writing to a
  * terminal, in the three shapes those tools actually produce:
- * - OSC (`ESC ]` … terminated by BEL or ST), used for titles and hyperlinks.
+ * - OSC (`ESC ]` вЂ¦ terminated by BEL or ST), used for titles and hyperlinks.
  * - CSI (`ESC [`, or the 8-bit `\u009B` introducer that stands in for both
  *   bytes), used for SGR colors and cursor control.
  * - any other ECMA-48 escape sequence: `ESC`, optional intermediate bytes

@@ -7,11 +7,15 @@ import chokidar, { type FSWatcher } from 'chokidar';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 import { broadcastSessionUpsertedBatch } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
-import { getClaudeConfigDir } from '@/shared/utils.js';
+import { getClaudeConfigDir, getCodexHome } from '@/shared/utils.js';
 
 type WatcherEventType = 'add' | 'change';
 
 const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> = [
+  {
+    provider: 'codex',
+    rootPath: path.join(getCodexHome(), 'sessions'),
+  },
   {
     provider: 'claude',
     rootPath: path.join(getClaudeConfigDir(), 'projects'),

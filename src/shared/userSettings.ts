@@ -21,6 +21,7 @@ export type UserPreferences = {
   userLanguage: string;
   projectSortOrder: 'name' | 'date';
   claudePermissions: unknown;
+  codexPermissions: unknown;
   codeEditorSettings: unknown;
   uiPreferences: unknown;
   selectedProvider: string;
@@ -54,6 +55,7 @@ const LEGACY_STORAGE_KEYS: Record<UserPreferenceKey, string> = {
   userLanguage: 'userLanguage',
   projectSortOrder: 'claude-settings',
   claudePermissions: 'claude-settings',
+  codexPermissions: 'codex-settings',
   // Unused: the four code-editor settings never shared one key, so they are
   // read by readLegacyCodeEditorSettings instead.
   codeEditorSettings: '',

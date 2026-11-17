@@ -64,6 +64,7 @@ type CommandEntry = {
 
 const PROVIDER_LABELS: Record<string, string> = {
   claude: 'Claude',
+  codex: 'Codex',
 };
 
 const FALLBACK_COMMANDS: CommandEntry[] = [

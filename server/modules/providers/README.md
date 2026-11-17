@@ -39,7 +39,9 @@ The services that consume them are:
 Live execution is consumed through `providerRuntimeService`, which resolves the
 provider-owned runtime through the same `providerRegistry` as every other facet.
 
-Current provider ids in this repo are:
+The registered providers are `claude` and `codex`. Codex chat uses the installed CLI through the SDK, with optional `AH_CODEX_CMD` and `AH_CODEX_HOME` for WSL interoperability. Its session synchronizer indexes native rollout JSONL files.
+
+Provider ids in the original upstream contract were:
 
 - `claude`
 - `codex`

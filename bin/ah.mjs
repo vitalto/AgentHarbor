@@ -9,12 +9,12 @@ const HELP = `Usage: ah <command> [options]
 
   projects                         Registered projects
   ls [--project P] [--recent N]    Live agent windows (or the N most recent conversations)
-  new [--project P] [--trust-folder] [text]
+  new [--provider claude|codex] [--project P] [--trust-folder] [text]
                                    Start a session (project defaults to the current directory)
   send <session> [text]            Send a message; a busy session queues it
   read <session> [--last N]        Last N messages (default 10)
   usage [session]                  Context use (default: the calling Claude session)
-  models                           Models and effort levels for --model / --effort
+  models [--provider claude|codex]  Models and effort levels for --model / --effort
   notify [--title T] [text]        Push a notification to the user's subscribed browsers;
                                    inside a Claude session it opens that session's chat
 
@@ -45,7 +45,8 @@ function loadConfig() {
   if (!apiKey) {
     fail('No API key: create one in Settings -> API keys and put it in ~/.agentharbor/cli.json as "apiKey".');
   }
-  return { url, apiKey };
+  const provider = process.env.AH_PROVIDER || fileConfig.provider || 'claude';
+  return { url, apiKey, provider };
 }
 
 function fail(message) {
@@ -147,7 +148,7 @@ const commands = {
     const project = await findProject(config, values.project);
     const content = await readMessageText(positionals);
     const { sessionId } = await api(config, 'POST', '/providers/sessions', {
-      provider: 'claude',
+      provider: values.provider ?? config.provider,
       projectPath: project.fullPath,
       initialMessage: content,
       ...(values['trust-folder'] ? { trustFolder: true } : {}),
@@ -177,7 +178,7 @@ const commands = {
       if (message.kind === 'text') {
         console.log(`\n## ${message.role}${message.model ? ` (${message.model})` : ''} ${message.timestamp}\n${message.content}`);
       } else if (message.kind === 'tool_use') {
-        console.log(`  · ${message.toolName}: ${message.toolInput?.description ?? ''}`);
+        console.log(`  В· ${message.toolName}: ${message.toolInput?.description ?? ''}`);
       }
     }
   },
@@ -201,8 +202,8 @@ const commands = {
     console.log(`sent to ${devices} device${devices === 1 ? '' : 's'}`);
   },
 
-  async models(config) {
-    const { models } = await api(config, 'GET', '/providers/claude/models');
+  async models(config, { values }) {
+    const { models } = await api(config, 'GET', `/providers/${encodeURIComponent(values.provider ?? config.provider)}/models`);
     for (const model of models.OPTIONS) {
       const efforts = model.effort?.values.map((effort) => effort.value).join('/') ?? '-';
       console.log(`${model.value.padEnd(14)} effort ${efforts}  ${model.label}`);
@@ -219,6 +220,7 @@ const parsed = parseArgs({
   args: rest,
   allowPositionals: true,
   options: {
+    provider: { type: 'string' },
     project: { type: 'string', short: 'p' },
     model: { type: 'string' },
     effort: { type: 'string' },

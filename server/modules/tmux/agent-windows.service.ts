@@ -269,6 +269,9 @@ function trackStartingWindow(appSessionId: string, window: StartingWindow): void
 
 async function launchAgentWindow(appSessionId: string): Promise<StartingWindow> {
   const session = sessionsDb.getSessionById(appSessionId);
+  if (session && session.provider !== 'claude') {
+    throw new AgentWindowError('This session is managed through the Codex chat.');
+  }
   if (!session) {
     throw new AgentWindowError(`Session ${appSessionId} not found.`);
   }
@@ -403,6 +406,9 @@ async function stopClaudeProcess(claude: ClaudeProcess): Promise<void> {
  */
 export async function moveSessionToTmux(appSessionId: string, options: { force?: boolean } = {}): Promise<PaneSession> {
   const session = sessionsDb.getSessionById(appSessionId);
+  if (session && session.provider !== 'claude') {
+    throw new AgentWindowError('This session is managed through the Codex chat.');
+  }
   const providerSessionId = session?.provider_session_id;
   if (!providerSessionId) {
     throw new AgentWindowError('This session has no Claude conversation yet.');

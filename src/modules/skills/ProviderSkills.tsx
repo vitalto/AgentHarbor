@@ -51,10 +51,12 @@ const MAX_SKILL_FOLDER_BYTES = 30 * 1024 * 1024;
 
 const PROVIDER_NAMES: Record<SkillsProvider, string> = {
   claude: 'Claude',
+  codex: 'Codex',
 };
 
 const PROVIDER_SKILL_PATHS: Record<SkillsProvider, string> = {
   claude: '~/.claude/skills/<skill-name>/SKILL.md',
+  codex: '~/.agents/skills/<skill-name>/SKILL.md',
 };
 
 const SCOPE_BADGE_CLASSES: Record<SkillsScope, string> = {

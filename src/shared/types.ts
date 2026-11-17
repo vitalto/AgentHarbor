@@ -5,7 +5,7 @@ import type { NavigateFunction } from 'react-router-dom';
 //----------------- LLM PROVIDER MODEL CATALOG ------------
 
 /** Identifies which coding-agent CLI backs a session, project selection or model list. */
-export type LLMProvider = 'claude';
+export type LLMProvider = 'claude' | 'codex';
 
 /** One selectable model in a provider's model menu, including its optional reasoning-effort choices. */
 export type ProviderModelOption = {
@@ -1358,7 +1358,7 @@ export type AgentContext = {
 export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'notifications' | 'plugins' | 'about';
 
 /** The coding-agent CLI a settings screen is configuring, aliasing LLMProvider so agent-scoped settings read as being about an agent rather than a chat model. */
-export type AgentProvider = LLMProvider;
+export type AgentProvider = 'claude';
 
 /** One category of per-agent configuration in the agents settings tab (account, permissions, MCP servers or skills); use it to key which panel the tab renders. */
 export type AgentCategory = 'account' | 'permissions' | 'runtime' | 'mcp' | 'skills';

@@ -25,9 +25,10 @@ const toProviderEffortOptions = (
 
 const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   claude: 'default',
+  codex: 'default',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude'];
+const PROVIDERS: LLMProvider[] = ['claude', 'codex'];
 
 /** localStorage key holding the user's default model for one provider. */
 const providerModelStorageKey = (provider: LLMProvider): string => `${provider}-model`;
@@ -39,6 +40,7 @@ const providerModelStorageKey = (provider: LLMProvider): string => `${provider}-
  * first paint and when the capabilities request fails.
  */
 const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
+  codex: ['default'],
   claude: ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'],
 };
 

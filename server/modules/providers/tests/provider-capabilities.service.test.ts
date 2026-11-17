@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { CODEX_PREDEFINED_MODELS } from '@/modules/providers/list/codex/codex-models.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import type { LLMProvider, ProviderModelsDefinition } from '@/shared/types.js';
 
 const CURATED_CATALOGS: Record<LLMProvider, ProviderModelsDefinition> = {
+  codex: CODEX_PREDEFINED_MODELS,
   claude: CLAUDE_PREDEFINED_MODELS,
 };
 

@@ -353,7 +353,7 @@ export const sessionsService = {
     const sessionId = randomUUID();
     const sessionName = buildSessionNameFromMessage(initialMessage);
     sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath, sessionName);
-    if (options.trustFolder) {
+    if (provider === 'claude' && options.trustFolder) {
       trustFolderOnNextStart(sessionId);
     }
 

@@ -25,6 +25,28 @@ chat UI on top of it:
 - agents survive server restarts, browser reloads and dropped mobile connections;
 - nothing is emulated: what you type in the web composer is typed into the TUI.
 
+## Codex chat
+
+In a new chat, open the model picker and select **OpenAI Codex → Codex CLI default**.
+AgentHarbor streams the turn from `codex exec`, stores the native thread ID and resumes that
+thread on the next message. History comes from the Codex rollout. Choose the model in Codex
+or add a model in the AgentHarbor picker.
+
+Install Codex CLI and run `codex login` as the account that runs it. The server uses
+`codex` on PATH by default. For Windows Codex through WSL, set `AH_CODEX_CMD` to the
+absolute WSL path of `codex.exe`, and `AH_CODEX_HOME` to the WSL path of its existing
+Codex home. The Terminal tab opens the project shell for a Codex chat.
+
+```bash
+ah new --provider codex --project P "task"
+ah read <session>
+ah send <session> "follow-up"
+```
+
+Set `"provider": "codex"` in the CLI configuration or `AH_PROVIDER=codex` to use Codex
+by default for `ah new` and `ah models`. An active Codex turn finishes before another
+CLI message can start in that thread.
+
 ## Features
 
 - **Chat view of a live TUI** - markdown, code blocks, diffs, tool cards and thinking blocks, rendered
@@ -186,7 +208,7 @@ See [SECURITY.md](SECURITY.md) for the threat model and how to report a vulnerab
 
 AgentHarbor started from CloudCLI UI and keeps its chat rendering, file tree, git panel, settings
 and plugin system. It replaces the SDK-based Claude runtime with the tmux/TUI runtime described above
-and removes: the Codex, Cursor, OpenCode and Gemini providers, voice input, TaskMaster / PRD editor,
+and removes: the Cursor, OpenCode and Gemini providers, voice input, TaskMaster / PRD editor,
 browser use, scheduled messages, `/api/agent`, the Electron desktop app, the Docker sandbox, edit and
 resend, fork, the model / effort / permission pickers and AI commit messages.
 

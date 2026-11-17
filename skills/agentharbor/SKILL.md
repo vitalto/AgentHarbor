@@ -5,7 +5,7 @@ description: Use when work should continue in another project or session run by 
 
 # Other sessions through AgentHarbor (`ah`)
 
-Every Claude session in AgentHarbor is a live window. The `ah` command lists, starts, messages and
+AgentHarbor runs Claude in live windows and Codex through its CLI. Use `ah new --provider codex --project P "task"` for Codex. Read its result with `ah read` and continue the same thread with `ah send`. Use `ah ls --recent 20` to list its saved conversations, and wait for a Codex turn to finish before sending another. The `ah` command lists, starts, messages and
 reads them. `ah help` prints the full usage.
 
 ```bash

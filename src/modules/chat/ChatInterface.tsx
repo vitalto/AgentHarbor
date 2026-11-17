@@ -438,7 +438,7 @@ function ChatInterface({
   const composerActivity = readComposerActivity(sessionActivity);
   const hasActivityIndicator = Boolean(composerActivity && !viewedTui.prompt);
 
-  const selectedProviderLabel = t('messageTypes.claude');
+  const selectedProviderLabel = provider === 'codex' ? 'Codex' : t('messageTypes.claude');
 
   if (!selectedProject) {
     return (

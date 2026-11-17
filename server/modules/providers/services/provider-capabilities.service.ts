@@ -48,6 +48,20 @@ type ProviderCapabilities = {
  * The capability matrix mirrors what the runtime actually implements today.
  */
 const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
+  codex: {
+    provider: 'codex',
+    permissionModes: ['default'],
+    defaultPermissionMode: 'default',
+    supportsImages: true,
+    supportsFiles: true,
+    supportsAbort: true,
+    supportsPermissionRequests: false,
+    supportsTokenUsage: false,
+    supportsEffort: true,
+    effortLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
+  },
   claude: {
     provider: 'claude',
     permissionModes: ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'],
