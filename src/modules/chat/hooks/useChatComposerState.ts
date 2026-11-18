@@ -16,6 +16,7 @@ import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
 import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import { isImageAttachmentDescriptor } from '@common/chatAttachmentKind';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -96,11 +97,6 @@ const createFakeSubmitEvent = () => {
 
 const MAX_ATTACHMENT_COUNT = 10;
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
-
-const isImageAttachment = (attachment: ChatAttachment) => {
-  if (attachment.mimeType?.startsWith('image/')) return true;
-  return /\.(gif|jpe?g|png|svg|webp)$/i.test(attachment.path || attachment.name || '');
-};
 
 const uploadAttachmentFiles = async (files: File[]): Promise<unknown[]> => {
   if (files.length === 0) {
@@ -882,8 +878,8 @@ export function useChatComposerState({
       const userMessage: ChatMessage = {
         type: 'user',
         content: currentInput,
-        images: attachmentRecords.filter(isImageAttachment),
-        files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
+        images: attachmentRecords.filter(isImageAttachmentDescriptor),
+        files: attachmentRecords.filter((attachment) => !isImageAttachmentDescriptor(attachment)),
         timestamp: new Date(),
         // Tags this echo as the replacement, so the truncation the server
         // broadcasts a moment later cuts the turns being replaced without

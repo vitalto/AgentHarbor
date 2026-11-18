@@ -59,6 +59,15 @@ test('matches optimistic attachment turns to persisted turns one-to-one', () => 
   assert.deepEqual(remainingRealtime.map((message) => message.id), ['local_second']);
 });
 
+test('uses stored attachment names to distinguish sends that a Windows transcript echoes out of order', () => {
+  const timestamp = '2026-07-28T20:30:21.000Z';
+  const first = createUserMessage('local_first', timestamp, { files: [{ path: '/uploads/1-notes.txt', name: 'notes.txt' }] });
+  const second = createUserMessage('local_second', timestamp, { files: [{ path: '/uploads/2-notes.txt', name: 'notes.txt' }] });
+  const echoedSecond = createUserMessage('saved_second', timestamp, { files: [{ path: 'C:\\staging\\2-notes.txt', name: 'notes.txt' }] });
+
+  assert.deepEqual(removeOptimisticUserEchoes([echoedSecond], [first, second]), [first]);
+});
+
 test('keeps the existing optimistic text reconciliation behavior', () => {
   const local = createUserMessage('local_text', '2026-07-28T20:30:21.000Z', {
     content: 'hello',

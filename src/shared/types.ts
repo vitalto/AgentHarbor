@@ -501,6 +501,8 @@ export type NormalizedMessage = {
    * when the cut was made, so this is where those rows begin.
    */
   replacesAfterRowCount?: number;
+  /** Recent attachment turns already on screen when this local prompt was sent are ineligible as its echo. */
+  priorAttachmentTurnIds?: string[];
   /** A reply finalized from local streaming chunks still needs to match the transcript by content. */
   isLocalStreamEcho?: boolean;
   sessionId: string;

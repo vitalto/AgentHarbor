@@ -2,6 +2,8 @@ import { promises as fs, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+export { isImageAttachmentDescriptor } from '../../shared/chatAttachmentKind.js';
+
 /**
  * Shared chat-attachment plumbing for every provider runtime.
  *
@@ -90,19 +92,6 @@ export function normalizeAttachmentDescriptors(attachments: unknown): ChatAttach
 /** Backward-compatible image-specific alias used by existing provider adapters. */
 export function normalizeImageDescriptors(images: unknown): ImageAttachmentDescriptor[] {
   return normalizeAttachmentDescriptors(images);
-}
-
-const IMAGE_FILE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
-
-/**
- * Determines whether the websocket gateway should route an attachment through
- * provider-native image input instead of the general file reference channel.
- */
-export function isImageAttachmentDescriptor(descriptor: ChatAttachmentDescriptor): boolean {
-  if (descriptor.mimeType && CLAUDE_IMAGE_MEDIA_TYPES.has(descriptor.mimeType)) {
-    return true;
-  }
-  return IMAGE_FILE_EXTENSIONS.has(path.extname(descriptor.path).toLowerCase());
 }
 
 /** Normalizes Windows separators so stored references stay portable. */
@@ -217,7 +206,7 @@ export function appendImagesInputTag(prompt: string, images: unknown): string {
   ].join('\n');
 }
 
-const FILES_INPUT_TAG_PATTERN = /\s*<files_input>([\s\S]*?)<\/files_input>\s*/g;
+const FILES_INPUT_TAG_PATTERN = /\s*<files_input>(\s*The user attached \d+ file\(s\) to this message\.[\s\S]*?)<\/files_input>\s*/g;
 // Windows terminals can drop angle brackets. Require the generated header and a numbered list at the end of the prompt.
 const BARE_FILES_INPUT_SUFFIX = /(?:^|\n)files_input\r?\nThe user attached \d+ file\(s\) to this message\.[^\r\n]*\r?\n(1\. [^\r\n]+(?:\r?\n\d+\. [^\r\n]+)*)\r?\n\/files_input\s*$/;
 
@@ -295,14 +284,13 @@ export function parseFilesInputTag(text: string): {
       lastMatch = match;
     }
   }
-  if (!lastMatch) {
+  if (!lastMatch || lastMatch.index + lastMatch[0].length !== text.length) {
     return { text, filePaths: [], attachments: [] };
   }
 
   const attachments = parseNumberedImageEntries(lastMatch[1]);
-  const stripped = (
-    text.slice(0, lastMatch.index) + '\n' + text.slice(lastMatch.index + lastMatch[0].length)
-  ).trim();
+  if (!attachments.length) return { text, filePaths: [], attachments: [] };
+  const stripped = text.slice(0, lastMatch.index).trim();
 
   return {
     text: stripped,

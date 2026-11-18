@@ -135,6 +135,14 @@ test('preserves ordinary prompt text between bare files_input markers', () => {
   assert.deepEqual(parseFilesInputTag(prompt), { text: prompt, filePaths: [], attachments: [] });
 });
 
+test('preserves a literal files_input tag in a message without a generated file suffix', () => {
+  const example = '<files_input>\n1. Example for the docs\n</files_input>';
+  const quoted = appendFilesInputTag('Quoted instructions', ['sample.txt']) + '\nEnd of quote.';
+  for (const prompt of [example, quoted]) {
+    assert.deepEqual(parseFilesInputTag(prompt), { text: prompt, filePaths: [], attachments: [] });
+  }
+});
+
 test('appendImagesInputTag and parseImagesInputTag round-trip', () => {
   const prompt = 'Describe these screenshots.\n\nFocus on the header.';
   const tagged = appendImagesInputTag(prompt, [

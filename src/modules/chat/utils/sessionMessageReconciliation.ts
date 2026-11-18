@@ -1,4 +1,4 @@
-import type { NormalizedMessage } from '@/shared/types';
+import type { ChatAttachment, ChatImage, NormalizedMessage } from '@/shared/types';
 
 const LOCAL_USER_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
 const LOCAL_USER_DEDUPE_CLOCK_SKEW_MS = 10_000;
@@ -6,8 +6,8 @@ const LOCAL_ATTACHMENT_ONLY_DEDUPE_WINDOW_MS = 30_000;
 
 type UserTurnFingerprint = {
   text: string;
-  imageCount: number;
-  fileCount: number;
+  images: ChatImage[];
+  files: ChatAttachment[];
 };
 
 /**
@@ -23,11 +23,32 @@ function userTurnFingerprint(message: NormalizedMessage): UserTurnFingerprint | 
   if (message.kind !== 'text' || message.role !== 'user') return null;
 
   const text = visibleCharacters(message.content || '');
-  const imageCount = Array.isArray(message.images) ? message.images.length : 0;
-  const fileCount = Array.isArray(message.files) ? message.files.length : 0;
-  if (!text && imageCount === 0 && fileCount === 0) return null;
+  const images = Array.isArray(message.images) ? message.images : [];
+  const files = Array.isArray(message.files) ? message.files : [];
+  if (!text && images.length === 0 && files.length === 0) return null;
 
-  return { text, imageCount, fileCount };
+  return { text, images, files };
+}
+
+function attachmentSourcesMatch(local: ChatImage[], persisted: ChatImage[]): boolean {
+  if (local.length !== persisted.length) return false;
+  if (local.length === 0) return true;
+  // Staging changes an upload's directory but keeps its unique stored filename.
+  // An inline image can only be compared by its bytes when both sides carry them.
+  const storedName = (attachment: ChatImage) => attachment?.path?.split(/[\\/]/).pop();
+  const sources = [storedName, (attachment: ChatImage) => attachment?.data];
+  return sources.every((readSource) => {
+    const available = local.map(readSource);
+    for (const attachment of persisted) {
+      const key = readSource(attachment);
+      if (!key) continue;
+      const exactIndex = available.indexOf(key);
+      const index = exactIndex < 0 ? available.indexOf(undefined) : exactIndex;
+      if (index < 0) return false;
+      available.splice(index, 1);
+    }
+    return true;
+  });
 }
 
 function userTurnFingerprintsMatch(
@@ -36,8 +57,8 @@ function userTurnFingerprintsMatch(
 ): boolean {
   return (
     local.text === server.text
-    && local.imageCount === server.imageCount
-    && local.fileCount === server.fileCount
+    && attachmentSourcesMatch(local.images, server.images)
+    && attachmentSourcesMatch(local.files, server.files)
   );
 }
 
@@ -73,7 +94,7 @@ function findServerEchoForLocalUser(
 
   for (let index = firstEligibleIndex; index < serverMessages.length; index++) {
     const serverMessage = serverMessages[index];
-    if (claimedServerIds.has(serverMessage.id)) {
+    if (claimedServerIds.has(serverMessage.id) || localMessage.priorAttachmentTurnIds?.includes(serverMessage.id)) {
       continue;
     }
 
@@ -99,6 +120,20 @@ function findServerEchoForLocalUser(
   }
 
   return closestMatch;
+}
+
+/** An inline transcript image may lack its upload path. A turn already visible before the send cannot be its echo. */
+export function recordPriorAttachmentTurns(localMessage: NormalizedMessage, visibleMessages: NormalizedMessage[]): NormalizedMessage {
+  if (!localMessage.images?.length && !localMessage.files?.length) return localMessage;
+  const localTime = readMessageTime(localMessage);
+  if (localTime === null) return localMessage;
+
+  const priorIds = visibleMessages.filter((message) => (
+    message.kind === 'text' && message.role === 'user' && !message.id.startsWith('local_')
+    && (message.images?.length || message.files?.length)
+    && (readMessageTime(message) ?? -Infinity) >= localTime - LOCAL_USER_DEDUPE_CLOCK_SKEW_MS
+  )).map((message) => message.id);
+  return priorIds.length ? { ...localMessage, priorAttachmentTurnIds: priorIds } : localMessage;
 }
 
 /**

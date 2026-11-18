@@ -76,18 +76,6 @@ function createCodexRowIdReader() {
   };
 }
 
-function isVisibleCodexUserMessage(payload: AnyRecord | null | undefined): boolean {
-  if (!payload || payload.type !== 'user_message') {
-    return false;
-  }
-
-  if (payload.kind && payload.kind !== 'plain') {
-    return false;
-  }
-
-  return typeof payload.message === 'string' && payload.message.trim().length > 0;
-}
-
 /**
  * Follows which turn a Codex rollout is inside as its rows stream past.
  *
@@ -179,7 +167,32 @@ export function extractCodexUserImages(
   return attachments.length > 0 ? attachments : undefined;
 }
 
-function extractCodexTextContent(content: unknown): string {
+function withoutCodexImagePlaceholders(text: string, elements: unknown): string {
+  if (!Array.isArray(elements) || !elements.length) return text;
+
+  // Codex addresses placeholders in UTF-8 bytes. The same label can also occur in the user's own prose.
+  const bytes = Buffer.from(text);
+  const ranges = elements.flatMap(element => {
+    const { start, end } = element?.byte_range ?? {};
+    const placeholder = element?.placeholder;
+    if (typeof placeholder !== 'string' || !/^\[Image #[1-9]\d*\]$/.test(placeholder)
+      || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > bytes.length
+      || bytes.toString('utf8', start, end) !== placeholder) return [];
+    return [{ start, end }];
+  }).sort((a, b) => a.start - b.start);
+
+  let caption = '';
+  let cursor = 0;
+  for (const { start, end } of ranges) {
+    if (start < cursor) continue;
+    caption += bytes.toString('utf8', cursor, start);
+    // The composer inserts a separating space after each attached image, outside its marked range.
+    cursor = bytes[end] === 0x20 ? end + 1 : end;
+  }
+  return cursor ? caption + bytes.toString('utf8', cursor) : text;
+}
+
+function extractCodexTextContent(content: unknown, hasImages = false): string {
   if (!Array.isArray(content)) {
     return typeof content === 'string' ? content : '';
   }
@@ -195,7 +208,7 @@ function extractCodexTextContent(content: unknown): string {
         (record.type === 'input_text' || record.type === 'output_text' || record.type === 'text')
         && typeof record.text === 'string'
       ) {
-        return record.text;
+        return hasImages ? withoutCodexImagePlaceholders(record.text, record.text_elements) : record.text;
       }
 
       return '';
@@ -204,14 +217,13 @@ function extractCodexTextContent(content: unknown): string {
     .join('\n');
 }
 
+/** Conversation search uses the same visible caption as the live and saved transcripts. */
 export function extractCodexSearchableMessage(entry: AnyRecord): { role: 'user' | 'assistant'; text: string } | null {
   const payload = readObjectRecord(entry.payload);
   if (!payload) return null;
   if (entry.type === 'event_msg') {
-    if (isVisibleCodexUserMessage(payload)) return { role: 'user', text: payload.message };
-    if (payload.type === 'item_completed' && payload.item?.type === 'UserMessage') {
-      return { role: 'user', text: extractCodexTextContent(payload.item.content) };
-    }
+    const prompt = readCodexUserPrompt(payload);
+    if (prompt) return { role: 'user', text: parseFilesInputTag(prompt.content).text };
   }
   if (entry.type === 'response_item' && payload.type === 'message' && payload.role === 'assistant') {
     return { role: 'assistant', text: readCodexMemoryCitations(extractCodexTextContent(payload.content)).text };
@@ -250,6 +262,18 @@ function extractCodexTypedUserImages(
   }
 
   return attachments.length > 0 ? attachments : undefined;
+}
+
+function readCodexUserPrompt(payload: AnyRecord) {
+  const item = payload.type === 'item_completed' && payload.item?.type === 'UserMessage' ? payload.item : null;
+  const legacy = payload.type === 'user_message' && (!payload.kind || payload.kind === 'plain') && typeof payload.message === 'string';
+  if (!item && !legacy) return null;
+
+  const images = item ? extractCodexTypedUserImages(item.content) : extractCodexUserImages(payload);
+  const content = item
+    ? extractCodexTextContent(item.content, Boolean(images))
+    : withoutCodexImagePlaceholders(payload.message, images && payload.text_elements);
+  return content.trim() || images ? { content, images, id: readNonEmptyString(item?.id) } : null;
 }
 
 /**
@@ -1309,38 +1333,8 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
         continue;
       }
 
-      // Paginated rollouts carry user prompts as `item_completed` /
-      // `UserMessage`; wire `response_item` user rows are internal, not prompts.
-      if (payload.type === 'item_completed') {
-        const item = readObjectRecord(payload.item);
-        if (item?.type === 'UserMessage') {
-          const content = extractCodexTextContent(item.content);
-          const images = extractCodexTypedUserImages(item.content);
-          if (content.trim() || images?.length) {
-            // Only the first prompt of a turn is anchored, matching the legacy
-            // `user_message` branch below: a turn can hold several prompts and
-            // the edit cut is per turn.
-            const turnId = readNonEmptyString(payload.turn_id)
-              ?? turns.getCurrentTurnId();
-            const isFirstPromptOfTurn = Boolean(turnId) && !anchoredTurnIds.has(turnId as string);
-            if (isFirstPromptOfTurn) {
-              anchoredTurnIds.add(turnId as string);
-            }
-            const row: AnyRecord = {
-              type: 'user',
-              uuid: readNonEmptyString(item.id),
-              timestamp,
-              message: { role: 'user', content },
-              ...(images ? { images } : {}),
-              ...(isFirstPromptOfTurn ? { turnId } : {}),
-            };
-            publish(row);
-          }
-        }
-        continue;
-      }
-
-      if (isVisibleCodexUserMessage(payload)) {
+      const prompt = readCodexUserPrompt(payload);
+      if (prompt) {
         // Only the first prompt of a turn is anchored. A turn can hold more
         // than one вЂ” a follow-up queued while the turn was running is written
         // into it вЂ” and the cut is per turn, so anchoring the second would
@@ -1352,9 +1346,10 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
         }
         publish({
           type: 'user',
+          uuid: prompt.id,
           timestamp,
-          message: { role: 'user', content: payload.message },
-          images: extractCodexUserImages(payload),
+          message: { role: 'user', content: prompt.content },
+          images: prompt.images,
           ...(isFirstPromptOfTurn ? { turnId } : {}),
         });
       }
