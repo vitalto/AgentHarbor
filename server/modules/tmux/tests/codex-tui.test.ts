@@ -193,6 +193,22 @@ const questionLines = [
   '  enter submit   ctrl+] skip   option 1/3', '  shift+→ main prompt', '',
 ];
 
+test('a native question keeps its identity across transcript output, status ticks and terminal wrapping', () => {
+  const drawer = (lines: string[]) => parseCodexScreen({ ...base, cursorVisible: false, lines }).dialog!;
+  const initial = drawer(questionLines);
+  for (const prefix of [
+    ['› an earlier message', '', '1. previous list item', '', '• Working (6m 08s • esc to interrupt)', ''],
+    ['• unrelated tool output', '  its continuation', '', '◦ Thinking (6m 09s • esc to interrupt)', ''],
+    ['› a previous message', '', '• Worked for 7m 12s', ''],
+  ]) {
+    const refreshed = drawer([...prefix, ...questionLines]);
+    assert.equal(refreshed.question, initial.question);
+    assert.equal(refreshed.codexQuestionId, initial.codexQuestionId);
+  }
+  assert.equal(drawer(questionLines.join('\n').replace('Where should the\n  sample go?', 'Where should the sample go?').split('\n')).codexQuestionId, initial.codexQuestionId);
+  assert.notEqual(drawer(questionLines.map(line => line.replace('sample go?', 'other sample go?'))).codexQuestionId, initial.codexQuestionId);
+});
+
 test('a narrow native question panel exposes its wrapped title and only the choices visible in this capture', () => {
   const drawer = parseCodexScreen({ ...base, cursorVisible: false, lines: questionLines });
   assert.equal(drawer.activity, 'waiting');

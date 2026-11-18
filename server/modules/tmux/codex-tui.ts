@@ -59,7 +59,11 @@ function readQuestionDrawer(lines: string[], footer: string): TuiPrompt | null {
   const help = lines.map((line) => /shift\+(?:→|right)\s+main prompt/i.test(line)).lastIndexOf(true);
   let end = help;
   while (end > 0 && /(?:enter\s+submit|ctrl\+\]\s+skip|option\s+\d+\/\d+)/i.test(lines[end - 1])) end--;
-  const body = lines.slice(0, end).map((line) => line.trimEnd());
+  // The drawer is inset by two columns. Scrollback and the live turn spinner
+  // can remain above it and change while the same question is on screen.
+  let start = end;
+  while (start > 0 && (!lines[start - 1] || lines[start - 1].startsWith('  '))) start--;
+  const body = lines.slice(start, end);
   const optionPattern = /^\s*(›\s+)?(\d+)\.\s+(.+)$/u;
   const firstOption = body.findIndex((line) => optionPattern.test(line));
   const firstInput = firstOption < 0 ? body.findIndex((line) => /^\s*›/u.test(line)) : firstOption;
