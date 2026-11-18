@@ -9,6 +9,7 @@ import { getProviderDisplayName } from '@/shared/utils';
 import { LLMProviderLogo } from '@/shared/ui';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/modules/chat/transcript/Reasoning';
 import ChatMessageImages from '@/modules/chat/transcript/ChatMessageImages';
+import { AgentQuestionCard } from '@/modules/chat/transcript/AgentQuestionCard';
 import ChatMessageFiles from '@/modules/chat/transcript/ChatMessageFiles';
 import { Markdown } from '@/modules/chat/transcript/Markdown';
 import StreamingMarkdown from '@/modules/chat/transcript/StreamingMarkdown';
@@ -226,7 +227,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
           <div className="w-full">
 
-            {message.isToolUse && message.toolName === 'Workflow' ? (
+            {message.questionRequest ? (
+              <AgentQuestionCard request={message.questionRequest} />
+            ) : message.isToolUse && message.toolName === 'Workflow' ? (
               /* A workflow launch owns its whole card too. The anchor is what
                  the background-tasks strip scrolls to. */
               <div id={`tool-result-${message.toolId}`} className="scroll-mt-4">

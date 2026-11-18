@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { AgentQuestion, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { isImageAttachmentDescriptor } from '@common/chatAttachmentKind';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
@@ -287,15 +287,13 @@ export function useChatComposerState({
   const sessionKeyRef = useRef(sessionKey);
   sessionKeyRef.current = sessionKey;
 
-  // Recall writes go through the same pair of stores a send reads: the state
-  // (for the render) and inputValueRef (so an immediate Enter submits the
-  // recalled text, not a stale value).
-  const setInputFromHistory = useCallback((value: string) => {
+  // Enter can submit before React has committed a recalled message or a selected reply.
+  const replaceComposerText = useCallback((value: string) => {
     setInput(value);
     inputValueRef.current = value;
   }, [setInput]);
   const { recordSentMessage, handleHistoryKeyDown } = useInputHistory({
-    setInput: setInputFromHistory,
+    setInput: replaceComposerText,
     textareaRef,
     scope: draftScope,
   });
@@ -1287,25 +1285,45 @@ export function useChatComposerState({
     [],
   );
 
+  const prepareQuestionReply = useCallback((question: AgentQuestion, answer = '') => {
+    if (editingAnchorId || !sessionKey || sessionKey !== sessionKeyRef.current) return;
+    const quote = question.title.split(/\r?\n/).map(line => `> ${line}`).join('\n') + '\n\n';
+    const draft = inputValueRef.current;
+    const lastQuote = draft.lastIndexOf(quote);
+    const previousAnswer = lastQuote < 0 ? null : draft.slice(lastQuote + quote.length);
+    // A second tap can change an untouched suggestion. Keep anything the user has since written.
+    const sameQuestion = lastQuote === 0 || (lastQuote >= 2 && draft.slice(lastQuote - 2, lastQuote) === '\n\n');
+    let prefix = draft ? draft + '\n\n' : '';
+    if (sameQuestion && previousAnswer !== null && (previousAnswer === '' || question.options.includes(previousAnswer))) {
+      prefix = draft.slice(0, lastQuote);
+    }
+    const next = prefix + quote + answer;
+    replaceComposerText(next);
+    const textarea = textareaRef.current;
+    textarea?.focus();
+    if (textarea) requestAnimationFrame(() => {
+      if (sessionKey === sessionKeyRef.current && textarea.value === next) textarea.setSelectionRange(next.length, next.length);
+    });
+  }, [editingAnchorId, sessionKey, replaceComposerText]);
+
   /** Loads an already-sent message back into the composer to be replaced. */
   const beginEditMessage = useCallback((message: ChatMessage) => {
     if (!message.transcriptAnchorId) return;
     setEditingAnchorId(message.transcriptAnchorId);
-    setInput(message.content || '');
-    inputValueRef.current = message.content || '';
+    replaceComposerText(message.content || '');
     textareaRef.current?.focus();
-  }, [setInput]);
+  }, [replaceComposerText]);
 
   const cancelEditMessage = useCallback(() => {
     setEditingAnchorId(null);
-    setInput('');
-    inputValueRef.current = '';
-  }, [setInput]);
+    replaceComposerText('');
+  }, [replaceComposerText]);
 
   return {
     input,
     setInput,
     editingAnchorId,
+    prepareQuestionReply,
     beginEditMessage,
     cancelEditMessage,
     textareaRef,

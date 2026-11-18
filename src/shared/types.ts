@@ -360,6 +360,8 @@ export type ChatMessage = {
   model?: string;
   isThinking?: boolean;
   isStreaming?: boolean;
+  /** Questions that can be answered by sending a follow-up in their originating chat. */
+  questionRequest?: AgentQuestionRequest;
   isToolUse?: boolean;
   toolName?: string;
   toolInput?: unknown;
@@ -429,6 +431,15 @@ export type PendingPermissionRequest = {
   context?: unknown;
   sessionId?: string | null;
   receivedAt?: Date;
+};
+
+/** A question agents can ask as a follow-up, optionally suggesting plain-text replies. */
+export type AgentQuestion = { title: string; options: string[] };
+
+/** An asynchronous question set addressed to one session. Its receipt does not include the user's answer. */
+export type AgentQuestionRequest = {
+  sessionId: string | null;
+  questions: AgentQuestion[];
 };
 
 /** One question asked by the AskUserQuestion tool, with its answer options and whether more than one option may be selected. */

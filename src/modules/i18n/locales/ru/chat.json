@@ -32,6 +32,10 @@
     "readTodo": "Прочитать список задач",
     "searchResults": "результаты"
   },
+  "interaction": {
+    "reply": "Ответить",
+    "customReply": "Свой ответ"
+  },
   "search": {
     "found": "Найдено {{count}} {{type}}",
     "file": "файл",

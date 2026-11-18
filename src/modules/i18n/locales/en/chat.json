@@ -32,6 +32,10 @@
     "readTodo": "Read todo list",
     "searchResults": "results"
   },
+  "interaction": {
+    "reply": "Reply",
+    "customReply": "Write a reply"
+  },
   "search": {
     "found": "Found {{count}} {{type}}",
     "file": "file",

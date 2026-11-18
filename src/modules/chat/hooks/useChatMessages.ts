@@ -5,6 +5,7 @@
 
 import type { ChatMessage, LiveTaskStatus, NormalizedMessage, SubagentActivity } from '@/shared/types';
 import { formatUsageLimitText } from '@/modules/chat/utils/chatFormatting';
+import { readCodexInteraction } from '@/modules/chat/utils/readCodexInteraction';
 import { readAskUserQuestionAnswers } from '@common/askUserQuestionAnswers';
 
 /**
@@ -478,6 +479,12 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
               toolUseResult: tr.toolUseResult,
             }
           : null;
+
+        const interaction = readCodexInteraction(msg, toolResult);
+        if (interaction) {
+          converted.push({ ...sharedMetadata, ...interaction, type: 'assistant', timestamp: msg.timestamp, toolId: msg.toolId });
+          break;
+        }
 
         // The server-indexed timeline arrives on a history load; the live fold
         // covers the run in progress. A mid-run refresh can attach a partial

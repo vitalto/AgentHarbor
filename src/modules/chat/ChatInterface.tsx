@@ -241,6 +241,8 @@ function ChatInterface({
     closeCommandModal,
     showCostModal,
     showModelsModal,
+    editingAnchorId,
+    prepareQuestionReply,
     beginEditMessage,
   } = useChatComposerState({
     sendWhileBusy: findWindow(selectedSession?.id || currentSessionId)?.location === 'tmux',
@@ -430,8 +432,11 @@ function ChatInterface({
     projectId: selectedProject?.projectId ?? null,
   }), [selectedProject?.projectId]);
 
-  // Lets a workflow card fetch its agents' timelines for this session.
-  const transcriptSessionValue = useMemo(() => ({ sessionId: currentSessionId }), [currentSessionId]);
+  const canReplyToQuestions = isActive && currentSessionId === viewedSessionId && !viewedTui.prompt && !editingAnchorId;
+  const transcriptSessionValue = useMemo(() => ({
+    sessionId: currentSessionId,
+    prepareQuestionReply: canReplyToQuestions ? prepareQuestionReply : undefined,
+  }), [currentSessionId, canReplyToQuestions, prepareQuestionReply]);
 
   // Mirrors ChatComposer's own visibility check so the message pane can
   // reserve enough bottom space to keep the floating status tab from
