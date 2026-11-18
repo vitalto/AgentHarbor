@@ -19,9 +19,13 @@ for (const withText of [true, false]) {
       lastChange = performance.now();
     });
     t.mock.method(tmuxService, 'inspectPane', async () => {
-      if (draft.endsWith('подп') && ++settlingReads === 3) {
-        draft += 'ись';
-        lastChange = performance.now();
+      if (draft.endsWith('подп')) {
+        settlingReads++;
+        if (settlingReads === 2) return { ...base, cursorVisible: false, lines: ['', '› ' + draft] };
+        if (settlingReads === 3) {
+          draft += 'ись';
+          lastChange = performance.now();
+        }
       }
       return { ...base, cursorX: 2 + draft.length, lines: ['', '› ' + draft] };
     });

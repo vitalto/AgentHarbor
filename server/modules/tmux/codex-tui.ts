@@ -139,8 +139,13 @@ export async function typeCodexInput(paneId: string, text: string, imagePaths: s
   }
   let stableSince = performance.now();
   await waitForScreen(paneId, (screen) => {
-    if (screen.title !== expectedTitle || !screen.composer || screen.empty) {
+    if (screen.title !== expectedTitle || screen.dialog) {
       throw new AgentWindowError('The Codex input changed before the message could be sent.');
+    }
+    // ConPTY briefly hides the cursor while repainting a partially rendered paste.
+    if (!screen.composer || screen.empty) {
+      stableSince = performance.now();
+      return false;
     }
     if (screen.input !== lastInput) {
       lastInput = screen.input;
