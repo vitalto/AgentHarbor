@@ -23,8 +23,7 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
   DEFAULT: defaultOption.value,
 };
 
-/** Maps Codex picker metadata into the catalog consumed by the Providers API. */
-export function parseCodexModelCatalog(raw: string, configuredModel?: string): ProviderModelsDefinition {
+function decodeCodexCatalog(raw: string, configuredModel?: string) {
   const models = readObjectRecord(JSON.parse(raw))?.models;
   if (!Array.isArray(models)) throw new Error('Invalid Codex model catalog.');
 
@@ -57,13 +56,19 @@ export function parseCodexModelCatalog(raw: string, configuredModel?: string): P
     .filter((row) => options.has(row?.slug))
     .sort((first, second) => (first.priority ?? Infinity) - (second.priority ?? Infinity))[0]?.slug;
   const effort = options.get(defaultId)?.effort;
-  return {
+  const catalog: ProviderModelsDefinition = {
     DEFAULT: defaultOption.value,
     OPTIONS: [{ ...defaultOption, ...(effort ? { effort } : {}) }, ...options.values()],
   };
+  return { catalog, model: defaultId as string | undefined };
 }
 
-async function readCodexModelCatalog({ home, executable, env }: ReturnType<typeof getCodexCliConfig>): Promise<ProviderModelsDefinition> {
+/** Used by the provider catalog tests to verify native model and effort choices. */
+export function parseCodexModelCatalog(raw: string, configuredModel?: string): ProviderModelsDefinition {
+  return decodeCodexCatalog(raw, configuredModel).catalog;
+}
+
+async function readCodexModelCatalog({ home, executable, env }: ReturnType<typeof getCodexCliConfig>) {
   const runCatalogCommand = async (args: string[]) => (await run(executable, ['debug', 'models', ...args], {
     timeout: 8000,
     maxBuffer: 32 * 1024 * 1024,
@@ -72,27 +77,29 @@ async function readCodexModelCatalog({ home, executable, env }: ReturnType<typeo
   })).stdout;
 
   let configuredModel: string | undefined;
+  let configuredEffort: string | undefined;
   try {
     const config = TOML.parse(await readFile(path.join(home, 'config.toml'), 'utf8'));
     const profile = readOptionalString(config.profile);
     const profiles = readObjectRecord(config.profiles);
     configuredModel = (profile && readOptionalString(profiles?.[profile]?.model)) || readOptionalString(config.model);
+    configuredEffort = (profile && readOptionalString(profiles?.[profile]?.model_reasoning_effort)) || readOptionalString(config.model_reasoning_effort);
   } catch {
     // Codex can run with just its built-in configuration.
   }
 
   for (const load of [
-    () => runCatalogCommand([]),
     () => readFile(path.join(home, 'models_cache.json'), 'utf8'),
     () => runCatalogCommand(['--bundled']),
   ]) {
     try {
-      return parseCodexModelCatalog(await load(), configuredModel);
+      const { catalog, model } = decodeCodexCatalog(await load(), configuredModel);
+      return { catalog, model, effort: configuredEffort ?? catalog.OPTIONS[0].effort?.default };
     } catch {
       // Older CLIs and offline installations may only have one of these sources.
     }
   }
-  return CODEX_PREDEFINED_MODELS;
+  return { catalog: CODEX_PREDEFINED_MODELS, model: configuredModel, effort: configuredEffort };
 }
 
 async function readReplyFromOffset(file: string, start: number): Promise<ProviderCurrentActiveModel | null> {
@@ -146,17 +153,22 @@ export async function readCodexLastReplySelection(file: string): Promise<Provide
   return readReplyFromOffset(file, 0);
 }
 
+let cachedCatalog: { key: string; expiresAt: number; result: ReturnType<typeof readCodexModelCatalog> } | undefined;
+
+/** The model picker and TUI driver resolve the session's default from the same offline CLI catalog. */
+export function getCodexModelCatalog() {
+  const cli = getCodexCliConfig();
+  const key = JSON.stringify([cli.home, cli.executable]);
+  if (!cachedCatalog || cachedCatalog.key !== key || Date.now() >= cachedCatalog.expiresAt) {
+    cachedCatalog = { key, expiresAt: Date.now() + 60_000, result: readCodexModelCatalog(cli) };
+  }
+  return cachedCatalog.result;
+}
+
 /** Supplies the provider registry with native Codex model choices and per-session reply metadata. */
 export class CodexProviderModels implements IProviderModels {
-  private catalog?: { key: string; expiresAt: number; result: Promise<ProviderModelsDefinition> };
-
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    const cli = getCodexCliConfig();
-    const key = JSON.stringify([cli.home, cli.executable]);
-    if (!this.catalog || this.catalog.key !== key || Date.now() >= this.catalog.expiresAt) {
-      this.catalog = { key, expiresAt: Date.now() + 60_000, result: readCodexModelCatalog(cli) };
-    }
-    return this.catalog.result;
+    return (await getCodexModelCatalog()).catalog;
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {

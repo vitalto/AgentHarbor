@@ -18,7 +18,7 @@ modes, menus, hooks. Web front-ends usually replace that TUI with an SDK or `str
 so the agent you chat with in the browser is not the one you can attach to from a terminal, and it
 dies with the web server.
 
-AgentHarbor keeps every agent a real, interactive Claude Code TUI living in a tmux window, and puts a
+AgentHarbor runs each Claude Code or Codex TUI in its own tmux window and puts a
 chat UI on top of it:
 
 - the same agent is reachable from the browser **and** over ssh/mosh + `tmux attach`;
@@ -28,16 +28,17 @@ chat UI on top of it:
 ## Codex chat
 
 Choose **OpenAI Codex** in the model picker. The picker lists the models and reasoning
-effort levels reported by the local Codex CLI. Each AgentHarbor session uses a native
-Codex thread on the local app server. The Terminal tab attaches to its interactive
-Codex window in tmux, and the web composer sends turns to the same thread.
+effort levels from the local Codex catalog. The web composer pastes into the same tmux
+pane you see in Terminal. Codex records the conversation in its native rollout file,
+which AgentHarbor follows for replies, tool activity and token usage. Stop sends Escape.
 
-Conversations includes sessions started in Codex CLI or the editor. AgentHarbor indexes
+The Conversations tab includes sessions started in Codex CLI or the editor. AgentHarbor indexes
 the native rollout files and follows new activity. Sessions held by another Codex
 process can be read in the browser while that process owns the thread.
 
-Install a Codex CLI with local app-server daemon, proxy and remote TUI support (tested
-with 0.169.0). Run `codex login` under the account that runs Codex. For Windows Codex
+Install Codex CLI 0.169.0 or a compatible version. AgentHarbor launches `codex --no-daemon`
+and resumes existing conversations by their exact native ID. Run `codex login` under
+the account that runs Codex. For Windows Codex
 through WSL, set `AH_CODEX_CMD` to the absolute WSL path of `codex.exe` and
 `AH_CODEX_HOME` to the WSL path of its Codex home.
 
@@ -48,8 +49,14 @@ ah send <session> "follow-up"
 ```
 
 Set `"provider": "codex"` in the CLI configuration or `AH_PROVIDER=codex` to use Codex
-by default for `ah new` and `ah models`. An active Codex turn finishes before another
-CLI message can start in that thread.
+by default for `ah new` and `ah models`. Follow-ups go into the active TUI. Finish any
+pending dialog or terminal draft before sending another message from the chat.
+
+AgentHarbor starts Codex with on-request approvals and its automatic reviewer. Routine
+commands run in the session's sandbox. The reviewer evaluates requests for additional
+access and can deny destructive actions. Set `AH_CODEX_SANDBOX_MODE=workspace-write`
+or `read-only` to choose the sandbox for new conversations. A legacy
+`AH_CODEX_SANDBOX_MODE=danger-full-access` setting now selects `workspace-write`.
 
 ## Features
 
@@ -59,7 +66,7 @@ CLI message can start in that thread.
   dialog show up as buttons in the chat.
 - **Terminal tab** - attaches to the very same tmux window, for anything the chat does not cover.
 - **Many agents at once** - every session is its own tmux window; the sidebar shows which agents are
-  busy, waiting for input or idle, and the Running tab lists every live Claude.
+  busy, waiting for input or idle. The Running tab includes live Claude and Codex sessions.
 - **Subagents and background commands** - panels above the composer show which subagents work right
   now (with their own steps) and which shell commands run in the background; both can be stopped.
 - **Images and files** - paste or attach images (they reach the TUI as `[Image #N]`); every file path
@@ -81,12 +88,12 @@ CLI message can start in that thread.
   small touch screen.
 - **Login required** - single-user account stored in a local SQLite database.
 
-The permission mode picker cycles the TUI's own modes (Shift+Tab under the hood). Model and effort
-have no pickers: type `/model` in the chat composer or the terminal tab.
+The Claude permission mode picker sends Shift+Tab to its TUI. For Codex, the model picker
+applies model and effort to the current conversation. You can also type `/model` in Terminal.
 
 ## How it works
 
-- The server launches agents as `claude --settings <AH_STATE_DIR>/hook-settings.json ...` in new
+- The server launches Claude as `claude --settings <AH_STATE_DIR>/hook-settings.json ...` in new
   windows of a tmux session (default `main`). A `SessionStart` hook from that settings file records
   which tmux pane runs which Claude session.
 - Messages from the web are typed into the pane (`tmux send-keys`); menus are parsed from the pane
@@ -95,6 +102,8 @@ have no pickers: type `/model` in the chat composer or the terminal tab.
   which is polled (inotify does not work on `/mnt/c`).
 - Claude's own status files (`<CLAUDE_CONFIG_DIR>/sessions/<pid>.json`: busy / waiting / idle) drive
   the activity indicators.
+- For Codex, the tmux pane title identifies the native thread. AgentHarbor reads its rollout
+  from `<CODEX_HOME>/sessions` and its current activity from the terminal.
 - The server never runs Claude in SDK or `stream-json` mode.
 
 ## Requirements
@@ -102,7 +111,7 @@ have no pickers: type `/model` in the chat composer or the terminal tab.
 - Linux, or Windows via WSL 2
 - tmux >= 3.3
 - Node.js 22
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI, logged in
+- A signed-in [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or Codex CLI for the provider you use
 
 ## Install and run
 

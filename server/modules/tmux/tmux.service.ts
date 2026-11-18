@@ -14,17 +14,19 @@ export type AgentPane = {
   command: string;
   /** What runs in the foreground right now (pane_current_command), e.g. bash or npm. */
   currentCommand: string;
+  /** The title set by the foreground TUI, including Codex's currently selected thread. */
+  title?: string;
 };
 
 export type TmuxService = ReturnType<typeof createTmuxService>;
 
 // Printable on purpose: tmux 3.4 prints control characters in -F output as octal escapes ("\037").
 const FIELD_SEPARATOR = '|~|';
-const PANE_FORMAT = ['#{window_id}', '#{window_name}', '#{pane_id}', '#{pane_pid}', '#{pane_current_path}', '#{pane_dead}', '#{pane_start_command}', '#{pane_current_command}']
+const PANE_FORMAT = ['#{window_id}', '#{window_name}', '#{pane_id}', '#{pane_pid}', '#{pane_current_path}', '#{pane_dead}', '#{pane_start_command}', '#{pane_current_command}', '#{pane_title}']
   .join(FIELD_SEPARATOR);
 
 function parsePaneLine(line: string): AgentPane | null {
-  const [windowId, windowName, paneId, panePid, cwd, dead, command, currentCommand] = line.split(FIELD_SEPARATOR);
+  const [windowId, windowName, paneId, panePid, cwd, dead, command, currentCommand, title] = line.split(FIELD_SEPARATOR);
   if (!windowId || !paneId) {
     return null;
   }
@@ -37,6 +39,7 @@ function parsePaneLine(line: string): AgentPane | null {
     dead: dead === '1',
     command: command ?? '',
     currentCommand: currentCommand ?? '',
+    title,
   };
 }
 
@@ -200,6 +203,15 @@ export function createTmuxService(options: { socketName?: string; session?: stri
     async capturePane(paneId: string): Promise<string[]> {
       const output = await run(['capture-pane', '-p', '-t', paneId]);
       return output.replace(/\n$/, '').split('\n').map((line) => line.trimEnd());
+    },
+
+    /** A single tmux command queue pairs the Codex screen with its cursor and TUI-supplied title. */
+    async inspectPane(paneId: string) {
+      const output = await run(['capture-pane', '-e', '-p', '-t', paneId, ';', 'display-message', '-p', '-t', paneId,
+        ['#{cursor_x}', '#{cursor_y}', '#{cursor_flag}', '#{pane_dead}', '#{pane_title}'].join(FIELD_SEPARATOR)]);
+      const lines = output.replace(/\n$/, '').split('\n');
+      const [x, y, visible, dead, title] = (lines.pop() ?? '').split(FIELD_SEPARATOR);
+      return { lines, cursorX: Number(x), cursorY: Number(y), cursorVisible: visible === '1', dead: dead === '1', title };
     },
 
     /** Starts a detached server for tests; production relies on the user's existing server. */

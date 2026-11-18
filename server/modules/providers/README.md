@@ -39,7 +39,7 @@ The services that consume them are:
 Live execution is consumed through `providerRuntimeService`, which resolves the
 provider-owned runtime through the same `providerRegistry` as every other facet.
 
-The registered providers are `claude` and `codex`. Codex chat shares a native thread between the local app server and an interactive Codex client in tmux. `AH_CODEX_CMD` selects the CLI and `AH_CODEX_HOME` selects its home, including Windows homes mounted in WSL. Its synchronizer indexes native rollout files, including threads opened outside AgentHarbor.
+The registered providers are `claude` and `codex`. Codex chat drives the interactive CLI in tmux. A new pane identifies its native thread through its terminal title. Resuming a closed pane uses that exact ID. The runtime tails appended rollout rows through the history decoder. `AH_CODEX_CMD` selects the CLI and `AH_CODEX_HOME` selects its home, including Windows homes mounted in WSL. Its synchronizer also indexes conversations opened outside AgentHarbor.
 
 Provider ids in the original upstream contract were:
 

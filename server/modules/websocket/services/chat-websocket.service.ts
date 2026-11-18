@@ -102,10 +102,12 @@ export type ProviderRuntimeGateway = {
   getPendingApprovalsForSession(sessionId: string): unknown[];
 };
 
-/** The live Claude windows behind sessions (tmux), as the chat gateway needs them. */
+/** The live terminal windows behind sessions, as the chat gateway needs them. */
 export type TerminalGateway = {
   watch(sessionId: string, socket: WebSocket): void;
   unwatchSocket(socket: WebSocket): void;
+  /** Attach viewers already subscribed before a different browser or the CLI started this run. */
+  attachViewers?(sessionId: string): void;
   /** `freeText` answers a free-text option (AskUserQuestion's "Type something."). */
   chooseOption(sessionId: string, optionIndex: number, freeText?: string): Promise<boolean>;
   /** Moves an AskUserQuestion set to its previous or next question (or the review step). */
@@ -373,6 +375,7 @@ async function dispatchRun(
     // conversation here and a rewind for a run that was never admitted cannot
     // be taken back. Inside the try so a rewind that throws still releases the
     // run instead of leaving the session processing forever.
+    dependencies.terminal?.attachViewers?.(sessionId);
     await beforeRun?.(run);
     await dependencies.runtime.run(provider, command, runtimeOptions, run.writer);
   } catch (error) {
@@ -446,7 +449,7 @@ async function handleChatAbort(
 
   const success = await dependencies.runtime.abort(run.provider, sessionId);
 
-  chatRunRegistry.completeRun(sessionId, {
+  chatRunRegistry.completeRunIfCurrent(run, {
     exitCode: success ? 0 : 1,
     aborted: true,
   });

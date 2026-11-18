@@ -16,10 +16,12 @@ import {
     providerRuntimeService,
     sessionsService,
     startBackgroundCommandReminders,
+    steerCodexTurn,
     typePromptWithAttachments,
 } from '@/modules/providers/index.js';
 import {
     configureSessionMonitor,
+    createCodexTerminalMonitor,
     findAgentWindow,
     getAgentConfig,
     loadStoredAgentSettings,
@@ -124,17 +126,29 @@ startApiErrorRetries();
 // (agents, workflows, backgrounded commands) is still reporting through it.
 chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackgroundWork(sessionId));
 
+const codexMonitor = createCodexTerminalMonitor((id) => chatRunRegistry.isProcessing(id));
+const isCodexSession = (id: string) => sessionsDb.getSessionById(id)?.provider === 'codex';
 const chatGateway: ChatWebSocketDependencies = {
     runtime: providerRuntimeService,
     terminal: {
-        watch: (sessionId, socket) => {
-            if (sessionsDb.getSessionById(sessionId)?.provider === 'claude') sessionMonitor.watch(sessionId, socket);
+        attachViewers: (sessionId) => {
+            for (const socket of codexMonitor.viewers(sessionId)) chatRunRegistry.attachConnection(sessionId, socket);
         },
-        unwatchSocket: (socket) => sessionMonitor.unwatchSocket(socket),
-        chooseOption: (sessionId, optionIndex, freeText) => sessionMonitor.chooseOption(sessionId, optionIndex, freeText),
-        switchQuestion: (sessionId, step) => sessionMonitor.switchQuestion(sessionId, step),
-        sendKeys: (sessionId, keys) => sessionMonitor.sendKeys(sessionId, keys),
+        watch: (sessionId, socket) => {
+            if (isCodexSession(sessionId)) codexMonitor.watch(sessionId, socket);
+            else if (sessionsDb.getSessionById(sessionId)?.provider === 'claude') sessionMonitor.watch(sessionId, socket);
+        },
+        unwatchSocket: (socket) => {
+            sessionMonitor.unwatchSocket(socket);
+            codexMonitor.unwatchSocket(socket);
+        },
+        chooseOption: async (sessionId, optionIndex, freeText) => !isCodexSession(sessionId) && sessionMonitor.chooseOption(sessionId, optionIndex, freeText),
+        switchQuestion: async (sessionId, step) => !isCodexSession(sessionId) && sessionMonitor.switchQuestion(sessionId, step),
+        sendKeys: (sessionId, keys) => (isCodexSession(sessionId) ? codexMonitor : sessionMonitor).sendKeys(sessionId, keys),
         typeWhileBusy: async (sessionId, text, attachments) => {
+            if (isCodexSession(sessionId)) {
+                return steerCodexTurn(sessionId, text, attachments);
+            }
             const pane = await findAgentWindow(sessionId);
             if (!pane) {
                 return false;

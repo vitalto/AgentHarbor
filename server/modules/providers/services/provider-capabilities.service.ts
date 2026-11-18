@@ -56,7 +56,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsFiles: true,
     supportsAbort: true,
     supportsPermissionRequests: false,
-    supportsTokenUsage: false,
+    supportsTokenUsage: true,
     supportsEffort: true,
     effortLevels: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra', 'persistent'],
     supportsMessageEditing: false,

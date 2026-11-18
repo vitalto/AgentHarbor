@@ -1,134 +1,190 @@
+import { setTimeout as delay } from 'node:timers/promises';
+
 import { sessionsDb } from '@/modules/database/index.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
-import { connectCodexDaemon, ensureCodexWindow, toNativeCodexPath, waitForCodexPrompt } from '@/modules/tmux/index.js';
-import { appendFilesInputTag, createCompleteMessage, createNormalizedMessage, normalizeAttachmentDescriptors, normalizeImageDescriptors } from '@/shared/index.js';
+import { getCodexModelCatalog } from '@/modules/providers/list/codex/codex-models.provider.js';
+import { findCodexRollout, readCodexRollout } from '@/modules/providers/list/codex/codex-sessions.provider.js';
+import { readCodexUsage } from '@/modules/providers/list/codex/codex-usage.js';
+import {
+  applyCodexSelection, createTranscriptTail, ensureCodexWindow, getCodexCliConfig, readCodexScreen,
+  stageAttachmentForClaude, tmuxService, typeCodexInput, waitForCodexComposer,
+} from '@/modules/tmux/index.js';
+import {
+  appendFilesInputTag, createCompleteMessage, createNormalizedMessage, normalizeAttachmentDescriptors, readObjectRecord,
+} from '@/shared/index.js';
 import type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/index.js';
 
-const turns = new Map<string, () => Promise<boolean>>();
+type Destination = { paneId: string; title: string };
+type Turn = { ready: Promise<Destination | null>; input: Promise<unknown>; startup: AbortController; submitted: boolean; interrupted: boolean };
+const turns = new Map<string, Turn>();
 
-export function interruptCodexTurn(sessionId: string) {
-  return turns.get(sessionId)?.() ?? false;
-}
-
-function normalizeItem(item: AnyRecord): AnyRecord | null {
-  const base = { type: 'item', itemId: item.id, uuid: item.id, status: item.status === 'inProgress' ? 'in_progress' : item.status };
-  switch (item.type) {
-    case 'agentMessage': return { ...base, itemType: 'agent_message', message: { role: 'assistant', content: item.text } };
-    case 'reasoning': return { ...base, itemType: 'reasoning', message: { role: 'assistant', content: (item.summary?.length ? item.summary : item.content)?.join('\n'), isReasoning: true } };
-    case 'commandExecution': return { ...base, itemType: 'command_execution', command: item.command, output: item.aggregatedOutput, exitCode: item.exitCode };
-    case 'fileChange': return { ...base, itemType: 'file_change', changes: item.changes?.map((change: AnyRecord) => ({ ...change, kind: change.kind?.type ?? change.kind })) };
-    case 'mcpToolCall': return { ...item, ...base, itemType: 'mcp_tool_call' };
-    case 'webSearch': return { ...item, ...base, itemType: 'web_search' };
-    default: return null;
+async function resolveRollout(appId: string, nativeId: string, searchArchive: boolean) {
+  const session = sessionsDb.getSessionById(appId);
+  if (session?.provider_session_id !== nativeId) throw new Error('The Codex session changed before its transcript was opened.');
+  if (session.jsonl_path) return session.jsonl_path;
+  const file = await findCodexRollout(nativeId, searchArchive);
+  if (file && session.project_path) {
+    // The first reply can finish before the filesystem watcher has indexed the new rollout.
+    sessionsDb.createSession(nativeId, 'codex', session.project_path, undefined, undefined, undefined, file);
   }
+  return file;
 }
 
-const runtimeDependencies = {
-  connect: connectCodexDaemon, window: ensureCodexWindow, waitForPrompt: waitForCodexPrompt,
-  effort: (id: string) => sessionsDb.getSessionById(id)?.effort,
-  stopped: notifyRunStopped, failed: notifyRunFailed,
-};
+async function typeMessage(destination: Destination, command: string, options: AnyRecord, signal?: AbortSignal) {
+  const config = getCodexCliConfig().pathConfig;
+  const stage = (input: unknown) => Promise.all(normalizeAttachmentDescriptors(input).map(async (file) => ({
+    ...file, path: await stageAttachmentForClaude(file.path, config),
+  })));
+  const [files, images] = await Promise.all([stage(options.files), stage(options.images)]);
+  await typeCodexInput(destination.paneId, appendFilesInputTag(command, files), images.map((file) => file.path), destination.title, signal);
+}
 
-export async function runCodexTmuxTurn(
-  command: string, options: AnyRecord, writer: ProviderRuntimeWriter, context: ProviderRuntimeContext,
-  dependencies = runtimeDependencies,
-) {
-  const appId: string = options.sessionId;
-  if (!appId) throw new Error('A Codex turn requires an AgentHarbor session id.');
+function withTurnInput(sessionId: string, action: (destination: Destination, turn: Turn) => Promise<boolean>) {
+  const turn = turns.get(sessionId);
+  if (!turn) return Promise.resolve(false);
+  const result = turn.input.then(async () => {
+    const destination = await turn.ready;
+    if (!destination || turn.interrupted || turns.get(sessionId) !== turn) return false;
+    return action(destination, turn);
+  });
+  turn.input = result.catch(() => false);
+  return result;
+}
+
+/** Web and CLI follow-ups go into the same composer, serialized so concurrent pastes cannot mix. */
+export function steerCodexTurn(sessionId: string, command: string, options: AnyRecord) {
+  return withTurnInput(sessionId, async (destination) => {
+    await typeMessage(destination, command, options);
+    return true;
+  });
+}
+
+async function interruptCodexTurn(sessionId: string) {
+  const pending = turns.get(sessionId);
+  if (!pending) return false;
+  if (!pending.submitted) {
+    pending.startup.abort();
+    if (!await pending.ready) return true;
+  }
+  return withTurnInput(sessionId, async ({ paneId, title }, turn) => {
+    const screen = await readCodexScreen(paneId);
+    if (screen.title !== title) return false;
+    await tmuxService.sendKeys(paneId, ['Escape']);
+    turn.interrupted = true;
+    if (turns.get(sessionId) === turn) turns.delete(sessionId);
+    return true;
+  });
+}
+
+/** The registered Codex provider runs turns from web sockets and the ah CLI through the pane's TUI. */
+export async function runCodexTmuxTurn(command: string, options: AnyRecord, writer: ProviderRuntimeWriter, context: ProviderRuntimeContext) {
+  const appId = options.sessionId;
+  if (!appId || turns.has(appId)) throw new Error('A Codex turn requires an available session.');
   const emit = (message: unknown) => writer.send(writer.isWebSocketWriter ? message : JSON.stringify(message));
-  const note = (kind: 'error' | 'status' | 'stream_delta', fields: AnyRecord) =>
-    emit(createNormalizedMessage({ sessionId: appId, provider: 'codex', kind, ...fields }));
-  const notification = { userId: writer.userId ?? null, provider: 'codex', sessionId: options.sessionId, sessionName: options.sessionSummary };
-  let client: Awaited<ReturnType<typeof connectCodexDaemon>> | undefined;
-  let abortRequested = false;
+  const note = (kind: 'error' | 'status', fields: AnyRecord) => emit(createNormalizedMessage({ sessionId: appId, provider: 'codex', kind, ...fields }));
+  const notification = { userId: writer.userId ?? null, provider: 'codex', sessionId: appId, sessionName: options.sessionSummary };
+  let resolveReady!: (destination: Destination | null) => void;
+  const turn: Turn = { ready: new Promise((resolve) => { resolveReady = resolve; }), input: Promise.resolve(),
+    startup: new AbortController(), submitted: false, interrupted: false };
+  turns.set(appId, turn);
   try {
-    const { providerSessionId: threadId, pane } = await dependencies.window(appId, false);
-    await dependencies.waitForPrompt(pane);
-    writer.setSessionId?.(threadId);
-    client = await dependencies.connect();
-    const { thread, sandbox, approvalPolicy } = await client.request('thread/resume', { threadId, excludeTurns: true });
-    if (thread?.status?.type === 'active') throw new Error('Codex already has a turn in progress in this session.');
-    const model = await context.resolveResumeModel(appId, options.model);
-    const catalog = await context.getProviderModels();
-    const selected = catalog.OPTIONS.find((entry) => entry.value === (model === 'default' ? catalog.DEFAULT : model));
-    const requestedEffort = options.effort ?? dependencies.effort(appId);
-    const effort = requestedEffort === 'default' ? selected?.effort?.default
-      : selected?.effort?.values?.some((entry) => entry.value === requestedEffort) ? requestedEffort : undefined;
-    const prompt = appendFilesInputTag(command, normalizeAttachmentDescriptors(options.files)
-      .map((file) => ({ ...file, path: toNativeCodexPath(file.path) })));
-    const input = [...(prompt.trim() ? [{ type: 'text', text: prompt, text_elements: [] }] : []),
-      ...normalizeImageDescriptors(options.images).map((image) => ({ type: 'localImage', path: toNativeCodexPath(image.path) }))];
-    const commands = new Map<string, AnyRecord>();
-    const publishItem = (item: AnyRecord) => {
-      const raw = normalizeItem(item);
-      if (raw) for (const message of context.normalizeMessage(raw, appId)) emit(message);
-    };
-    let settle!: (turn: AnyRecord) => void;
-    let fail!: (error: Error) => void;
-    const completion = new Promise<AnyRecord>((resolve, reject) => { settle = resolve; fail = reject; });
-    // The proxy can disconnect before turn/start has returned its response.
-    void completion.catch(() => {});
-    let turnId: string | undefined;
-    let waitingForInput = false;
-    const early: Array<[string, AnyRecord]> = [];
-    const onEvent = (method: string, params: AnyRecord) => {
-      if (params.threadId !== threadId) return;
-      if (!turnId) { early.push([method, params]); return; }
-      if (method === 'thread/status/changed' && params.status?.type === 'active') {
-        const waiting = Boolean(params.status.activeFlags?.length);
-        if (waiting !== waitingForInput) {
-          waitingForInput = waiting;
+    const { pane, providerSessionId: previousId } = await ensureCodexWindow(appId);
+    const { screen, providerSessionId } = await waitForCodexComposer(appId, pane, turn.startup.signal);
+    writer.setSessionId?.(providerSessionId);
+    const destination = { paneId: pane.paneId, title: screen.title };
+    const session = sessionsDb.getSessionById(appId);
+    if (screen.activity !== 'working') {
+      const model = await context.resolveResumeModel(appId, options.model) || 'default';
+      await applyCodexSelection(pane, destination.title, model, options.effort || session?.effort || 'default', async () => {
+        const defaults = await getCodexModelCatalog();
+        if (model === 'default') return defaults;
+        const catalog = await context.getProviderModels();
+        return { effort: catalog.OPTIONS.find((entry) => entry.value === model)?.effort?.default };
+      });
+    }
+
+    const rollout = await resolveRollout(appId, providerSessionId, Boolean(previousId));
+    let tail = rollout ? createTranscriptTail(rollout) : null;
+    // Baseline before Enter: a short answer can already be on disk when paste/submit returns.
+    await tail?.poll();
+    await typeMessage(destination, command, options, turn.startup.signal);
+    turn.submitted = true;
+    resolveReady(destination);
+    let aborted = false;
+    let failure: string | null = null;
+    async function* appendedRows() {
+      let noActivitySince = Date.now();
+      let nextFileLookup = 0;
+      const localCommand = command.trimStart().startsWith('/');
+      let sawTurn = false;
+      let turnId: string | undefined;
+      let waiting = false;
+      for (;;) {
+        if (turn.interrupted) return;
+        if (!tail && Date.now() >= nextFileLookup) {
+          const file = await resolveRollout(appId, providerSessionId, false);
+          if (file) tail = createTranscriptTail(file, 0);
+          nextFileLookup = Date.now() + 1000;
+        }
+        const batch = await tail?.poll();
+        if (batch?.reset) throw new Error('The Codex transcript changed while reading this turn. Reopen the conversation.');
+        let completed = false;
+        for (const raw of batch?.rows ?? []) {
+          const entry = readObjectRecord(raw);
+          if (!entry) continue;
+          noActivitySince = Date.now();
+          yield entry;
+          const payload = entry.payload;
+          if (entry.type !== 'event_msg' || !payload) continue;
+          if (payload.type === 'task_started' || payload.type === 'turn_started') {
+            turnId = payload.turn_id;
+            sawTurn = true;
+            completed = false;
+          }
+          if (turnId && payload.turn_id && payload.turn_id !== turnId) continue;
+          const usage = readCodexUsage(entry);
+          if (usage) note('status', { text: 'token_budget', tokenBudget: usage });
+          if (payload.type === 'error') failure = payload.message || 'Codex reported an error.';
+          if ((sawTurn || screen.activity === 'working') && ['task_complete', 'turn_complete', 'turn_aborted'].includes(payload.type)) {
+            aborted = payload.type === 'turn_aborted';
+            completed = true;
+          }
+        }
+        if (completed) return;
+        const current = await readCodexScreen(pane.paneId);
+        if (current.title !== destination.title && current.composer) throw new Error('The terminal switched to a different Codex session.');
+        const isWaiting = current.activity === 'waiting';
+        if (waiting !== isWaiting) {
+          waiting = isWaiting;
           note('status', { text: waiting ? 'Codex is waiting for your response in Terminal.' : 'Working', canInterrupt: true });
         }
+        if (localCommand && !sawTurn && current.activity !== 'working' && (current.empty || isWaiting)
+          && Date.now() - noActivitySince > 1500) return;
+        if (current.activity === 'working' || isWaiting) noActivitySince = Date.now();
+        if (Date.now() - noActivitySince > 20_000) throw new Error(failure || 'Codex returned no turn completion. Check the terminal and its transcript.');
+        await delay(250);
       }
-      if ((params.turnId ?? params.turn?.id) !== turnId) return;
-      if (method === 'turn/completed') { settle(params.turn); return; }
-      if (method === 'item/agentMessage/delta') note('stream_delta', { content: params.delta });
-      if (method === 'thread/tokenUsage/updated') {
-        const usage = params.tokenUsage;
-        if (usage?.last) note('status', { text: 'token_budget', tokenBudget: { used: usage.last.totalTokens, total: usage.modelContextWindow, inputTokens: usage.last.inputTokens, outputTokens: usage.last.outputTokens } });
-      }
-      if (method === 'item/started' && params.item?.type === 'commandExecution') commands.set(params.item.id, params.item);
-      if (method === 'item/commandExecution/outputDelta') {
-        const item = commands.get(params.itemId);
-        if (item) { item.aggregatedOutput = (item.aggregatedOutput || '') + params.delta; publishItem(item); }
-      }
-      if (method === 'item/completed' || method === 'item/started') {
-        if (params.item) publishItem(params.item);
-        if (method === 'item/completed') commands.delete(params.item?.id);
-      }
-    };
-    client.observe(onEvent, fail);
-    const sandboxPolicy = sandbox?.type === 'readOnly' || sandbox?.type === 'workspaceWrite' ? sandbox
-      : { type: 'workspaceWrite', writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false };
-    const result = await client.request('turn/start', { threadId, input, sandboxPolicy,
-      approvalPolicy: approvalPolicy ?? 'on-request',
-      ...(model && model !== 'default' ? { model } : model === 'default' && catalog.DEFAULT !== 'default' ? { model: catalog.DEFAULT } : {}),
-      ...(effort ? { effort } : {}),
-    });
-    turnId = result.turn?.id;
-    if (!turnId) throw new Error('Codex did not return a turn id.');
-    const connection = client;
-    turns.set(appId, async () => {
-      abortRequested = true;
-      try { await connection.request('turn/interrupt', { threadId, turnId }); return true; }
-      catch { abortRequested = false; return false; }
-    });
-    for (const [method, params] of early) onEvent(method, params);
-    const turn = await completion;
-    if (turn.status === 'failed') throw new Error(turn.error?.message || 'Codex turn failed.');
-    if (!abortRequested) {
-      emit(createCompleteMessage({ provider: 'codex', sessionId: appId, actualSessionId: threadId, exitCode: 0, aborted: turn.status === 'interrupted' }));
-      dependencies.stopped({ ...notification, stopReason: turn.status });
     }
+    await readCodexRollout(appendedRows(), undefined, (row) => {
+      for (const message of context.normalizeMessage(row, appId)) emit(message);
+    });
+    if (turn.interrupted) return;
+    if (failure) throw new Error(failure);
+    emit(createCompleteMessage({ provider: 'codex', sessionId: appId, actualSessionId: providerSessionId, exitCode: 0, aborted }));
+    notifyRunStopped({ ...notification, stopReason: aborted ? 'interrupted' : 'completed' });
   } catch (error) {
+    if (!turn.submitted && turn.startup.signal.aborted) {
+      emit(createCompleteMessage({ provider: 'codex', sessionId: appId, exitCode: 0, aborted: true }));
+      return;
+    }
     note('error', { content: error instanceof Error ? error.message : String(error) });
     emit(createCompleteMessage({ provider: 'codex', sessionId: appId, exitCode: 1 }));
-    dependencies.failed({ ...notification, error });
+    notifyRunFailed({ ...notification, error });
   } finally {
-    turns.delete(appId);
-    client?.close();
+    resolveReady(null);
+    if (turns.get(appId) === turn) turns.delete(appId);
   }
 }
 
+/** Provider registry adapter for the interactive Codex CLI. */
 export const codexRuntime = { run: runCodexTmuxTurn, abort: interruptCodexTurn };

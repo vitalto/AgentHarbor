@@ -32,7 +32,7 @@ function UnreadablePrompt({ prompt, onKey }: { prompt: TuiPrompt; onKey?: (key: 
     <Confirmation approval="pending" className="mb-3" data-testid="tui-prompt">
       <ConfirmationTitle className="flex items-start gap-3">
         <MessageSquareMoreIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="font-medium text-foreground">Claude is waiting for an answer in a menu AgentHarbor cannot read</span>
+        <span className="font-medium text-foreground">The terminal is waiting for your answer</span>
       </ConfirmationTitle>
       <pre className="max-h-72 w-full overflow-auto whitespace-pre rounded-md border bg-muted/50 p-2 font-mono text-xs text-foreground">
         {prompt.body.join('\n')}

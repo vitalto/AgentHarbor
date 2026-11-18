@@ -3,6 +3,8 @@ export { providerSkillsService } from './services/skills.service.js';
 export { providerMcpService } from './services/mcp.service.js';
 export { providerRuntimeService } from './services/provider-runtime.service.js';
 
+export { steerCodexTurn } from './list/codex/codex-runtime.provider.js';
+
 // typePromptWithAttachments: the chat gateway types a message sent while Claude is busy the same way a new turn is typed.
 export { typePromptWithAttachments } from './list/claude/claude-tmux.runtime.js';
 

@@ -20,6 +20,7 @@ import type {
 import {
   createNormalizedMessage,
   generateMessageId,
+  getCodexHome,
   readObjectRecord,
   sliceTailPage,
   truncateSubagentActivity,
@@ -76,14 +77,10 @@ function isVisibleCodexUserMessage(payload: AnyRecord | null | undefined): boole
  * so a turn id is the only durable address a user message has. Turns are
  * bracketed by rows that do carry `turn_id`: `task_started` opens one,
  * `turn_context` restates it, `task_complete` closes it, and the prompt is
- * written between them. That id is also exactly what `thread/fork` cuts at,
- * which is what makes "edit this message" and "fork from here" addressable
- * for Codex at all.
+ * written between them.
  *
  * `thread_rolled_back` retires the last N turns in place: the rows stay in the
- * file, but the turns are no longer part of the thread and the fork endpoint
- * refuses to cut at one. They are tracked here so a retired turn is never
- * offered as an anchor, rather than discovered when the fork fails.
+ * file. Only prompts in the active conversation retain their turn anchors.
  */
 function createCodexTurnTracker() {
   /** Turn ids still part of the conversation, oldest first. */
@@ -909,6 +906,23 @@ async function findCodexSubagentRollout(
   return null;
 }
 
+/** The TUI runtime uses the exact native id until the session watcher has indexed its rollout. */
+export async function findCodexRollout(threadId: string, searchArchive: boolean) {
+  const root = path.join(getCodexHome(), 'sessions');
+  const suffix = '-' + threadId + '.jsonl';
+  // A UUIDv7 carries its creation time; the CLI can file it on either side of UTC midnight.
+  if (/^[\da-f]{8}-[\da-f]{4}-7/i.test(threadId)) {
+    const createdAt = parseInt(threadId.slice(0, 13).replace('-', ''), 16);
+    for (const days of [0, -1, 1]) {
+      const date = new Date(createdAt + days * 86_400_000).toISOString().slice(0, 10).split('-');
+      const match = await findFileWithSuffix(path.join(root, ...date), suffix, 0);
+      if (match) return match;
+    }
+    if (!searchArchive) return null;
+  }
+  return findFileWithSuffix(root, suffix, 3);
+}
+
 /** Depth-limited search for a file whose name ends with `suffix`. */
 async function findFileWithSuffix(directory: string, suffix: string, depth: number): Promise<string | null> {
   let entries;
@@ -1181,7 +1195,30 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
     return { messages: [], total: 0, hasMore: false };
   }
 
+  async function* readEntries(file: string) {
+    const stream = fsSync.createReadStream(file);
+    const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
+    try {
+      for await (const line of lines) {
+        let entry: AnyRecord;
+        try { entry = JSON.parse(line); } catch { continue; }
+        if (entry) yield entry;
+      }
+    } finally {
+      lines.close();
+      stream.destroy();
+    }
+  }
+  return readCodexRollout(readEntries(sessionFilePath), sessionFilePath);
+}
+
+/** Decodes both persisted history and the appended rows streamed by the Codex TUI runtime. */
+export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessionFilePath?: string, onMessage?: (message: AnyRecord) => void): Promise<CodexHistoryResult> {
   const messages: AnyRecord[] = [];
+  const publish = (message: AnyRecord) => {
+    messages.push(message);
+    onMessage?.(message);
+  };
   let tokenUsage: AnyRecord | null = null;
 
   /** Call ids whose orchestration wrapper must never reach the transcript. */
@@ -1215,8 +1252,6 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
   /** Turns whose prompt already carries the anchor, so only the first does. */
   const anchoredTurnIds = new Set<string>();
 
-  const fileStream = fsSync.createReadStream(sessionFilePath);
-  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
   /** Emits a tool_result row unless the call already produced one. */
   const pushToolResult = (callId: string, timestamp: string, output: string, isError: boolean) => {
@@ -1224,21 +1259,10 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
       return;
     }
     completedExecCalls.add(callId);
-    messages.push({ type: 'tool_result', timestamp, toolCallId: callId, output, isError });
+    publish({ type: 'tool_result', timestamp, toolCallId: callId, output, isError });
   };
 
-  for await (const line of rl) {
-    if (!line.trim()) {
-      continue;
-    }
-
-    let entry: AnyRecord;
-    try {
-      entry = JSON.parse(line) as AnyRecord;
-    } catch {
-      continue;
-    }
-
+  for await (const entry of entries) {
     const payload = readObjectRecord(entry.payload);
     if (!payload) {
       continue;
@@ -1298,7 +1322,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
           // not in this file; the rows still belong in the transcript.
           const rows = changes.map((change, index) =>
             fileChangeToToolMessage(change, timestamp, `${callId}#${index}`));
-          rows.forEach((row) => messages.push(row));
+          rows.forEach((row) => publish(row));
           patchGroups.set(callId, {
             callId,
             rows,
@@ -1311,7 +1335,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
       }
 
       if (payload.type === 'turn_aborted') {
-        messages.push({
+        publish({
           type: 'status_note',
           timestamp,
           content: payload.reason === 'interrupted' ? 'Turn interrupted' : `Turn aborted (${String(payload.reason ?? 'unknown')})`,
@@ -1320,7 +1344,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
       }
 
       if (payload.type === 'context_compacted') {
-        messages.push({ type: 'status_note', timestamp, content: 'Context compacted' });
+        publish({ type: 'status_note', timestamp, content: 'Context compacted' });
         continue;
       }
 
@@ -1348,7 +1372,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
               ...(images ? { images } : {}),
               ...(isFirstPromptOfTurn ? { turnId } : {}),
             };
-            messages.push(row);
+            publish(row);
           }
         }
         continue;
@@ -1364,7 +1388,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
         if (isFirstPromptOfTurn) {
           anchoredTurnIds.add(turnId as string);
         }
-        messages.push({
+        publish({
           type: 'user',
           timestamp,
           message: { role: 'user', content: payload.message },
@@ -1390,7 +1414,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
       const proposedPlan = readCodexProposedPlan(textContent);
       if (proposedPlan) {
         const planCallId = readNonEmptyString(payload.id) ?? generateMessageId('codex-plan');
-        messages.push({
+        publish({
           type: 'tool_use',
           timestamp,
           toolName: 'ExitPlanMode',
@@ -1398,11 +1422,11 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
           toolCallId: planCallId,
           memoryCitations: cited.memoryCitations,
         });
-        messages.push({ type: 'tool_result', timestamp, toolCallId: planCallId, output: '' });
+        publish({ type: 'tool_result', timestamp, toolCallId: planCallId, output: '' });
         continue;
       }
 
-      messages.push({
+      publish({
         type: 'assistant',
         timestamp,
         message: { role: 'assistant', content: textContent },
@@ -1416,7 +1440,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
         ? payload.summary.map((item: AnyRecord) => item?.text).filter(Boolean).join('\n')
         : '';
       if (summaryText.trim()) {
-        messages.push({
+        publish({
           type: 'thinking',
           timestamp,
           message: { role: 'assistant', content: summaryText },
@@ -1430,7 +1454,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
       const query = readNonEmptyString(action?.query as string | undefined);
       if (query) {
         const callId = readNonEmptyString(payload.id) ?? generateMessageId('codex-search');
-        messages.push({
+        publish({
           type: 'tool_use',
           timestamp,
           toolName: 'WebSearch',
@@ -1461,14 +1485,14 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
           toolInput: JSON.stringify({ description: humanizeCodexToolName(taskName) }),
           toolCallId: fallbackCallId,
         };
-        messages.push(taskMessage);
+        publish(taskMessage);
         subagent = { toolCallId: fallbackCallId, message: taskMessage, agentPath: agentMessage.author, isComplete: false };
         subagentsByCallId.set(fallbackCallId, subagent);
         subagentsByPath.set(agentMessage.author, subagent);
       }
 
       if (!subagent.isComplete) {
-        messages.push({
+        publish({
           type: 'tool_result',
           timestamp,
           toolCallId: subagent.toolCallId,
@@ -1511,7 +1535,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
           }),
           toolCallId: callId,
         };
-        messages.push(taskMessage);
+        publish(taskMessage);
         subagentsByCallId.set(callId, { toolCallId: callId, message: taskMessage, isComplete: false });
         ignoredToolCallIds.add(callId);
         continue;
@@ -1537,7 +1561,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
       }
 
       if (name === 'update_plan') {
-        messages.push({
+        publish({
           type: 'tool_use',
           timestamp,
           toolName: 'TodoWrite',
@@ -1576,7 +1600,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
             toolInput: rawInput,
             toolCallId: callId,
           };
-          messages.push(fallbackMessage);
+          publish(fallbackMessage);
           continue;
         }
 
@@ -1603,12 +1627,12 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
             }),
             toolCallId: nextRowId(),
           };
-          messages.push(shellMessage);
+          publish(shellMessage);
           shellCallMessages.set(callId, shellMessage);
         }
 
         for (const search of searches) {
-          messages.push({
+          publish({
             type: 'tool_use',
             timestamp,
             toolName: 'WebSearch',
@@ -1621,21 +1645,21 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
           // The script's own result covers whatever else it did, so the plan
           // row is closed here вЂ” without one it would read as still running.
           const planCallId = nextRowId();
-          messages.push({
+          publish({
             type: 'tool_use',
             timestamp,
             toolName: 'TodoWrite',
             toolInput: JSON.stringify({ todos: plan.todos }),
             toolCallId: planCallId,
           });
-          messages.push({ type: 'tool_result', timestamp, toolCallId: planCallId, output: '' });
+          publish({ type: 'tool_result', timestamp, toolCallId: planCallId, output: '' });
         }
 
         if (patches.length > 0) {
           const changes = patches.flatMap((patch) => parseCodexPatch(patch.patch));
           const rows = changes.map((change, index) =>
             fileChangeToToolMessage(change, timestamp, index === 0 ? nextRowId() : `${callId}#${index}`));
-          rows.forEach((row) => messages.push(row));
+          rows.forEach((row) => publish(row));
           patchGroups.set(callId, { callId, rows, timestamp });
           pendingPatchCallId = callId;
         }
@@ -1651,7 +1675,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
       if (name === 'apply_patch') {
         const rows = parseCodexPatch(String(rawInput ?? ''))
           .map((change, index) => fileChangeToToolMessage(change, timestamp, `${callId}#${index}`));
-        rows.forEach((row) => messages.push(row));
+        rows.forEach((row) => publish(row));
         patchGroups.set(callId, { callId, rows, timestamp });
         pendingPatchCallId = callId;
         // The call's own output is a bare `{}`; the per-file rows carry the result.
@@ -1674,12 +1698,12 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
           toolInput: JSON.stringify({ command }),
           toolCallId: callId,
         };
-        messages.push(shellMessage);
+        publish(shellMessage);
         shellCallMessages.set(callId, shellMessage);
         continue;
       }
 
-      messages.push({
+      publish({
         type: 'tool_use',
         timestamp,
         toolName: name,
@@ -1759,7 +1783,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
   for (const group of patchGroups.values()) {
     const failed = group.success === false;
     for (const row of group.rows) {
-      messages.push({
+      publish({
         type: 'tool_result',
         timestamp: group.timestamp,
         toolCallId: row.toolCallId,
@@ -1769,7 +1793,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
     }
   }
 
-  await attachCodexSubagentTranscripts(sessionFilePath, subagentsByCallId);
+  if (sessionFilePath) await attachCodexSubagentTranscripts(sessionFilePath, subagentsByCallId);
 
   // A rollback is recorded after the turns it retires, so a prompt can be
   // anchored and then retired later in the same file. Its rows still render вЂ”
@@ -1832,14 +1856,10 @@ async function attachCodexSubagentTranscripts(
 }
 
 export class CodexSessionsProvider implements IProviderSessions {
-  /**
-   * Normalizes a persisted Codex JSONL entry.
-   *
-   * Live Codex SDK events are transformed before they reach normalizeMessage(),
-   * while history entries already use the compact message/tool shape produced
-   * by getCodexSessionMessages().
-   */
-  private normalizeHistoryEntry(raw: AnyRecord, sessionId: string | null): NormalizedMessage[] {
+  /** The runtime and history loader share the compact rows produced by the rollout decoder. */
+  normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
+    const raw = readObjectRecord(rawMessage);
+    if (!raw) return [];
     const ts = raw.timestamp || new Date().toISOString();
     const baseId = raw.uuid || generateMessageId('codex');
 
@@ -1959,208 +1979,6 @@ export class CodexSessionsProvider implements IProviderSessions {
   }
 
   /**
-   * Normalizes either a Codex history entry or a transformed live SDK event.
-   */
-  normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
-    const raw = readObjectRecord(rawMessage);
-    if (!raw) {
-      return [];
-    }
-
-    if (raw.message?.role) {
-      return this.normalizeHistoryEntry(raw, sessionId);
-    }
-
-    const ts = raw.timestamp || new Date().toISOString();
-    const baseId = raw.uuid || generateMessageId('codex');
-
-    if (raw.type === 'item') {
-      // Live items carry a stable SDK id, so an in-progress row and its later
-      // completion collapse onto the same transcript entry instead of stacking.
-      const itemId = readNonEmptyString(raw.itemId as string | undefined) ?? baseId;
-
-      switch (raw.itemType) {
-        case 'agent_message': {
-          const cited = readCodexMemoryCitations(String(raw.message?.content || ''));
-          const text = cited.text;
-          const proposedPlan = readCodexProposedPlan(text);
-          if (proposedPlan) {
-            // Same unification as history: a proposed plan is a plan card, not
-            // an assistant paragraph that happens to start with a tag.
-            return [createNormalizedMessage({
-              id: itemId,
-              sessionId,
-              timestamp: ts,
-              provider: PROVIDER,
-              kind: 'tool_use',
-              toolName: 'ExitPlanMode',
-              toolInput: { plan: proposedPlan },
-              toolId: itemId,
-              memoryCitations: cited.memoryCitations,
-            })];
-          }
-          return [createNormalizedMessage({
-            id: itemId,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'text',
-            role: 'assistant',
-            content: text,
-            memoryCitations: cited.memoryCitations,
-          })];
-        }
-        case 'reasoning':
-          return [createNormalizedMessage({
-            id: itemId,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'thinking',
-            content: raw.message?.content || '',
-          })];
-        case 'command_execution': {
-          const toolUse = createNormalizedMessage({
-            id: itemId,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'tool_use',
-            toolName: 'Bash',
-            toolInput: { command: raw.command },
-            toolId: itemId,
-            status: raw.status,
-          });
-          const partialOutput = typeof raw.output === 'string' ? raw.output : '';
-          if (raw.status === 'in_progress' && !partialOutput) {
-            return [toolUse];
-          }
-          // The SDK reports a command's output on the item itself; the UI reads
-          // tool output from a paired result, so one is emitted here. Emitting
-          // it while the command is still running is what lets its output
-          // stream into the row instead of appearing only at the end.
-          return [toolUse, createNormalizedMessage({
-            id: `${itemId}_result`,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'tool_result',
-            toolId: itemId,
-            content: partialOutput,
-            isError: raw.status === 'failed' || (typeof raw.exitCode === 'number' && raw.exitCode !== 0),
-          })];
-        }
-        case 'file_change': {
-          // One row per file so each change gets the same diff view as an Edit.
-          const changes = Array.isArray(raw.changes) ? raw.changes : [];
-          return changes.map((change: AnyRecord, index: number) => createNormalizedMessage({
-            id: `${itemId}_${index}`,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'tool_use',
-            toolName: change?.kind === 'add' ? 'Write' : 'Edit',
-            toolInput: { file_path: change?.path, old_string: '', new_string: '' },
-            toolId: `${itemId}_${index}`,
-            status: raw.status,
-          }));
-        }
-        case 'mcp_tool_call': {
-          const toolName = raw.server ? `mcp__${String(raw.server)}__${String(raw.tool ?? 'tool')}` : String(raw.tool || 'MCP');
-          const toolUse = createNormalizedMessage({
-            id: itemId,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'tool_use',
-            toolName,
-            toolInput: raw.arguments,
-            toolId: itemId,
-            status: raw.status,
-          });
-          if (raw.status === 'in_progress') {
-            return [toolUse];
-          }
-          return [toolUse, createNormalizedMessage({
-            id: `${itemId}_result`,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'tool_result',
-            toolId: itemId,
-            content: raw.error
-              ? String((raw.error as AnyRecord)?.message ?? raw.error)
-              : JSON.stringify(raw.result ?? ''),
-            isError: Boolean(raw.error) || raw.status === 'failed',
-          })];
-        }
-        case 'web_search':
-          return [createNormalizedMessage({
-            id: itemId,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'tool_use',
-            toolName: 'WebSearch',
-            toolInput: { query: raw.query },
-            toolId: itemId,
-          })];
-        case 'todo_list':
-          // Codex's live plan uses `{text, completed}`; Claude's TodoWrite uses
-          // `{content, status}`. Normalizing here means one renderer, not two.
-          return [createNormalizedMessage({
-            id: itemId,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'tool_use',
-            toolName: 'TodoWrite',
-            toolInput: {
-              todos: (Array.isArray(raw.items) ? raw.items : []).map((item: AnyRecord) => ({
-                content: String(item?.text ?? ''),
-                status: item?.completed ? 'completed' : 'pending',
-              })),
-            },
-            toolId: itemId,
-          })];
-        case 'error':
-          return [createNormalizedMessage({
-            id: itemId,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'error',
-            content: raw.message?.content || 'Unknown error',
-          })];
-        default:
-          return [createNormalizedMessage({
-            id: itemId,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'tool_use',
-            toolName: raw.itemType || 'Unknown',
-            toolInput: raw.item || raw,
-            toolId: itemId,
-          })];
-      }
-    }
-
-    if (raw.type === 'turn_failed') {
-      return [createNormalizedMessage({
-        id: baseId,
-        sessionId,
-        timestamp: ts,
-        provider: PROVIDER,
-        kind: 'error',
-        content: raw.error?.message || 'Turn failed',
-      })];
-    }
-
-    return [];
-  }
-
-  /**
    * Loads Codex JSONL history and keeps token usage metadata when the
    * transcript reported it.
    */
@@ -2181,7 +1999,7 @@ export class CodexSessionsProvider implements IProviderSessions {
 
     const normalized: NormalizedMessage[] = [];
     for (const raw of result.messages) {
-      normalized.push(...this.normalizeHistoryEntry(raw, sessionId));
+      normalized.push(...this.normalizeMessage(raw, sessionId));
     }
 
     const toolResultMap = new Map<string, NormalizedMessage>();
