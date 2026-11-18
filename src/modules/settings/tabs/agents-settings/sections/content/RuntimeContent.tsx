@@ -8,6 +8,7 @@ import SettingsToggle from '@/modules/settings/SettingsToggle';
 import { useAgentSettings, type AgentSettingName, type AgentSettingsOverview } from '@/modules/settings/hooks/useAgentSettings';
 import { useShutdownWhenIdle, type ShutdownWhenIdleState, type WatchedAgent } from '@/modules/settings/hooks/useShutdownWhenIdle';
 import { Button, Input } from '@/shared/ui';
+import type { AgentProvider } from '@/shared/types';
 import { cn } from '@/shared/utils';
 
 type NumberSettingRowProps = {
@@ -15,9 +16,10 @@ type NumberSettingRowProps = {
   overview: AgentSettingsOverview;
   isSaving: boolean;
   onSave: (name: AgentSettingName, value: number | null) => void;
+  provider: AgentProvider;
 };
 
-function NumberSettingRow({ name, overview, isSaving, onSave }: NumberSettingRowProps) {
+function NumberSettingRow({ name, overview, isSaving, onSave, provider }: NumberSettingRowProps) {
   const { t } = useTranslation('settings');
   const savedValue = overview.values[name];
   const defaultValue = overview.defaults[name];
@@ -40,7 +42,7 @@ function NumberSettingRow({ name, overview, isSaving, onSave }: NumberSettingRow
   return (
     <SettingsRow
       label={t(`runtime.settings.${name}.label`)}
-      description={t(`runtime.settings.${name}.description`, { defaultValue, minimum, maximum })}
+      description={t(`runtime.settings.${name}.${provider === 'codex' ? 'codexDescription' : 'description'}`, { defaultValue, minimum, maximum })}
     >
       <div className="flex flex-col items-end gap-1">
         <div className="flex items-center gap-2">
@@ -146,27 +148,24 @@ function ShutdownStatus({ state, onCancel, isUpdating }: {
 }
 
 /** Rendered by AgentCategoryContentSection for the "runtime" category: server-wide agent lifecycle settings. */
-export default function RuntimeContent() {
+export default function RuntimeContent({ provider }: { provider: AgentProvider }) {
   const { t } = useTranslation('settings');
   const { overview, error: settingsError, savingSetting, saveSetting } = useAgentSettings();
-  const { state: shutdownState, requestError, isUpdating, setArmed, cancelShutdown } = useShutdownWhenIdle();
+  const settings: AgentSettingName[] = provider === 'codex' ? ['idleCloseMinutes'] : [
+    'idleCloseMinutes', 'backgroundReminderMinutes', 'apiErrorRetryAttempts', 'apiErrorRetryDelayMinutes', 'attachmentRetentionDays',
+  ];
 
   return (
     <div className="space-y-8">
       <SettingsSection title={t('runtime.windows.title')} description={t('runtime.windows.description')}>
         {overview ? (
           <SettingsCard divided>
-            {([
-              'idleCloseMinutes',
-              'backgroundReminderMinutes',
-              'apiErrorRetryAttempts',
-              'apiErrorRetryDelayMinutes',
-              'attachmentRetentionDays',
-            ] as const).map((name) => (
+            {settings.map((name) => (
               <NumberSettingRow
                 // A saved value remounts the row, so its draft starts from what the server now holds.
                 key={`${name}:${overview.values[name]}`}
                 name={name}
+                provider={provider}
                 overview={overview}
                 isSaving={savingSetting === name}
                 onSave={(settingName, value) => void saveSetting(settingName, value)}
@@ -179,30 +178,38 @@ export default function RuntimeContent() {
         {settingsError && <p className="text-sm text-destructive">{settingsError}</p>}
       </SettingsSection>
 
-      <SettingsSection title={t('runtime.power.title')}>
-        <SettingsCard divided>
-          <SettingsRow
-            label={t('runtime.power.label')}
-            description={shutdownState
-              ? t('runtime.power.description', {
-                minutes: Math.round(shutdownState.quietPeriodMs / 60_000),
-                seconds: shutdownState.shutdownDelaySeconds,
-              })
-              : undefined}
-          >
-            <SettingsToggle
-              checked={shutdownState?.armed ?? false}
-              disabled={!shutdownState || isUpdating}
-              onChange={(armed) => void setArmed(armed)}
-              ariaLabel={t('runtime.power.label')}
-            />
-          </SettingsRow>
-          {shutdownState && (
-            <ShutdownStatus state={shutdownState} onCancel={() => void cancelShutdown()} isUpdating={isUpdating} />
-          )}
-        </SettingsCard>
-        {requestError && <p className="text-sm text-destructive">{requestError}</p>}
-      </SettingsSection>
+      {provider === 'claude' && <ShutdownSettings />}
     </div>
+  );
+}
+
+function ShutdownSettings() {
+  const { t } = useTranslation('settings');
+  const { state: shutdownState, requestError, isUpdating, setArmed, cancelShutdown } = useShutdownWhenIdle();
+  return (
+    <SettingsSection title={t('runtime.power.title')}>
+      <SettingsCard divided>
+        <SettingsRow
+          label={t('runtime.power.label')}
+          description={shutdownState
+            ? t('runtime.power.description', {
+              minutes: Math.round(shutdownState.quietPeriodMs / 60_000),
+              seconds: shutdownState.shutdownDelaySeconds,
+            })
+            : undefined}
+        >
+          <SettingsToggle
+            checked={shutdownState?.armed ?? false}
+            disabled={!shutdownState || isUpdating}
+            onChange={(armed) => void setArmed(armed)}
+            ariaLabel={t('runtime.power.label')}
+          />
+        </SettingsRow>
+        {shutdownState && (
+          <ShutdownStatus state={shutdownState} onCancel={() => void cancelShutdown()} isUpdating={isUpdating} />
+        )}
+      </SettingsCard>
+      {requestError && <p className="text-sm text-destructive">{requestError}</p>}
+    </SettingsSection>
   );
 }

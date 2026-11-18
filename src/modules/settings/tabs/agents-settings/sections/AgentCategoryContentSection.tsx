@@ -53,7 +53,7 @@ export default function AgentCategoryContentSection({
         />
       )}
 
-      {selectedAgent === 'claude' && selectedCategory === 'runtime' && <RuntimeContent />}
+      {selectedCategory === 'runtime' && <RuntimeContent provider={selectedAgent} />}
 
       {selectedCategory === 'mcp' && (
         // AgentSettingsProject.name is populated from the DB projectId by

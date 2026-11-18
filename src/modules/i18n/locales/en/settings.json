@@ -479,6 +479,7 @@
     "settings": {
       "idleCloseMinutes": {
         "label": "Close idle agents after",
+        "codexDescription": "AgentHarbor closes an idle Codex terminal when nobody is viewing it. Send a message to resume the chat. Claude and Codex share this timeout. Set it to 0 to keep terminals open.",
         "description": "An agent with no turn, question, background command, subagent or open terminal is closed; the chat continues with the next message. 0 keeps agents open. Default {{defaultValue}}.",
         "unit": "min"
       },

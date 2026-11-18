@@ -3,7 +3,7 @@ import { AppError } from '@/shared/utils.js';
 
 /** Agent behaviour the user changes in Settings; the environment only supplies the defaults. */
 export type AgentSettings = {
-  /** Idle Claude windows close after this many minutes without activity; 0 keeps them open. */
+  /** Idle agent windows close after this many minutes without activity; 0 keeps them open. */
   idleCloseMinutes: number;
   /** Copies of pasted files made for a Windows Claude are deleted after this many days. */
   attachmentRetentionDays: number;

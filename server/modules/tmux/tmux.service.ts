@@ -172,6 +172,10 @@ export function createTmuxService(options: { socketName?: string; session?: stri
       await run(['kill-window', '-t', windowId]);
     },
 
+    async killPane(paneId: string): Promise<void> {
+      await run(['kill-pane', '-t', paneId]);
+    },
+
     async selectWindow(windowId: string): Promise<void> {
       await run(['select-window', '-t', windowId]);
     },

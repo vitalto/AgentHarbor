@@ -4,6 +4,8 @@ import { newestWrite } from '@/modules/tmux/agent-activity.js';
 import { getAgentConfig } from '@/modules/tmux/agent-config.js';
 import { isAwaitingApiErrorRetry } from '@/modules/tmux/api-error-retry.service.js';
 import { readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
+import { readCodexScreen } from '@/modules/tmux/codex-tui.js';
+import { listCodexLiveThreads } from '@/modules/tmux/codex-windows.service.js';
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
 import { readLastTranscriptEntryTime } from '@/shared/utils.js';
@@ -51,10 +53,14 @@ async function lastWriteOf(pane: PaneSession): Promise<number | null> {
   return known.length > 0 ? Math.max(...known) : null;
 }
 
-/** Closes registered Claude windows idle for longer than the idle-close setting (0 disables). */
-export async function sweepIdleAgents(): Promise<string[]> {
+// A newly attached terminal can resume a thread whose last turn was days ago.
+let codexIdleSince = new Map<string, number>();
+
+/** Closes AgentHarbor terminal windows after the configured idle interval (0 disables). */
+export async function sweepIdleAgents(listCodexThreads = listCodexLiveThreads): Promise<string[]> {
   const idleLimitMs = getAgentConfig().idleCloseMinutes * 60_000;
   if (idleLimitMs <= 0) {
+    codexIdleSince.clear();
     return [];
   }
   const [panes, processes] = await Promise.all([paneRegistry.refresh(), readClaudeProcesses()]);
@@ -79,8 +85,26 @@ export async function sweepIdleAgents(): Promise<string[]> {
       closed.push(pane.pane.windowName);
     }
   }
+  const nextIdleSince = new Map<string, number>();
+  for (const { pane, providerSessionId, activity, updatedAt } of await listCodexThreads()) {
+    if (!pane || activity !== 'idle' || !updatedAt) continue;
+    const threadPane = `${pane.paneId}:${providerSessionId}`;
+    const idleSince = Math.max(updatedAt, codexIdleSince.get(threadPane) ?? Date.now());
+    nextIdleSince.set(threadPane, idleSince);
+    if (Date.now() - idleSince < idleLimitMs || await tmuxService.countViewers(pane.windowId) > 0) continue;
+    // The shared list is briefly cached; a new turn or draft may already be on screen.
+    const screen = await readCodexScreen(pane.paneId).catch(() => null);
+    if (screen?.activity !== 'idle' || (pane.title && pane.title !== screen.title)) {
+      nextIdleSince.delete(threadPane);
+      continue;
+    }
+    // A split window may also contain a shell the user opened separately.
+    await tmuxService.killPane(pane.paneId);
+    closed.push(pane.windowName);
+  }
+  codexIdleSince = nextIdleSince;
   if (closed.length > 0) {
-    console.log(`[AgentHarbor] closed idle Claude windows: ${closed.join(', ')}`);
+    console.log(`[AgentHarbor] closed idle agent windows: ${closed.join(', ')}`);
   }
   return closed;
 }

@@ -17,7 +17,7 @@ type AgentsSettingsTabProps = {
 
 const PROVIDER_CATEGORIES: Record<AgentProvider, AgentCategory[]> = {
   claude: ['account', 'permissions', 'runtime', 'mcp', 'skills'],
-  codex: ['account', 'mcp', 'skills'],
+  codex: ['account', 'runtime', 'mcp', 'skills'],
 };
 
 /** Rendered by Settings for the "agents" tab, showing the settings supported by each CLI. */
