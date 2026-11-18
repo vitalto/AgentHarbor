@@ -501,6 +501,8 @@ export type NormalizedMessage = {
    * when the cut was made, so this is where those rows begin.
    */
   replacesAfterRowCount?: number;
+  /** A reply finalized from local streaming chunks still needs to match the transcript by content. */
+  isLocalStreamEcho?: boolean;
   sessionId: string;
   timestamp: string;
   provider: LLMProvider;

@@ -275,9 +275,11 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
         && m.kind === 'text'
         && prev.role === 'assistant'
         && m.role === 'assistant'
+        && (needsAssistantTextEchoMatch(prev) || needsAssistantTextEchoMatch(m))
       ) {
         const ms = (m.content || '').trim();
         if (ms.length > 0 && ms === (prev.content || '').trim()) {
+          if (prev.isLocalStreamEcho) out[out.length - 1] = m;
           continue;
         }
       }
@@ -285,6 +287,11 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
     out.push(m);
   }
   return out;
+}
+
+function needsAssistantTextEchoMatch(message: NormalizedMessage): boolean {
+  // Codex transcript replies keep their IDs across live delivery and history. Only a local stream needs a text match.
+  return message.provider !== 'codex' || message.isLocalStreamEcho === true;
 }
 
 /**
@@ -316,7 +323,7 @@ function pruneRealtimeSupersededByServer(
       return true;
     }
 
-    if (message.kind === 'text' && message.role === 'assistant') {
+    if (message.kind === 'text' && message.role === 'assistant' && needsAssistantTextEchoMatch(message)) {
       if (isAssistantTextEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
         return false;
       }
@@ -764,12 +771,14 @@ export function useSessionStore() {
       msg.sessionId === sessionId
         ? msg
         : { ...msg, sessionId };
-    const snapshotIndex = msg.provider === 'codex' && msg.toolId && (msg.kind === 'tool_use' || msg.kind === 'tool_result')
-      ? slot.realtimeMessages.findIndex(row => row.provider === msg.provider && row.kind === msg.kind && row.toolId === msg.toolId)
-      : -1;
+    const isCodexToolSnapshot = msg.provider === 'codex' && Boolean(msg.toolId)
+      && (msg.kind === 'tool_use' || msg.kind === 'tool_result');
+    const rowIndex = slot.realtimeMessages.findIndex((row) =>
+      row.id === msg.id || (isCodexToolSnapshot && row.provider === msg.provider && row.kind === msg.kind && row.toolId === msg.toolId),
+    );
     let updated = [...slot.realtimeMessages];
-    if (snapshotIndex >= 0) {
-      updated[snapshotIndex] = normalizedMessage;
+    if (rowIndex >= 0) {
+      updated[rowIndex] = normalizedMessage;
     } else {
       updated.push(normalizedMessage);
     }
@@ -864,6 +873,7 @@ export function useSessionStore() {
         id: `text_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         kind: 'text',
         role: 'assistant',
+        isLocalStreamEcho: true,
       };
       recomputeMergedIfNeeded(slot);
       notify(sessionId);

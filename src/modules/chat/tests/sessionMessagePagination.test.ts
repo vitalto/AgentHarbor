@@ -146,6 +146,15 @@ test('normal non-overlapping older pages prepend unchanged', () => {
   assert.deepEqual(result.messages.map((item) => item.id), range(61, 100).map((item) => item.id));
 });
 
+test('separate Codex rows with the same text and timestamp can straddle a page boundary', () => {
+  const older = message(1, { id: 'older', provider: 'codex' });
+  const newer = { ...older, id: 'newer' };
+
+  assert.deepEqual(mergeOlderServerPage([newer], [older]).messages.map((row) => row.id), ['older', 'newer']);
+  assert.equal(findLatestPageOverlapLength([older], [newer]), 0);
+  assert.equal(hasReachedCachedTailTimeBoundary([older], [newer]), false);
+});
+
 test('a disjoint fetched window is never concatenated onto cached history', () => {
   const cached = range(1, 20);
   const disjoint = range(30, 49);

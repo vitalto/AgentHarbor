@@ -53,7 +53,8 @@ export function messagesRepresentSamePersistedRow(
 ): boolean {
   if (first.id === second.id) return true;
   if (
-    first.provider !== second.provider
+    first.provider === 'codex'
+    || first.provider !== second.provider
     || first.kind !== second.kind
     || first.timestamp !== second.timestamp
     || first.role !== second.role
@@ -151,7 +152,8 @@ export function hasReachedCachedTailTimeBoundary(
     return false;
   }
 
-  return fetchedOldestTime <= cachedNewestTime;
+  // Different rows can share a timestamp on either side of a page boundary.
+  return fetchedOldestTime < cachedNewestTime;
 }
 
 /**

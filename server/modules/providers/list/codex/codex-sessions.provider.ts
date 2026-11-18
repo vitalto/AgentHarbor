@@ -1,8 +1,12 @@
+import { createHash } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
+import { javascriptLanguage } from '@codemirror/lang-javascript';
+
 import { readCodexTranscriptEntries } from '@/shared/index.js';
 import { readCodexUsage } from '@/modules/providers/list/codex/codex-usage.js';
+import { CodexToolCallTimeline } from '@/modules/providers/list/codex/codex-tool-call-timeline.js';
 import { sessionsDb } from '@/modules/database/index.js';
 import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
@@ -54,6 +58,22 @@ type CodexHistoryResult = {
 
 function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function createCodexRowIdReader() {
+  const occurrences = new Map<string, number>();
+  return (entry: AnyRecord): string => {
+    const id = readNonEmptyString(entry.payload?.id)
+      ?? readNonEmptyString(entry.payload?.event_id)
+      ?? readNonEmptyString(entry.id);
+    if (id) return id;
+
+    // A live turn starts partway through the rollout. Only earlier copies of this exact legacy row can affect its ID.
+    const fingerprint = createHash('sha256').update(JSON.stringify(entry)).digest('base64url');
+    const ordinal = occurrences.get(fingerprint) ?? 0;
+    occurrences.set(fingerprint, ordinal + 1);
+    return `codex-row:${fingerprint}:${ordinal}`;
+  };
 }
 
 function isVisibleCodexUserMessage(payload: AnyRecord | null | undefined): boolean {
@@ -331,8 +351,9 @@ function extractCodexToolOutput(output: unknown): string {
 
 type CodexExecOperation =
   | { kind: 'shell'; command: string; justification?: string }
+  | { kind: 'unresolved-shell' }
   | { kind: 'stdin'; chars: string }
-  | { kind: 'patch'; patch: string }
+  | { kind: 'patch'; patch?: string }
   | { kind: 'search'; queries: string[] }
   | { kind: 'plan'; todos: CodexPlanTodo[] };
 
@@ -363,56 +384,53 @@ function decodeJavaScriptStringLiteral(literal: string): string {
     .replace(/\\([\\'`])/g, '$1');
 }
 
-/**
- * Returns the source of the argument list of the call that opens at
- * `openParenIndex`, skipping over parens that appear inside string literals.
- *
- * A plain regex cannot be used here: shell commands routinely embed `(`/`)`
- * and quotes, so the argument object has to be found by balancing.
- */
-function readCallArguments(source: string, openParenIndex: number): string | null {
-  let depth = 0;
-  let quote: string | null = null;
+function readCodexExecCalls(source: string) {
+  const tree = javascriptLanguage.parser.parse(source);
+  const calls: { toolName: string; argumentSource: string; patch?: string }[] = [];
+  const constants = new Map<string, { value: string; from: number; to: number } | undefined>();
 
-  for (let index = openParenIndex; index < source.length; index += 1) {
-    const character = source[index];
-
-    if (quote) {
-      if (character === '\\') {
-        index += 1;
-        continue;
-      }
-      if (character === quote) {
-        quote = null;
-      }
-      continue;
-    }
-
-    if (character === '"' || character === "'" || character === '`') {
-      quote = character;
-      continue;
-    }
-
-    if (character === '(') {
-      depth += 1;
-      continue;
-    }
-
-    if (character === ')') {
-      depth -= 1;
-      if (depth === 0) {
-        return source.slice(openParenIndex + 1, index);
-      }
+  function staticString(node: typeof tree.topNode | null | undefined) {
+    if (node?.name === 'String' || (node?.name === 'TemplateString' && !node.getChild('Interpolation'))) {
+      return decodeJavaScriptStringLiteral(source.slice(node.from, node.to));
     }
   }
 
-  return null;
+  tree.iterate({ enter(ref) {
+    if (ref.name === 'VariableDefinition') {
+      const definition = ref.node;
+      const name = source.slice(ref.from, ref.to);
+      const declaration = definition.parent;
+      const value = declaration?.firstChild?.name === 'const' && definition.nextSibling?.name === 'Equals'
+        ? staticString(definition.nextSibling.nextSibling) : undefined;
+      let scope = declaration;
+      while (scope?.parent && scope.name !== 'Block') scope = scope.parent;
+      // A shadowed or computed binding cannot supply a reliable filename.
+      constants.set(name, value !== undefined && scope && !constants.has(name) ? { value, from: scope.from, to: scope.to } : undefined);
+      return;
+    }
+    if (ref.name !== 'CallExpression') return;
+    const node = ref.node;
+    const target = node.firstChild;
+    const args = node.getChild('ArgList');
+    if (target?.name !== 'MemberExpression' || !args) return;
+    const toolName = /^tools\s*\.\s*([\w$]+)$/.exec(source.slice(target.from, target.to))?.[1];
+    if (!toolName) return;
+    const argumentSource = source.slice(args.from + 1, args.to - 1);
+    let patch: string | undefined;
+    if (toolName === 'apply_patch') {
+      const binding = constants.get(argumentSource.trim());
+      patch = binding && binding.from <= node.from && node.to <= binding.to
+        ? binding.value : staticString(args.firstChild?.nextSibling);
+    }
+    calls.push({ toolName, argumentSource, patch });
+  } });
+  return calls;
 }
 
 /** Reads `key: "value"` / `"key": "value"` out of an object-literal source. */
 function readStringProperty(objectSource: string, key: string): string | undefined {
   const pattern = new RegExp(
-    `(?:["']${key}["']|\\b${key})\\s*:\\s*("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*'|\`(?:\\\\.|[^\`\\\\])*\`)`,
+    `(?:["']${key}["']|\\b${key})\\s*:\\s*("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*'|\`(?:\\\\.|[^\`\\\\])*\`)(?=\\s*(?:[,}]|$))`,
     's',
   );
   const match = pattern.exec(objectSource);
@@ -423,25 +441,6 @@ function readStringProperty(objectSource: string, key: string): string | undefin
 function readSearchQueries(objectSource: string): string[] {
   const pattern = /(?:["']q["']|\bq)\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/gs;
   return Array.from(objectSource.matchAll(pattern), (match) => decodeJavaScriptStringLiteral(match[1]));
-}
-
-/**
- * Finds the patch body an `apply_patch` call is given.
- *
- * The program almost always assigns it to a local first
- * (`const patch = "*** Begin Patch..."; tools.apply_patch(patch)`), so the
- * argument itself is usually an identifier. Scanning the whole script for the
- * literal that carries the patch header covers both forms.
- */
-function readPatchLiteral(source: string): string | undefined {
-  const pattern = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/gs;
-  for (const match of source.matchAll(pattern)) {
-    const decoded = decodeJavaScriptStringLiteral(match[1]);
-    if (decoded.includes('*** Begin Patch')) {
-      return decoded;
-    }
-  }
-  return undefined;
 }
 
 /**
@@ -475,6 +474,8 @@ function readMappedCommandCandidates(source: string): string[] {
   const stringPattern = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/gs;
 
   for (const arrayMatch of source.matchAll(arrayPattern)) {
+    // Tuple/object batches can contain labels, paths and options alongside the command.
+    if (/[^\s,]/.test(arrayMatch[2].replace(stringPattern, ''))) continue;
     if (!new RegExp(`\\b${arrayMatch[1]}\\.map\\s*\\(`).test(source)) {
       continue;
     }
@@ -495,20 +496,15 @@ function readMappedCommandCandidates(source: string): string[] {
  */
 export function parseCodexExecScript(input: unknown): CodexExecOperation[] {
   const source = typeof input === 'string' ? input : String(input ?? '');
-  if (!source.includes('tools.')) {
+  if (!source.includes('tools')) {
     return [];
   }
 
   const operations: CodexExecOperation[] = [];
-  const callPattern = /tools\.([A-Za-z_0-9]+)\s*\(/g;
   /** Filled in lazily, and only once, for shorthand-argument shell calls. */
   let mappedCommands: string[] | null = null;
 
-  for (const match of source.matchAll(callPattern)) {
-    const toolName = match[1];
-    const openParenIndex = match.index + match[0].length - 1;
-    const argumentSource = readCallArguments(source, openParenIndex) ?? '';
-
+  for (const { toolName, argumentSource, patch } of readCodexExecCalls(source)) {
     switch (toolName) {
       case 'shell_command':
       case 'exec_command': {
@@ -529,6 +525,7 @@ export function parseCodexExecScript(input: unknown): CodexExecOperation[] {
             operations.push({ kind: 'shell', command: mappedCommand });
           }
         }
+        if (!mappedCommands.length) operations.push({ kind: 'unresolved-shell' });
         break;
       }
       case 'write_stdin': {
@@ -536,10 +533,7 @@ export function parseCodexExecScript(input: unknown): CodexExecOperation[] {
         break;
       }
       case 'apply_patch': {
-        const patch = readPatchLiteral(argumentSource) ?? readPatchLiteral(source);
-        if (patch) {
-          operations.push({ kind: 'patch', patch });
-        }
+        operations.push({ kind: 'patch', patch });
         break;
       }
       case 'web__run':
@@ -747,7 +741,6 @@ export function parseCodexPatch(patch: string): CodexFileChange[] {
   return changes;
 }
 
-/** Converts a `patch_apply_end` change map into the same per-file shape. */
 function readPatchApplyChanges(changes: unknown): CodexFileChange[] {
   const record = readObjectRecord(changes);
   if (!record) {
@@ -761,91 +754,113 @@ function readPatchApplyChanges(changes: unknown): CodexFileChange[] {
       continue;
     }
     const changeType = change.type === 'add' || change.type === 'delete' ? change.type : 'update';
-    const { oldText, newText } = unifiedDiffToTexts(
+    const texts = unifiedDiffToTexts(
       typeof change.unified_diff === 'string' ? change.unified_diff : '',
     );
-    parsed.push({
-      filePath,
-      changeType,
-      oldText: changeType === 'add' ? '' : oldText,
-      newText: changeType === 'delete' ? '' : newText,
-    });
+    if (changeType === 'add') {
+      texts.oldText = '';
+      if (typeof change.content === 'string') texts.newText = change.content;
+    } else if (changeType === 'delete') {
+      texts.newText = '';
+      if (typeof change.content === 'string') texts.oldText = change.content;
+    }
+    parsed.push({ filePath, changeType, ...texts });
   }
 
   return parsed;
 }
 
-/** Maps a file change onto the tool the frontend already renders diffs for. */
-function fileChangeToToolMessage(change: CodexFileChange, timestamp: string, toolCallId: string): AnyRecord {
-  const toolName = change.changeType === 'add' ? 'Write' : 'Edit';
+type CodexPatchResult = { content: string; isError: boolean };
+type CodexPatchRow = {
+  timestamp?: string;
+  toolId: string;
+  toolName: 'Write' | 'Edit' | 'exec' | 'apply_patch';
+  toolInput: AnyRecord | string;
+  toolResult?: CodexPatchResult;
+};
+
+type CodexPatchCall = {
+  callId: string;
+  firstRowId: string;
+  timestamp?: string;
+  changes: CodexFileChange[];
+  wrapper?: string;
+  result?: CodexPatchResult;
+  reported: boolean;
+  fileCount: number;
+};
+
+function createCodexPatchTracker(timeline: CodexToolCallTimeline, publish: (row: CodexPatchRow) => void) {
+  const calls = new Map<string, CodexPatchCall>();
+  const openCalls = new Set<string>();
+  const reportedIds = new Set<string>();
+
+  function publishFiles(call: CodexPatchCall, changes: CodexFileChange[], toolResult?: CodexPatchResult) {
+    const publishTool = (toolName: CodexPatchRow['toolName'], toolInput: CodexPatchRow['toolInput']) => {
+      const index = call.fileCount++;
+      publish({
+        toolId: index === 0 ? call.firstRowId : `${call.callId}#${index}`, timestamp: call.timestamp,
+        toolName, toolInput, toolResult,
+      });
+    };
+    if (!changes.length) {
+      if (call.wrapper) publishTool('exec', call.wrapper);
+      else if (toolResult?.isError) publishTool('apply_patch', {});
+    }
+    for (const change of changes) {
+      publishTool(change.changeType === 'add' ? 'Write' : 'Edit', {
+        file_path: change.filePath,
+        old_string: change.oldText,
+        new_string: change.newText,
+        ...(change.changeType === 'add' ? { content: change.newText } : {}),
+        ...(change.changeType === 'delete' ? { deleted: true } : {}),
+      });
+    }
+  }
+
   return {
-    type: 'tool_use',
-    timestamp,
-    toolName,
-    toolInput: JSON.stringify({
-      file_path: change.filePath,
-      old_string: change.oldText,
-      new_string: change.newText,
-      ...(change.changeType === 'delete' ? { deleted: true } : {}),
-    }),
-    toolCallId,
+    start(callId: string, firstRowId: string, timestamp: string | undefined, patches: (string | undefined)[], wrapper?: string) {
+      const changes = patches.flatMap(patch => typeof patch === 'string' ? parseCodexPatch(patch) : []);
+      calls.set(callId, { callId, firstRowId, timestamp, changes, wrapper, reported: false, fileCount: 0 });
+      openCalls.add(callId);
+    },
+    report(payload: AnyRecord, timestamp: string | undefined): boolean {
+      const legacy = payload.type === 'patch_apply_end';
+      if (!legacy && (payload.type !== 'item_completed' || payload.item?.type !== 'FileChange')) return false;
+      const item = legacy ? payload : payload.item;
+      const id = readNonEmptyString(legacy ? item.call_id : item.id);
+      if (!id || reportedIds.has(id)) return true;
+      reportedIds.add(id);
+
+      let ownerId = legacy ? id : timeline.ownerOf(payload) ?? id;
+      // Older nested patch reports have a separate call_id and no start time.
+      if (legacy && !calls.has(ownerId) && openCalls.size === 1) [ownerId] = openCalls;
+      const call: CodexPatchCall = calls.get(ownerId) ?? {
+        callId: id, firstRowId: `${id}#0`, timestamp, changes: [], fileCount: 0, reported: false,
+      };
+      call.reported = true;
+      const isError = legacy ? item.success === false : ['failed', 'declined', 'cancelled', 'canceled', 'aborted'].includes(item.status);
+      const content = isError ? String(item.stderr || item.stdout || 'Patch failed') : String(item.stdout || '');
+      const changes = readPatchApplyChanges(item.changes);
+      if (changes.length || isError) publishFiles(call, changes.length ? changes : call.changes, { content, isError });
+      return true;
+    },
+    output(callId: string, rawOutput: string) {
+      const call = calls.get(callId);
+      if (!call) return;
+      const cleaned = cleanCodexShellOutput(rawOutput);
+      if (cleaned.runningCellId) return;
+      openCalls.delete(callId);
+      call.result = { content: cleaned.output, isError: cleaned.exitCode !== undefined && cleaned.exitCode !== 0 };
+    },
+    finish() {
+      // A historical rollout can lack the native report. Only then use the source of the call.
+      for (const call of calls.values()) {
+        if (call.reported) continue;
+        publishFiles(call, call.changes, call.result);
+      }
+    },
   };
-}
-
-/** Reads the `file_path` back out of a rendered file-change row. */
-function readRowFilePath(row: AnyRecord): string {
-  try {
-    return String((JSON.parse(String(row.toolInput ?? '{}')) as AnyRecord).file_path ?? '');
-  } catch {
-    return '';
-  }
-}
-
-/**
- * Rewrites the rows reconstructed from a patch call's input with the
- * authoritative diffs Codex reports once the patch has been applied.
- *
- * Rows are matched by path, never by position: `patch_apply_end` reports the
- * touched files in map order, which does not follow the order they appeared in
- * the patch body. Rows whose file the report does not mention are dropped
- * rather than left behind claiming an edit that never happened.
- */
-function rewritePatchRows(
-  rows: AnyRecord[],
-  changes: CodexFileChange[],
-  callId: string,
-  messages: AnyRecord[],
-): void {
-  const rowsByPath = new Map<string, AnyRecord>();
-  for (const row of rows) {
-    rowsByPath.set(readRowFilePath(row), row);
-  }
-
-  const keptRows: AnyRecord[] = [];
-  for (const [index, change] of changes.entries()) {
-    const replacement = fileChangeToToolMessage(change, String(rows[0]?.timestamp ?? ''), `${callId}#${index}`);
-    const existing = rowsByPath.get(change.filePath);
-    if (existing) {
-      existing.toolName = replacement.toolName;
-      existing.toolInput = replacement.toolInput;
-      keptRows.push(existing);
-      rowsByPath.delete(change.filePath);
-      continue;
-    }
-
-    replacement.timestamp = rows[0]?.timestamp ?? replacement.timestamp;
-    keptRows.push(replacement);
-    messages.push(replacement);
-  }
-
-  for (const surplus of rowsByPath.values()) {
-    const position = messages.indexOf(surplus);
-    if (position !== -1) {
-      messages.splice(position, 1);
-    }
-  }
-
-  rows.splice(0, rows.length, ...keptRows);
 }
 
 // в”Ђв”Ђв”Ђ Subagents в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -971,9 +986,12 @@ type CodexSubagentTranscript = {
  * same components as the main thread's.
  */
 async function readCodexSubagentTranscript(filePath: string): Promise<CodexSubagentTranscript> {
+  const readRowId = createCodexRowIdReader();
   const activity: SubagentActivity[] = [];
   const transcript: CodexSubagentTranscript = { activity };
   const pendingResults = new Map<string, SubagentActivity>();
+  const recordedCalls = new CodexToolCallTimeline();
+  const patchCalls = createCodexPatchTracker(recordedCalls, row => activity.push({ kind: 'tool', ...row }));
 
   for await (const entry of readCodexTranscriptEntries(filePath)) {
     const payload = readObjectRecord(entry.payload);
@@ -981,6 +999,7 @@ async function readCodexSubagentTranscript(filePath: string): Promise<CodexSubag
       continue;
     }
 
+    recordedCalls.observe(entry, payload);
     if (entry.type === 'session_meta') {
       // A resumed rollout writes a second, sparser session_meta; assigning
       // unconditionally would erase the identity the first one carried.
@@ -994,11 +1013,11 @@ async function readCodexSubagentTranscript(filePath: string): Promise<CodexSubag
       continue;
     }
 
+    const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
+    if (entry.type === 'event_msg') patchCalls.report(payload, timestamp);
     if (entry.type !== 'response_item') {
       continue;
     }
-
-    const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
 
     if (payload.type === 'message' && payload.role === 'assistant') {
       const content = extractCodexTextContent(payload.content).trim();
@@ -1019,22 +1038,34 @@ async function readCodexSubagentTranscript(filePath: string): Promise<CodexSubag
     }
 
     if (payload.type === 'function_call' || payload.type === 'custom_tool_call') {
-      const callId = readNonEmptyString(payload.call_id) ?? generateMessageId('codex-subagent-call');
-      for (const child of translateCodexToolCall(payload, callId)) {
+      const callId = readNonEmptyString(payload.call_id) ?? readRowId(entry);
+      const shellRows: SubagentActivity[] = [];
+      for (const child of translateCodexToolCall(payload, callId, timestamp, patchCalls)) {
         const record: SubagentActivity = { ...child, timestamp };
         activity.push(record);
         pendingResults.set(callId, record);
+        if (record.toolName === 'Bash' || record.toolName === 'Exec') shellRows.push(record);
       }
+      if (payload.name === 'exec' && shellRows.length) recordedCalls.watchCommands(callId, commands => {
+        if (commands.length < shellRows.length) return;
+        shellRows.forEach((row, index) => {
+          const command = index === shellRows.length - 1 ? commands.slice(index).join('\n') : commands[index];
+          row.toolName = 'Bash';
+          row.toolInput = { ...readObjectRecord(row.toolInput), command };
+        });
+      });
       continue;
     }
 
     if (payload.type === 'function_call_output' || payload.type === 'custom_tool_call_output') {
-      const callId = readNonEmptyString(payload.call_id);
+      const callId = readNonEmptyString(payload.call_id) ?? readNonEmptyString(payload.id);
+      const rawOutput = extractCodexToolOutput(payload.output);
+      if (callId) patchCalls.output(callId, rawOutput);
       const target = callId ? pendingResults.get(callId) : undefined;
       if (!target) {
         continue;
       }
-      const cleaned = cleanCodexShellOutput(extractCodexToolOutput(payload.output));
+      const cleaned = cleanCodexShellOutput(rawOutput);
       target.toolResult = {
         content: cleaned.output,
         isError: cleaned.exitCode !== undefined && cleaned.exitCode !== 0,
@@ -1042,6 +1073,7 @@ async function readCodexSubagentTranscript(filePath: string): Promise<CodexSubag
     }
   }
 
+  patchCalls.finish();
   return transcript;
 }
 
@@ -1053,34 +1085,26 @@ async function readCodexSubagentTranscript(filePath: string): Promise<CodexSubag
  * Shared by the main thread and by subagent transcripts so a subagent's shell
  * command looks identical to the parent's.
  */
-function translateCodexToolCall(payload: AnyRecord, callId: string): SubagentActivity[] {
+function translateCodexToolCall(
+  payload: AnyRecord, callId: string, timestamp: string | undefined, patchCalls: ReturnType<typeof createCodexPatchTracker>,
+): SubagentActivity[] {
   const name = readNonEmptyString(payload.name) ?? 'tool';
   const rawInput = payload.type === 'custom_tool_call' ? payload.input : payload.arguments;
 
   if (name === 'exec') {
     const operations = parseCodexExecScript(rawInput);
+    const patches = operations.filter(operation => operation.kind === 'patch');
+    const hasComputedShell = operations.some(operation => operation.kind === 'unresolved-shell');
     const rows: SubagentActivity[] = [];
+    if (hasComputedShell) rows.push({ kind: 'tool', toolId: callId, toolName: 'Exec', toolInput: rawInput });
     for (const operation of operations) {
-      if (operation.kind === 'shell') {
+      if (operation.kind === 'shell' && !hasComputedShell) {
         rows.push({
           kind: 'tool',
           toolId: callId,
           toolName: 'Bash',
           toolInput: { command: operation.command, description: operation.justification },
         });
-      } else if (operation.kind === 'patch') {
-        for (const change of parseCodexPatch(operation.patch)) {
-          rows.push({
-            kind: 'tool',
-            toolId: callId,
-            toolName: change.changeType === 'add' ? 'Write' : 'Edit',
-            toolInput: {
-              file_path: change.filePath,
-              old_string: change.oldText,
-              new_string: change.newText,
-            },
-          });
-        }
       } else if (operation.kind === 'search') {
         rows.push({
           kind: 'tool',
@@ -1090,7 +1114,11 @@ function translateCodexToolCall(payload: AnyRecord, callId: string): SubagentAct
         });
       }
     }
-    if (rows.length > 0) {
+    if (patches.length > 0) {
+      const firstRowId = rows.length ? `${callId}#0` : callId;
+      patchCalls.start(callId, firstRowId, timestamp, patches.map(operation => operation.patch), rows.length ? undefined : rawInput);
+    }
+    if (rows.length > 0 || patches.length > 0) {
       return rows;
     }
   }
@@ -1107,16 +1135,8 @@ function translateCodexToolCall(payload: AnyRecord, callId: string): SubagentAct
   }
 
   if (name === 'apply_patch') {
-    return parseCodexPatch(String(rawInput ?? '')).map((change) => ({
-      kind: 'tool' as const,
-      toolId: callId,
-      toolName: change.changeType === 'add' ? 'Write' : 'Edit',
-      toolInput: {
-        file_path: change.filePath,
-        old_string: change.oldText,
-        new_string: change.newText,
-      },
-    }));
+    patchCalls.start(callId, callId, timestamp, [rawInput]);
+    return [];
   }
 
   if (name === 'update_plan') {
@@ -1179,6 +1199,8 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
 
 /** Decodes both persisted history and the appended rows streamed by the Codex TUI runtime. */
 export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessionFilePath?: string, onMessage?: (message: AnyRecord) => void): Promise<CodexHistoryResult> {
+  const readRowId = createCodexRowIdReader();
+  const recordedCalls = new CodexToolCallTimeline();
   const messages: AnyRecord[] = [];
   const idlessPromptsPerTimestamp = new Map<string, number>();
   const publish = (message: AnyRecord) => {
@@ -1197,20 +1219,12 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
   const ignoredToolCallIds = new Set<string>();
   /** Exec calls that own a shell row, so their output can be routed back. */
   const shellCallMessages = new Map<string, AnyRecord>();
-  /**
-   * File rows produced by each patch call, so the authoritative
-   * `patch_apply_end` diffs can replace what was reconstructed from the call
-   * input, and so every row gets exactly one result.
-   */
-  const patchGroups = new Map<string, {
-    callId: string;
-    rows: AnyRecord[];
-    timestamp: string;
-    success?: boolean;
-    failure?: string;
-  }>();
-  /** Patch call awaiting its out-of-band `patch_apply_end` report. */
-  let pendingPatchCallId: string | null = null;
+  const patchCalls = createCodexPatchTracker(recordedCalls, row => {
+    const { toolId: toolCallId, timestamp, toolName, toolResult } = row;
+    const toolInput = typeof row.toolInput === 'string' ? row.toolInput : JSON.stringify(row.toolInput);
+    publish({ type: 'tool_use', toolCallId, timestamp, toolName, toolInput });
+    if (toolResult) publish({ type: 'tool_result', toolCallId, timestamp, output: toolResult.content, isError: toolResult.isError });
+  });
   const execCallByCellId = new Map<string, string>();
   const waitCallToExecCall = new Map<string, string>();
   const pendingExecOutput = new Map<string, string>();
@@ -1234,11 +1248,22 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
     publish({ type: 'tool_result', timestamp, toolCallId: callId, output, isError });
   };
 
+  const watchShellRow = (row: AnyRecord, description?: string) => {
+    recordedCalls.watchCommands(row.toolCallId, commands => {
+      const toolInput = JSON.stringify({ command: commands.join('\n'), description });
+      if (row.toolName === 'Bash' && row.toolInput === toolInput) return;
+      row.toolName = 'Bash';
+      row.toolInput = toolInput;
+      onMessage?.(row);
+    });
+  };
+
   for await (const entry of entries) {
     const payload = readObjectRecord(entry.payload);
     if (!payload) {
       continue;
     }
+    recordedCalls.observe(entry, payload);
     const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : new Date().toISOString();
     // Before the type-specific branches: a turn is opened and closed by rows
     // that produce no transcript entry of their own, and each of those
@@ -1267,48 +1292,12 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
         continue;
       }
 
-      // Codex reports patch results out of band. They carry the real unified
-      // diffs, so they replace whatever was reconstructed from the call input.
-      // Codex reports the applied patch out of band, and it is the only place
-      // the real unified diffs appear. It always arrives before the call's own
-      // output, so the rows reconstructed from the call input are rewritten
-      // here rather than duplicated.
-      if (payload.type === 'patch_apply_end') {
-        const callId = readNonEmptyString(payload.call_id);
-        if (!callId) {
-          continue;
-        }
-        const changes = readPatchApplyChanges(payload.changes);
-        // A patch applied from inside an `exec` script is reported under a
-        // synthetic id that does not match the script's call id, so fall back
-        // to the patch call that is still in flight.
-        const group = patchGroups.get(callId)
-          ?? (pendingPatchCallId ? patchGroups.get(pendingPatchCallId) : undefined);
-        if (group) {
-          rewritePatchRows(group.rows, changes, group.callId, messages);
-          group.success = payload.success !== false;
-          group.failure = String(payload.stderr || payload.stdout || '');
-          pendingPatchCallId = null;
-        } else if (changes.length > 0) {
-          // A resumed thread can replay the result of a patch whose call is
-          // not in this file; the rows still belong in the transcript.
-          const rows = changes.map((change, index) =>
-            fileChangeToToolMessage(change, timestamp, `${callId}#${index}`));
-          rows.forEach((row) => publish(row));
-          patchGroups.set(callId, {
-            callId,
-            rows,
-            timestamp,
-            success: payload.success !== false,
-            failure: String(payload.stderr || payload.stdout || ''),
-          });
-        }
-        continue;
-      }
+      if (patchCalls.report(payload, timestamp)) continue;
 
       if (payload.type === 'turn_aborted') {
         publish({
           type: 'status_note',
+          uuid: readRowId(entry),
           timestamp,
           content: payload.reason === 'interrupted' ? 'Turn interrupted' : `Turn aborted (${String(payload.reason ?? 'unknown')})`,
         });
@@ -1316,7 +1305,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
       }
 
       if (payload.type === 'context_compacted') {
-        publish({ type: 'status_note', timestamp, content: 'Context compacted' });
+        publish({ type: 'status_note', uuid: readRowId(entry), timestamp, content: 'Context compacted' });
         continue;
       }
 
@@ -1386,7 +1375,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
 
       const proposedPlan = readCodexProposedPlan(textContent);
       if (proposedPlan) {
-        const planCallId = readNonEmptyString(payload.id) ?? generateMessageId('codex-plan');
+        const planCallId = readRowId(entry);
         publish({
           type: 'tool_use',
           timestamp,
@@ -1401,6 +1390,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
 
       publish({
         type: 'assistant',
+        uuid: readRowId(entry),
         timestamp,
         message: { role: 'assistant', content: textContent },
         memoryCitations: cited.memoryCitations,
@@ -1415,6 +1405,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
       if (summaryText.trim()) {
         publish({
           type: 'thinking',
+          uuid: readRowId(entry),
           timestamp,
           message: { role: 'assistant', content: summaryText },
         });
@@ -1426,7 +1417,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
       const action = readObjectRecord(payload.action);
       const query = readNonEmptyString(action?.query as string | undefined);
       if (query) {
-        const callId = readNonEmptyString(payload.id) ?? generateMessageId('codex-search');
+        const callId = readRowId(entry);
         publish({
           type: 'tool_use',
           timestamp,
@@ -1448,7 +1439,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
       if (!subagent) {
         // A resumed thread can replay an answer whose spawn call is not in this
         // file. Synthesize the container so the answer still has a home.
-        const fallbackCallId = readNonEmptyString(payload.id) ?? generateMessageId('codex-subagent');
+        const fallbackCallId = readRowId(entry);
         const taskName = agentMessage.author.split('/').filter(Boolean).pop() || 'agent';
         const taskMessage: AnyRecord = {
           uuid: fallbackCallId,
@@ -1477,7 +1468,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
     }
 
     if (payload.type === 'function_call' || payload.type === 'custom_tool_call') {
-      const callId = readNonEmptyString(payload.call_id) ?? generateMessageId('codex-call');
+      const callId = readNonEmptyString(payload.call_id) ?? readRowId(entry);
       const name = readNonEmptyString(payload.name) ?? 'tool';
       const rawInput = payload.type === 'custom_tool_call' ? payload.input : payload.arguments;
 
@@ -1547,6 +1538,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
       if (name === 'exec') {
         const operations = parseCodexExecScript(rawInput);
         const shellCommands = operations.filter((operation) => operation.kind === 'shell');
+        const hasComputedShell = operations.some(operation => operation.kind === 'unresolved-shell');
         const stdinWrites = operations.filter((operation) => operation.kind === 'stdin');
         const patches = operations.filter((operation) => operation.kind === 'patch');
         const searches = operations.filter((operation) => operation.kind === 'search');
@@ -1554,7 +1546,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
 
         // A bare stdin poll continues whatever command is still running; it is
         // a continuation, not an action of its own.
-        if (operations.length > 0 && shellCommands.length === 0 && stdinWrites.length > 0) {
+        if (operations.length > 0 && shellCommands.length === 0 && patches.length === 0 && stdinWrites.length > 0) {
           ignoredToolCallIds.add(callId);
           if (runningExecCallId) {
             waitCallToExecCall.set(callId, runningExecCallId);
@@ -1574,33 +1566,33 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
             toolCallId: callId,
           };
           publish(fallbackMessage);
+          watchShellRow(fallbackMessage);
           continue;
         }
 
         // The call has exactly one output, so whichever row represents the work
         // it did keeps the call id and receives that output. Extra rows get
         // suffixed ids and are resolved by their own bookkeeping.
-        let outputOwnerAssigned = false;
+        let toolRowCount = 0;
         const nextRowId = () => {
-          if (!outputOwnerAssigned) {
-            outputOwnerAssigned = true;
-            return callId;
-          }
-          return `${callId}~${messages.length}`;
+          const index = toolRowCount++;
+          return index === 0 ? callId : `${callId}~${index}`;
         };
 
-        if (shellCommands.length > 0) {
+        if (hasComputedShell || shellCommands.length > 0) {
+          const description = shellCommands.find((operation) => operation.justification)?.justification;
           const shellMessage: AnyRecord = {
             type: 'tool_use',
             timestamp,
-            toolName: 'Bash',
-            toolInput: JSON.stringify({
+            toolName: hasComputedShell ? 'exec' : 'Bash',
+            toolInput: hasComputedShell ? rawInput : JSON.stringify({
               command: shellCommands.map((operation) => operation.command).join('\n'),
-              description: shellCommands.find((operation) => operation.justification)?.justification,
+              description,
             }),
             toolCallId: nextRowId(),
           };
           publish(shellMessage);
+          watchShellRow(shellMessage, description);
           shellCallMessages.set(callId, shellMessage);
         }
 
@@ -1629,15 +1621,12 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
         }
 
         if (patches.length > 0) {
-          const changes = patches.flatMap((patch) => parseCodexPatch(patch.patch));
-          const rows = changes.map((change, index) =>
-            fileChangeToToolMessage(change, timestamp, index === 0 ? nextRowId() : `${callId}#${index}`));
-          rows.forEach((row) => publish(row));
-          patchGroups.set(callId, { callId, rows, timestamp });
-          pendingPatchCallId = callId;
+          const firstRowId = nextRowId();
+          patchCalls.start(callId, firstRowId, timestamp, patches.map(operation => operation.patch), firstRowId === callId ? rawInput : undefined);
+          if (firstRowId === callId) ignoredToolCallIds.add(callId);
         }
 
-        if (!outputOwnerAssigned) {
+        if (toolRowCount === 0) {
           // Every recognized operation produced no row (an empty patch, say).
           // Nothing owns the output, so drop it rather than leaving it loose.
           ignoredToolCallIds.add(callId);
@@ -1646,12 +1635,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
       }
 
       if (name === 'apply_patch') {
-        const rows = parseCodexPatch(String(rawInput ?? ''))
-          .map((change, index) => fileChangeToToolMessage(change, timestamp, `${callId}#${index}`));
-        rows.forEach((row) => publish(row));
-        patchGroups.set(callId, { callId, rows, timestamp });
-        pendingPatchCallId = callId;
-        // The call's own output is a bare `{}`; the per-file rows carry the result.
+        patchCalls.start(callId, `${callId}#0`, timestamp, [rawInput]);
         ignoredToolCallIds.add(callId);
         continue;
       }
@@ -1687,8 +1671,9 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
     }
 
     if (payload.type === 'function_call_output' || payload.type === 'custom_tool_call_output') {
-      const callId = readNonEmptyString(payload.call_id) ?? '';
+      const callId = readNonEmptyString(payload.call_id) ?? readRowId(entry);
       const rawOutput = extractCodexToolOutput(payload.output);
+      patchCalls.output(callId, rawOutput);
 
       // A wait / stdin poll delivers the tail of an earlier command's output.
       const continuedCallId = waitCallToExecCall.get(callId);
@@ -1750,21 +1735,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
     }
   }
 
-  // Every file row needs a result or the UI shows it as still running. The
-  // patch outcome is known only after `patch_apply_end` (which may never
-  // arrive), so results are emitted once the whole file has been read.
-  for (const group of patchGroups.values()) {
-    const failed = group.success === false;
-    for (const row of group.rows) {
-      publish({
-        type: 'tool_result',
-        timestamp: group.timestamp,
-        toolCallId: row.toolCallId,
-        output: failed ? (group.failure || 'Patch failed') : '',
-        isError: failed,
-      });
-    }
-  }
+  patchCalls.finish();
 
   if (sessionFilePath) await attachCodexSubagentTranscripts(sessionFilePath, subagentsByCallId);
 
@@ -1834,7 +1805,9 @@ export class CodexSessionsProvider implements IProviderSessions {
     const raw = readObjectRecord(rawMessage);
     if (!raw) return [];
     const ts = raw.timestamp || new Date().toISOString();
-    const baseId = raw.uuid || generateMessageId('codex');
+    const baseId = raw.toolCallId && (raw.type === 'tool_use' || raw.type === 'tool_result')
+      ? `codex-${raw.type}:${raw.toolCallId}`
+      : raw.uuid || generateMessageId('codex');
 
     if (raw.type === 'status_note' && typeof raw.content === 'string') {
       return [createNormalizedMessage({
