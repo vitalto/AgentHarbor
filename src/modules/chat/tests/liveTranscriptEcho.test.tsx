@@ -43,3 +43,23 @@ it('drops the optimistic user row once the transcript echo of that prompt stream
   });
   assert.deepEqual(result.current.getMessages('session-1').map((message) => message.id), ['uuid-1_0']);
 });
+
+it('updates streamed Codex command snapshots in place and keeps identical independent calls', async () => {
+  const { useSessionStore } = await import('@/modules/chat/hooks/useSessionStore');
+  const { result } = renderHook(() => useSessionStore());
+  const command: NormalizedMessage = {
+    id: 'first', toolId: 'first', kind: 'tool_use', provider: 'codex', sessionId: 'session-1',
+    timestamp: '2026-01-01T00:00:00Z', toolName: 'Bash', toolInput: { command: 'pwd' }, status: 'in_progress',
+  };
+  const output: NormalizedMessage = { ...command, id: 'first_result', kind: 'tool_result', content: 'part' };
+  act(() => {
+    for (const snapshot of [command, output, { ...command, id: 'second', toolId: 'second' },
+      { ...command, status: 'completed' }, { ...output, content: 'complete output' }]) {
+      result.current.appendRealtime('session-1', snapshot);
+    }
+  });
+  const rows = result.current.getMessages('session-1');
+  assert.deepEqual(rows.map(row => row.id), ['first', 'first_result', 'second']);
+  assert.equal(rows[0].status, 'completed');
+  assert.equal(rows[1].content, 'complete output');
+});

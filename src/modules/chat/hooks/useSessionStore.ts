@@ -764,7 +764,15 @@ export function useSessionStore() {
       msg.sessionId === sessionId
         ? msg
         : { ...msg, sessionId };
-    let updated = [...slot.realtimeMessages, normalizedMessage];
+    const snapshotIndex = msg.provider === 'codex' && msg.toolId && (msg.kind === 'tool_use' || msg.kind === 'tool_result')
+      ? slot.realtimeMessages.findIndex(row => row.provider === msg.provider && row.kind === msg.kind && row.toolId === msg.toolId)
+      : -1;
+    let updated = [...slot.realtimeMessages];
+    if (snapshotIndex >= 0) {
+      updated[snapshotIndex] = normalizedMessage;
+    } else {
+      updated.push(normalizedMessage);
+    }
     if (updated.length > MAX_REALTIME_MESSAGES) {
       updated = updated.slice(-MAX_REALTIME_MESSAGES);
     }
