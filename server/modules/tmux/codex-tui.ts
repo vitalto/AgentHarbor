@@ -1,6 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { AgentWindowError } from '@/modules/tmux/agent-windows.service.js';
+import { readCodexBackgroundTerminalCount } from '@/modules/tmux/codex-background-terminals.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
 import { unreadablePrompt, type TuiPrompt } from '@/modules/tmux/tui-prompt.js';
 
@@ -58,6 +59,7 @@ export function parseCodexScreen(capture: PaneCapture) {
   const working = composer && hasInterruptHint(lines, prompt);
   return {
     title: capture.title, lines, composer, empty,
+    backgroundTerminalCount: composer ? readCodexBackgroundTerminalCount(lines, prompt) : 0,
     dialog: menu ? readFolderAccessPrompt(lines) ?? unreadablePrompt(lines) : null,
     output: working ? lines.slice(0, prompt).filter((line) => line.trim()).slice(-14) : [],
     input: composer ? lines.slice(prompt, capture.cursorY + 1).join('\n') : '',
@@ -92,8 +94,10 @@ function threadInStatus(lines: string[]) {
 }
 
 /** Older AgentHarbor panes have no thread in their title. Ask their live TUI before delivering a chat message. */
-export async function readCodexStatusThread(paneId: string, title: string, signal: AbortSignal) {
-  await typeCodexInput(paneId, '/status', [], title, signal);
+export async function readCodexStatusThread(paneId: string, title: string, signal: AbortSignal, idleOnly = false) {
+  if (!await typeCodexInput(paneId, '/status', [], title, signal, idleOnly ? () => true : undefined)) {
+    throw new AgentWindowError('The Codex terminal is busy.');
+  }
   const deadline = Date.now() + 3000;
   do {
     signal.throwIfAborted();
@@ -111,6 +115,7 @@ export async function readCodexStatusThread(paneId: string, title: string, signa
 }
 
 type Screen = ReturnType<typeof parseCodexScreen>;
+type AcceptIdleScreen = (screen: Screen) => boolean | Promise<boolean>;
 
 async function waitForScreen(paneId: string, accepts: (screen: Screen) => boolean, error: string, signal?: AbortSignal, timeoutMs = 3000) {
   const deadline = Date.now() + timeoutMs;
@@ -123,9 +128,36 @@ async function waitForScreen(paneId: string, accepts: (screen: Screen) => boolea
   throw new AgentWindowError(error);
 }
 
-/** Types one web message (or session-local slash command) into the Codex composer. */
-export async function typeCodexInput(paneId: string, text: string, imagePaths: string[], expectedTitle: string, signal?: AbortSignal) {
+const pendingInput = new Map<string, Promise<boolean>>();
+
+/** The idle reaper must keep the pane while a chat message or automatic prompt is being submitted. */
+export function isWritingCodexInput(paneId: string): boolean {
+  return pendingInput.has(paneId);
+}
+
+/** Serializes writes from chat and runtime services. An automatic prompt yields to an existing writer. */
+export async function typeCodexInput(paneId: string, text: string, imagePaths: string[], expectedTitle: string, signal?: AbortSignal, acceptIdleScreen?: AcceptIdleScreen) {
+  const previous = pendingInput.get(paneId);
+  if (previous && acceptIdleScreen) return false;
+  const write = () => submitCodexInput(paneId, text, imagePaths, expectedTitle, signal, acceptIdleScreen);
+  const pending = previous ? previous.then(write, write) : write();
+  pendingInput.set(paneId, pending);
+  try {
+    return await pending;
+  } finally {
+    if (pendingInput.get(paneId) === pending) pendingInput.delete(paneId);
+  }
+}
+
+async function submitCodexInput(paneId: string, text: string, imagePaths: string[], expectedTitle: string,
+  signal: AbortSignal | undefined, acceptIdleScreen?: AcceptIdleScreen) {
   const first = await readCodexScreen(paneId);
+  if (acceptIdleScreen) {
+    if (first.activity !== 'idle' || first.title !== expectedTitle || !await acceptIdleScreen(first)) return false;
+    // A retry can check the transcript on disk before it claims the prompt.
+    const latest = await readCodexScreen(paneId);
+    if (latest.activity !== 'idle' || latest.title !== expectedTitle) return false;
+  }
   if (first.title !== expectedTitle || !first.empty) {
     throw new AgentWindowError('Open Terminal and finish the Codex dialog or draft before sending.');
   }
@@ -146,6 +178,8 @@ export async function typeCodexInput(paneId: string, text: string, imagePaths: s
     lastInput = pasted.input;
   }
   let stableSince = performance.now();
+  // Automatic prompts contain one line of text, which the TUI can wrap across several rows.
+  const expectedPrompt = acceptIdleScreen ? text.replace(/\s+/g, '') : null;
   await waitForScreen(paneId, (screen) => {
     if (screen.title !== expectedTitle || screen.dialog) {
       throw new AgentWindowError('The Codex input changed before the message could be sent.');
@@ -154,6 +188,13 @@ export async function typeCodexInput(paneId: string, text: string, imagePaths: s
     if (!screen.composer || screen.empty) {
       stableSince = performance.now();
       return false;
+    }
+    if (expectedPrompt !== null) {
+      const visiblePrompt = screen.input.slice(1).replace(/\s+/g, '');
+      if (!expectedPrompt.startsWith(visiblePrompt)) {
+        throw new AgentWindowError('The Codex draft changed during an automatic prompt.');
+      }
+      if (visiblePrompt !== expectedPrompt) return false;
     }
     if (screen.input !== lastInput) {
       lastInput = screen.input;
@@ -171,4 +212,5 @@ export async function typeCodexInput(paneId: string, text: string, imagePaths: s
     if (screen.title !== expectedTitle) throw new AgentWindowError('The terminal switched to a different Codex session.');
     return screen.empty || screen.dialog !== null;
   }, 'Codex did not submit the draft after Enter.', undefined, submitTimeoutMs);
+  return true;
 }

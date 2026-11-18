@@ -1,9 +1,13 @@
 import { Resolver } from 'node:dns/promises';
 import fsp from 'node:fs/promises';
 
+import { appConfigDb, getConnection, sessionsDb } from '@/modules/database/index.js';
 import { getAgentConfig } from '@/modules/tmux/agent-config.js';
 import { typeIntoAgent } from '@/modules/tmux/agent-windows.service.js';
 import { readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
+import { getCodexCliConfig } from '@/modules/tmux/codex-cli.js';
+import { readCodexRetryFailure } from '@/modules/tmux/codex-retry-failure.js';
+import { listCodexLiveThreads, sendCodexRuntimePrompt } from '@/modules/tmux/codex-windows.service.js';
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
 import { readInputBox } from '@/modules/tmux/tui-prompt.js';
@@ -15,8 +19,10 @@ const TRANSCRIPT_TAIL_BYTES = 256 * 1024;
 const MAX_ERROR_AGE_MS = 6 * 60 * 60_000;
 const DELAY_GROWTH = 3;
 const NETWORK_CHECK_CACHE_MS = 30_000;
-const DNS_PROBE_HOST = 'api.anthropic.com';
+const dnsProbeHosts = { claude: 'api.anthropic.com', codex: 'chatgpt.com' };
 const MAX_ERROR_TEXT_CHARS = 160;
+const CODEX_RETRY_CLAIMS = 'codex.api_error_retry_claims';
+const MAX_CODEX_RETRY_CLAIMS = 512;
 
 export const API_ERROR_RETRY_MARKER = '[AgentHarbor] API error retry';
 
@@ -139,16 +145,26 @@ export function planApiErrorRetry(transcriptTail: string, settings: ApiErrorRetr
     return { kind: 'none' };
   }
   const errorAt = Date.parse(String(error.timestamp));
-  if (!Number.isFinite(errorAt) || now - errorAt > MAX_ERROR_AGE_MS) {
+  return planRetry(settings, now, errorAt, error.uuid, oneLine(textOf(error)), countRetriesInARow(rows, errorIndex));
+}
+
+function planRetry(settings: ApiErrorRetrySettings, now: number, errorAt: number, errorUuid: string,
+  errorText: string, retriesSent: number): ApiErrorRetryPlan {
+  if (settings.attempts <= 0 || !Number.isFinite(errorAt) || now - errorAt > MAX_ERROR_AGE_MS) {
     return { kind: 'none' };
   }
-  const errorText = oneLine(textOf(error));
-  const retriesSent = countRetriesInARow(rows, errorIndex);
   if (retriesSent >= settings.attempts) {
     return { kind: 'exhausted', attempts: retriesSent, errorText };
   }
   const delayMs = settings.delayMinutes * 60_000 * DELAY_GROWTH ** retriesSent;
-  return { kind: 'retry', attempt: retriesSent + 1, dueAt: errorAt + delayMs, errorUuid: error.uuid, errorText };
+  return { kind: 'retry', attempt: retriesSent + 1, dueAt: errorAt + delayMs, errorUuid, errorText };
+}
+
+/** The tmux retry sweep applies the shared retry count and delay to terminal Codex rollout errors. */
+export function planCodexApiErrorRetry(tail: string, settings: ApiErrorRetrySettings, now: number): ApiErrorRetryPlan {
+  const failed = readCodexRetryFailure(tail, API_ERROR_RETRY_MARKER);
+  if (!failed) return { kind: 'none' };
+  return planRetry(settings, now, failed.errorAt, failed.errorUuid, failed.errorText, failed.retriesSent);
 }
 
 export function formatApiErrorRetry(plan: Extract<ApiErrorRetryPlan, { kind: 'retry' }>, attempts: number): string {
@@ -174,13 +190,10 @@ export async function readTranscriptEnd(transcriptPath: string, bytes: number = 
   }
 }
 
-/**
- * Whether the machine is online, asked without touching the Anthropic API:
- * Windows' own connectivity status (NCSI, which Windows probes anyway) and a
- * DNS lookup of the API host. The retry prompt is the only API request made.
- */
-async function checkNetwork(windowsClaude: boolean): Promise<boolean> {
-  if (windowsClaude) {
+/** Use Windows connectivity status and DNS so checking a provider never consumes an API request. */
+async function checkNetwork(provider: keyof typeof dnsProbeHosts): Promise<boolean> {
+  const windows = provider === 'claude' ? getAgentConfig().windowsClaude : getCodexCliConfig().pathConfig.windowsClaude;
+  if (windows) {
     const internetProfiles = await runWindowsPowerShell(
       "@(Get-NetConnectionProfile | Where-Object { $_.IPv4Connectivity -eq 'Internet' -or $_.IPv6Connectivity -eq 'Internet' }).Count",
       20_000,
@@ -191,29 +204,32 @@ async function checkNetwork(windowsClaude: boolean): Promise<boolean> {
     }
   }
   try {
-    const addresses = await new Resolver({ timeout: 5000, tries: 2 }).resolve4(DNS_PROBE_HOST);
+    const addresses = await new Resolver({ timeout: 5000, tries: 2 }).resolve4(dnsProbeHosts[provider]);
     return addresses.length > 0;
   } catch {
     return false;
   }
 }
 
-let networkCheck: { at: number; online: Promise<boolean> } | null = null;
+const networkChecks = new Map<keyof typeof dnsProbeHosts, { at: number; online: Promise<boolean> }>();
 
-function networkLooksUp(now: number): Promise<boolean> {
+function networkLooksUp(now: number, provider: keyof typeof dnsProbeHosts): Promise<boolean> {
+  let networkCheck = networkChecks.get(provider);
   if (!networkCheck || now - networkCheck.at >= NETWORK_CHECK_CACHE_MS) {
-    networkCheck = { at: now, online: checkNetwork(getAgentConfig().windowsClaude) };
+    networkCheck = { at: now, online: checkNetwork(provider) };
+    networkChecks.set(provider, networkCheck);
   }
   return networkCheck.online;
 }
 
 /** Sessions whose last turn ended on a transient API error that will still be retried; the idle reaper keeps their windows. */
 let sessionsAwaitingRetry = new Set<string>();
+let codexAwaitingRetry = new Set<string>();
 /** The error each session was last retried for, so a slow transcript write never gets a second prompt. */
 const retriedErrors = new Map<string, string>();
 
 export function isAwaitingApiErrorRetry(providerSessionId: string): boolean {
-  return sessionsAwaitingRetry.has(providerSessionId);
+  return sessionsAwaitingRetry.has(providerSessionId) || codexAwaitingRetry.has(providerSessionId);
 }
 
 function newestProcessOf(processes: ClaudeProcess[], providerSessionId: string): ClaudeProcess | null {
@@ -232,18 +248,70 @@ async function sendRetry(pane: PaneSession, text: string): Promise<boolean> {
   return true;
 }
 
-/**
- * Tells a resting agent whose turn died on a network or API server error to
- * continue, once the retry delay has passed and the machine is online. Only
- * windows AgentHarbor runs in tmux are touched, never one with a menu open or
- * text in its input box.
- */
-export async function sweepApiErrorRetries(now: number = Date.now()): Promise<number> {
-  const settings = readApiErrorRetrySettings();
-  if (settings.attempts <= 0) {
-    sessionsAwaitingRetry = new Set();
-    return 0;
+function readCodexClaims(now: number): Record<string, number> {
+  const saved: Record<string, number> = JSON.parse(appConfigDb.get(CODEX_RETRY_CLAIMS) ?? '{}');
+  return Object.fromEntries(Object.entries(saved).filter(([, expires]) => expires >= now));
+}
+
+function updateCodexClaims(now: number, update: (claims: Record<string, number>) => boolean): boolean {
+  return getConnection().transaction(() => {
+    const claims = readCodexClaims(now);
+    if (!update(claims)) return false;
+    appConfigDb.set(CODEX_RETRY_CLAIMS, JSON.stringify(claims));
+    return true;
+  }).immediate();
+}
+
+async function sweepCodexRetries(settings: ApiErrorRetrySettings, now: number, deps: typeof codexRetryRuntime): Promise<number> {
+  const awaiting = new Set<string>();
+  let sent = 0;
+  for (const { pane, providerSessionId, activity } of await deps.listThreads()) {
+    if (!pane || activity !== 'idle') continue;
+    const row = sessionsDb.getSessionByProviderSessionId(providerSessionId);
+    if (row?.provider !== 'codex' || !row.jsonl_path) continue;
+    const rollout = row.jsonl_path;
+    const plan = planCodexApiErrorRetry(await readTranscriptEnd(rollout).catch(() => ''), settings, now);
+    if (plan.kind !== 'retry') continue;
+    const key = `${providerSessionId}/${plan.errorUuid}`;
+    if (Object.hasOwn(readCodexClaims(now), key)) continue;
+    awaiting.add(providerSessionId);
+    if (now < plan.dueAt || !await deps.online(now, 'codex')) continue;
+    let claimedUntil: number | null = null;
+    try {
+      const delivered = await deps.send(providerSessionId, pane, formatApiErrorRetry(plan, settings.attempts), async () => {
+        const tail = await readTranscriptEnd(rollout);
+        const current = Date.now();
+        const fresh = planCodexApiErrorRetry(tail, readApiErrorRetrySettings(), current);
+        if (fresh.kind !== 'retry' || fresh.errorUuid !== plan.errorUuid || fresh.attempt !== plan.attempt || fresh.dueAt > current) return false;
+        // Persist before touching the terminal. A crash after Enter leaves delivery ambiguous across restarts.
+        return updateCodexClaims(current, (claims) => {
+          if (Object.hasOwn(claims, key) || Object.keys(claims).length >= MAX_CODEX_RETRY_CLAIMS) return false;
+          claimedUntil = current + MAX_ERROR_AGE_MS;
+          claims[key] = claimedUntil;
+          return true;
+        });
+      });
+      if (delivered) {
+        awaiting.delete(providerSessionId);
+        sent++;
+        console.log(`[AgentHarbor] API error retry ${plan.attempt}/${settings.attempts} sent to ${pane.windowName}`);
+      } else if (claimedUntil !== null) {
+        // A changed composer yields a definite skip before paste. An exception may mean Enter already reached Codex.
+        updateCodexClaims(Date.now(), (claims) => {
+          if (claims[key] !== claimedUntil) return false;
+          delete claims[key];
+          return true;
+        });
+      }
+    } catch (error) {
+      console.error(`[AgentHarbor] could not send an API error retry to ${pane.windowName}`, error);
+    }
   }
+  codexAwaitingRetry = awaiting;
+  return sent;
+}
+
+async function sweepClaudeRetries(settings: ApiErrorRetrySettings, now: number): Promise<number> {
   const [panes, processes] = await Promise.all([paneRegistry.refresh(), readClaudeProcesses()]);
   const awaiting = new Set<string>();
   let retried = 0;
@@ -264,7 +332,7 @@ export async function sweepApiErrorRetries(now: number = Date.now()): Promise<nu
     if (claude.activity !== 'idle' || now < plan.dueAt || retriedErrors.get(pane.providerSessionId) === plan.errorUuid) {
       continue;
     }
-    if (!(await networkLooksUp(now))) {
+    if (!(await networkLooksUp(now, 'claude'))) {
       continue;
     }
     const delivered = await sendRetry(pane, formatApiErrorRetry(plan, settings.attempts)).catch((error) => {
@@ -279,6 +347,25 @@ export async function sweepApiErrorRetries(now: number = Date.now()): Promise<nu
   }
   sessionsAwaitingRetry = awaiting;
   return retried;
+}
+
+const codexRetryRuntime = { listThreads: listCodexLiveThreads, online: networkLooksUp, send: sendCodexRuntimePrompt };
+
+/** The tmux scheduler checks both providers independently for failed turns awaiting continuation. */
+export async function sweepApiErrorRetries(now: number = Date.now(), codex = codexRetryRuntime): Promise<number> {
+  const settings = readApiErrorRetrySettings();
+  if (settings.attempts <= 0) {
+    sessionsAwaitingRetry.clear();
+    codexAwaitingRetry.clear();
+    return 0;
+  }
+  const providers = await Promise.allSettled([sweepClaudeRetries(settings, now), sweepCodexRetries(settings, now, codex)]);
+  let sent = 0;
+  for (const result of providers) {
+    if (result.status === 'fulfilled') sent += result.value;
+    else console.error('[AgentHarbor] API error retry sweep failed', result.reason);
+  }
+  return sent;
 }
 
 export function startApiErrorRetries(): void {

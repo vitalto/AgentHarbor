@@ -484,12 +484,14 @@
         "unit": "min"
       },
       "backgroundReminderMinutes": {
+        "codexDescription": "When Codex reports a background terminal, AgentHarbor starts timing it. If the session is idle, it gets a reminder after 1, 3, 7… times this interval. Set it to 0 to turn reminders off. Default {{defaultValue}}.",
         "label": "Remind about background commands after",
         "description": "When an agent has finished its turn but a background command is still running, the agent gets a short note from you after this long, then after gaps that double each time (1, 3, 7… times this value from the start). Catches a script waiting for something that will never happen. 0 turns it off. Default {{defaultValue}}.",
         "unit": "min"
       },
       "apiErrorRetryAttempts": {
         "label": "Continue after a network error",
+        "codexDescription": "When a Codex turn ends with a temporary connection or server error, AgentHarbor can ask it to continue. This limits consecutive retries. Set it to 0 to turn retries off. Default {{defaultValue}}.",
         "description": "When a turn stops on a network or API server error (\"Connection lost mid-response\", \"Can't reach the API server\", \"Request blocked before it reached Anthropic's API\"), the agent gets a short note to continue, at most this many times in a row. It is sent only once Windows reports internet access and api.anthropic.com resolves; nothing else is sent to Anthropic. Usage limits are left to Claude's own automatic continue. 0 turns it off. Default {{defaultValue}}.",
         "unit": "times"
       },
@@ -508,7 +510,7 @@
     "power": {
       "title": "Power",
       "label": "Shut down when all agents finish",
-      "codexDescription": "This switch applies to both Codex and Claude. A working Codex session or one with unknown activity holds off shutdown. A session waiting for your answer allows the timer to run. After {{minutes}} min of inactivity, a {{seconds}} s shutdown countdown starts. The switch applies once.",
+      "codexDescription": "This switch applies to both Codex and Claude. An active turn, a background terminal, a pending retry or unknown activity in Codex holds off shutdown. After {{minutes}} min of inactivity, a {{seconds}} s shutdown countdown starts. The switch applies once.",
       "description": "Once no agent has a turn, a background command or a running subagent for {{minutes}} min, the computer shuts down with a {{seconds}} s countdown. An agent waiting for your answer does not hold it back. Works once, like a sleep timer: it turns itself off after that and does not survive a server restart.",
       "checking": "Checking agents…",
       "waitingFor_one": "Waiting for {{count}} agent:",
@@ -518,6 +520,7 @@
       "cancelShutdown": "Cancel shutdown",
       "failed": "The shutdown failed: {{error}}",
       "work": {
+        "api-retry": "waiting to retry",
         "turn": "working",
         "background-command": "background command",
         "subagent": "subagent"

@@ -4,7 +4,7 @@ import { newestWrite } from '@/modules/tmux/agent-activity.js';
 import { getAgentConfig } from '@/modules/tmux/agent-config.js';
 import { isAwaitingApiErrorRetry } from '@/modules/tmux/api-error-retry.service.js';
 import { readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
-import { readCodexScreen } from '@/modules/tmux/codex-tui.js';
+import { isWritingCodexInput, readCodexScreen } from '@/modules/tmux/codex-tui.js';
 import { listCodexLiveThreads } from '@/modules/tmux/codex-windows.service.js';
 import { paneRegistry, type PaneSession } from '@/modules/tmux/pane-registry.service.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
@@ -86,15 +86,16 @@ export async function sweepIdleAgents(listCodexThreads = listCodexLiveThreads): 
     }
   }
   const nextIdleSince = new Map<string, number>();
-  for (const { pane, providerSessionId, activity, updatedAt } of await listCodexThreads()) {
-    if (!pane || activity !== 'idle' || !updatedAt) continue;
+  for (const { pane, providerSessionId, activity, updatedAt, backgroundTerminalCount } of await listCodexThreads()) {
+    if (!pane || activity !== 'idle' || !updatedAt || backgroundTerminalCount || isAwaitingApiErrorRetry(providerSessionId)) continue;
     const threadPane = `${pane.paneId}:${providerSessionId}`;
     const idleSince = Math.max(updatedAt, codexIdleSince.get(threadPane) ?? Date.now());
     nextIdleSince.set(threadPane, idleSince);
     if (Date.now() - idleSince < idleLimitMs || await tmuxService.countViewers(pane.windowId) > 0) continue;
     // The shared list is briefly cached; a new turn or draft may already be on screen.
     const screen = await readCodexScreen(pane.paneId).catch(() => null);
-    if (screen?.activity !== 'idle' || (pane.title && pane.title !== screen.title)) {
+    if (screen?.activity !== 'idle' || screen.backgroundTerminalCount || isWritingCodexInput(pane.paneId)
+      || (pane.title && pane.title !== screen.title)) {
       nextIdleSince.delete(threadPane);
       continue;
     }

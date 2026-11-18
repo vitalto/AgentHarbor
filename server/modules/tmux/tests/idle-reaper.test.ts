@@ -48,8 +48,9 @@ test('the idle sweep closes an unattended Codex window after the configured inte
   let viewers = 0;
   t.mock.method(tmuxService, 'countViewers', async () => viewers);
   let screenBusy = true;
+  let liveBackground = false;
   t.mock.method(tmuxService, 'inspectPane', async () => ({
-    lines: [screenBusy ? 'Working (esc to interrupt)' : '', '› '],
+    lines: [screenBusy ? 'Working (esc to interrupt)' : liveBackground ? '  1 background terminal running · /ps to view' : '', '› '],
     cursorX: 2, cursorY: 1, cursorVisible: true, dead: false, title: '',
   }));
   const kill = t.mock.method(tmuxService, 'killPane', async () => {});
@@ -66,6 +67,7 @@ test('the idle sweep closes an unattended Codex window after the configured inte
     { providerSessionId: 'busy', pane: { ...pane, windowId: '@21' }, activity: 'working' as const, updatedAt: now },
     { providerSessionId: 'waiting', pane: { ...pane, windowId: '@22' }, activity: 'waiting' as const, updatedAt: now },
     { providerSessionId: 'draft', pane: { ...pane, windowId: '@23' }, activity: 'unknown' as const, updatedAt: now },
+    { providerSessionId: 'background', pane: { ...pane, windowId: '@24' }, activity: 'idle' as const, updatedAt: now, backgroundTerminalCount: 1 },
     { providerSessionId: 'external', pane: null, activity: 'idle' as const, updatedAt: now },
   ];
   assert.deepEqual(await sweepIdleAgents(listThreads), []);
@@ -80,6 +82,11 @@ test('the idle sweep closes an unattended Codex window after the configured inte
   clock += 30 * 60_000;
   assert.deepEqual(await sweepIdleAgents(listThreads), []);
   screenBusy = false;
+  assert.deepEqual(await sweepIdleAgents(listThreads), []);
+  clock += 30 * 60_000;
+  liveBackground = true;
+  assert.deepEqual(await sweepIdleAgents(listThreads), []);
+  liveBackground = false;
   assert.deepEqual(await sweepIdleAgents(listThreads), []);
   clock += 30 * 60_000;
   assert.deepEqual(await sweepIdleAgents(listThreads), ['codex-test']);

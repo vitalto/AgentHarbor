@@ -42,7 +42,10 @@ function NumberSettingRow({ name, overview, isSaving, onSave, provider }: Number
   return (
     <SettingsRow
       label={t(`runtime.settings.${name}.label`)}
-      description={t(`runtime.settings.${name}.${provider === 'codex' ? 'codexDescription' : 'description'}`, { defaultValue, minimum, maximum })}
+      description={t([
+        `runtime.settings.${name}.${provider === 'codex' ? 'codexDescription' : 'description'}`,
+        `runtime.settings.${name}.description`,
+      ], { defaultValue, minimum, maximum })}
     >
       <div className="flex flex-col items-end gap-1">
         <div className="flex items-center gap-2">
@@ -151,7 +154,7 @@ function ShutdownStatus({ state, onCancel, isUpdating }: {
 export default function RuntimeContent({ provider }: { provider: AgentProvider }) {
   const { t } = useTranslation('settings');
   const { overview, error: settingsError, savingSetting, saveSetting } = useAgentSettings();
-  const settings: AgentSettingName[] = provider === 'codex' ? ['idleCloseMinutes', 'attachmentRetentionDays'] : [
+  const settings: AgentSettingName[] = [
     'idleCloseMinutes', 'backgroundReminderMinutes', 'apiErrorRetryAttempts', 'apiErrorRetryDelayMinutes', 'attachmentRetentionDays',
   ];
 

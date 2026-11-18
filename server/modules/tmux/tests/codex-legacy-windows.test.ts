@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { findCodexWindow, listCodexLiveThreads, waitForCodexComposer } from '@/modules/tmux/codex-windows.service.js';
+import { findCodexWindow, listCodexLiveThreads, sendCodexRuntimePrompt, waitForCodexComposer } from '@/modules/tmux/codex-windows.service.js';
 import { tmuxService, type AgentPane } from '@/modules/tmux/tmux.service.js';
 
 const initialId = '01999999-abcd-7123-9876-123456789abc';
@@ -15,6 +15,36 @@ const legacyPane: AgentPane = {
   command: "exec 'codex' '--remote' 'unix://' 'resume' '" + initialId + "'", currentCommand: 'init', title: 'host',
 };
 const placeholder = '› \x1b[2mAsk anything\x1b[0m';
+
+test('automatic prompts require the current owned idle thread and serialize competing sends', async (t) => {
+  const pane = { ...legacyPane, title: initialId };
+  let draft = '';
+  let title = otherId;
+  let busy = false;
+  let owned = false;
+  const submitted: string[] = [];
+  t.mock.method(tmuxService, 'readWindowOption', async (_window: string, key: string) =>
+    owned && key === '@agentharbor-codex-pane' ? pane.paneId : null);
+  t.mock.method(tmuxService, 'inspectPane', async () => ({
+    title, dead: false, cursorVisible: true, cursorY: 1, cursorX: 2 + draft.length,
+    lines: [busy ? 'Working (esc to interrupt)' : '', draft ? '› ' + draft : placeholder],
+  }));
+  t.mock.method(tmuxService, 'pasteText', async (_id: string, value: string) => { draft += value; });
+  t.mock.method(tmuxService, 'sendKeys', async () => { submitted.push(draft); draft = ''; });
+  const send = () => sendCodexRuntimePrompt(initialId, pane, 'Continue.');
+  assert.equal(await send(), false);
+  owned = true;
+  assert.equal(await send(), false);
+  title = initialId;
+  busy = true;
+  assert.equal(await send(), false);
+  busy = false;
+  draft = 'unsent';
+  assert.equal(await send(), false);
+  draft = '';
+  assert.deepEqual((await Promise.all([send(), send()])).sort(), [false, true]);
+  assert.deepEqual(submitted, ['Continue.']);
+});
 
 test('listing and opening recognize the same legacy pane and exclude split panes and unowned locks', async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'ah-legacy-pane-'));

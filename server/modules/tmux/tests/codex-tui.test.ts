@@ -8,6 +8,18 @@ import { tmuxService } from '@/modules/tmux/tmux.service.js';
 
 const base = { title: 'thread', dead: false, cursorVisible: true, cursorX: 2, cursorY: 1 };
 
+test('an automatic prompt does not submit text typed by the user during its paste', async (t) => {
+  let draft = '';
+  t.mock.method(tmuxService, 'inspectPane', async () => ({
+    ...base, lines: ['', '› ' + draft], cursorX: 2 + draft.length,
+  }));
+  t.mock.method(tmuxService, 'pasteText', async (_pane: string, text: string) => { draft = text + 'my draft'; });
+  const enter = t.mock.method(tmuxService, 'sendKeys', async () => { draft = ''; });
+  await assert.rejects(typeCodexInput('%1', 'Continue.', [], base.title, undefined, () => true));
+  assert.equal(enter.mock.callCount(), 0);
+  assert.match(draft, /my draft$/);
+});
+
 test('a stable partial Windows paste submits the whole multiline caption with four images once', async (t) => {
   const caption = Array.from({ length: 10 }, (_, i) => `Строка ${i} с текстом`).join('\n\n');
   const images = ['one.png', 'two.png', 'three.png', 'four.png'];

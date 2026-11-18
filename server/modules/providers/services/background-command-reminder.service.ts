@@ -1,9 +1,11 @@
 import { listRunningBackgroundCommands } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import {
   getAgentConfig,
+  listCodexLiveThreads,
   paneRegistry,
   readClaudeProcesses,
   readInputBox,
+  sendCodexRuntimePrompt,
   tmuxService,
   typeIntoAgent,
   type ClaudeProcess,
@@ -97,18 +99,7 @@ async function remindAgent(pane: PaneSession, text: string): Promise<boolean> {
   return true;
 }
 
-/**
- * Sends a resting agent (turn over, a background command still running) a
- * short note when a command has run 1, 3, 7… reminder intervals since its
- * start, so a waiter stuck on a condition that will never come is noticed.
- * A busy agent or one waiting on a menu gets it once it rests. The first
- * sweep after a start only records what is already due: a restart sends nothing.
- */
-export async function sweepBackgroundCommandReminders(now: number = Date.now()): Promise<number> {
-  const intervalMs = getAgentConfig().backgroundReminderMinutes * 60_000;
-  if (intervalMs <= 0) {
-    return 0;
-  }
+async function sweepClaudeReminders(now: number, intervalMs: number): Promise<number> {
   const [panes, processes] = await Promise.all([paneRegistry.refresh(), readClaudeProcesses()]);
   const liveSessions = new Set(processes.map((claude) => claude.providerSessionId));
   for (const providerSessionId of sentReminders.keys()) {
@@ -147,6 +138,64 @@ export async function sweepBackgroundCommandReminders(now: number = Date.now()):
   return reminded;
 }
 
+// Codex's live footer exposes a count, not process IDs or start times. Time the observed activity in this pane.
+const codexObservations = new Map<string, { firstSeenAt: number; remindersSent: number }>();
+
+async function sweepCodexReminders(now: number, intervalMs: number, listThreads: typeof listCodexLiveThreads,
+  sendPrompt: typeof sendCodexRuntimePrompt): Promise<number> {
+  const live = new Set<string>();
+  let reminded = 0;
+  for (const { pane, providerSessionId, backgroundTerminalCount, activity } of await listThreads()) {
+    if (!pane || !backgroundTerminalCount) continue;
+    const key = `${pane.paneId}:${providerSessionId}`;
+    live.add(key);
+    const observation = codexObservations.get(key) ?? { firstSeenAt: now, remindersSent: 0 };
+    codexObservations.set(key, observation);
+    const due = remindersDueAfter(now - observation.firstSeenAt, intervalMs);
+    if (activity !== 'idle' || due <= observation.remindersSent) continue;
+    const delivered = await sendPrompt(providerSessionId, pane,
+      '[AgentHarbor] Codex still shows running background terminals. Check their progress and stop any that are stuck.',
+      (screen) => screen.backgroundTerminalCount > 0).catch((error) => {
+      console.error(`[AgentHarbor] could not remind ${pane.windowName} of its background terminals`, error);
+      return false;
+    });
+    if (delivered) {
+      observation.remindersSent = due;
+      reminded++;
+    }
+  }
+  for (const key of codexObservations.keys()) {
+    if (!live.has(key)) codexObservations.delete(key);
+  }
+  return reminded;
+}
+
+let sweepInFlight: Promise<number> | null = null;
+
+/** The scheduler checks both providers at the shared interval and retries undelivered reminders on the next sweep. */
+export function sweepBackgroundCommandReminders(now: number = Date.now(), listCodexThreads = listCodexLiveThreads,
+  sendCodexPrompt = sendCodexRuntimePrompt): Promise<number> {
+  if (sweepInFlight) return sweepInFlight;
+  const intervalMs = getAgentConfig().backgroundReminderMinutes * 60_000;
+  if (intervalMs <= 0) {
+    codexObservations.clear();
+    return Promise.resolve(0);
+  }
+  sweepInFlight = Promise.allSettled([
+    sweepClaudeReminders(now, intervalMs),
+    sweepCodexReminders(now, intervalMs, listCodexThreads, sendCodexPrompt),
+  ]).then((results) => {
+    let reminded = 0;
+    for (const result of results) {
+      if (result.status === 'fulfilled') reminded += result.value;
+      else console.error('[AgentHarbor] background command reminder sweep failed', result.reason);
+    }
+    return reminded;
+  }).finally(() => { sweepInFlight = null; });
+  return sweepInFlight;
+}
+
+/** The server starts this scheduler after loading the shared agent settings. */
 export function startBackgroundCommandReminders(): void {
   const sweep = () => void sweepBackgroundCommandReminders()
     .catch((error) => console.error('[AgentHarbor] background command reminder sweep failed', error));

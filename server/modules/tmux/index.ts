@@ -33,12 +33,13 @@ export { createTranscriptTail } from '@/modules/tmux/transcript-tail.js';
 export { createCodexTerminalMonitor } from '@/modules/tmux/codex-terminal-monitor.js';
 export { readCodexScreen, typeCodexInput } from '@/modules/tmux/codex-tui.js';
 export { getCodexCliConfig } from '@/modules/tmux/codex-cli.js';
-export { applyCodexSelection, closeCodexWindow, ensureCodexWindow, listCodexLiveThreads, waitForCodexComposer } from '@/modules/tmux/codex-windows.service.js';
+export { applyCodexSelection, closeCodexWindow, ensureCodexWindow, listCodexLiveThreads, sendCodexRuntimePrompt, waitForCodexComposer } from '@/modules/tmux/codex-windows.service.js';
 export type { AgentPane } from '@/modules/tmux/tmux.service.js';
 export { getPermissionMode, setPermissionMode } from '@/modules/tmux/permission-mode.js';
 export type { PermissionMode } from '@/modules/tmux/permission-mode.js';
 export { startIdleReaper } from '@/modules/tmux/idle-reaper.service.js';
 export {
+  isAwaitingApiErrorRetry,
   planApiErrorRetry,
   readApiErrorRetrySettings,
   readTranscriptEnd,

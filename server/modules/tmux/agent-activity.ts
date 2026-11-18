@@ -17,7 +17,7 @@ export const SUBAGENT_ACTIVE_WINDOW_MS = 90_000;
  * list: permission prompts and AskUserQuestion never time out, so nothing
  * happens there until someone answers.
  */
-export type UnfinishedWork = 'turn' | 'background-command' | 'subagent';
+export type UnfinishedWork = 'turn' | 'background-command' | 'subagent' | 'api-retry';
 
 export type UnfinishedAgent = {
   providerSessionId: string;

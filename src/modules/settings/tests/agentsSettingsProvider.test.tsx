@@ -6,16 +6,18 @@ import AgentsSettingsTab from '@/modules/settings/tabs/agents-settings/AgentsSet
 import type { ProviderAuthStatus } from '@/shared/types';
 
 const { saveAgentSettings } = vi.hoisted(() => ({ saveAgentSettings: vi.fn() }));
-const idleSettings = (minutes: number) => Response.json({ settings: {
-  values: { idleCloseMinutes: minutes, attachmentRetentionDays: 7 }, defaults: { idleCloseMinutes: 60, attachmentRetentionDays: 7 },
-  limits: { idleCloseMinutes: { minimum: 0, maximum: 10080 }, attachmentRetentionDays: { minimum: 1, maximum: 365 } },
-} });
+function runtimeSettings(overrides: Record<string, number> = {}) {
+  const defaults = { idleCloseMinutes: 60, attachmentRetentionDays: 7, backgroundReminderMinutes: 60,
+    apiErrorRetryAttempts: 3, apiErrorRetryDelayMinutes: 1 };
+  const limits = Object.fromEntries(Object.keys(defaults).map((name) => [name, { minimum: 0, maximum: 10080 }]));
+  return Response.json({ settings: { values: { ...defaults, idleCloseMinutes: 30, ...overrides }, defaults, limits } });
+}
 
 vi.mock('@/shared/api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   api: {
     providers: { claudeSettingsPermissions: async () => Response.json({ success: true, data: { sources: [] } }) },
-    settings: { agentSettings: async () => idleSettings(30), saveAgentSettings },
+    settings: { agentSettings: async () => runtimeSettings(), saveAgentSettings },
     power: { shutdownWhenIdle: async () => Response.json({ data: { armed: false, shutdownAt: null, quietPeriodMs: 60000, shutdownDelaySeconds: 60 } }) },
   },
 }));
@@ -40,9 +42,9 @@ describe('agent selection in settings', () => {
     expect(onLogin).toHaveBeenCalledWith('codex');
   });
 
-  it('edits the shared idle timeout from Codex Runtime', async () => {
+  it('edits timeout, reminder and retry settings from Codex Runtime', async () => {
     const status: ProviderAuthStatus = { authenticated: false, email: null, method: null, error: null, loading: false };
-    saveAgentSettings.mockResolvedValueOnce(idleSettings(0));
+    saveAgentSettings.mockImplementation(async (changes) => runtimeSettings(changes));
     render(<AgentsSettingsTab
       providerAuthStatus={{ claude: status, codex: status }} onProviderLogin={vi.fn()}
       claudePermissions={{ allowedTools: [], disallowedTools: [], skipPermissions: false }}
@@ -54,9 +56,17 @@ describe('agent selection in settings', () => {
     expect((timeout as HTMLInputElement).value).toBe('30');
     expect((screen.getByRole('spinbutton', { name: /keep pasted files/i }) as HTMLInputElement).value).toBe('7');
     expect(screen.getByRole('switch', { name: /shut down when all agents finish/i }).getAttribute('aria-checked')).toBe('false');
-    fireEvent.change(timeout, { target: { value: '0' } });
-    fireEvent.blur(timeout);
-    await waitFor(() => expect(saveAgentSettings).toHaveBeenCalledWith({ idleCloseMinutes: 0 }));
-    await waitFor(() => expect((screen.getByDisplayValue('0') as HTMLInputElement).disabled).toBe(false));
+    for (const [name, label, value] of [
+      ['idleCloseMinutes', /close idle agents after/i, 0],
+      ['backgroundReminderMinutes', /remind about background commands/i, 12],
+      ['apiErrorRetryAttempts', /continue after a network error/i, 2],
+      ['apiErrorRetryDelayMinutes', /first retry after/i, 5],
+    ] as const) {
+      const input = screen.getByRole('spinbutton', { name: label });
+      fireEvent.change(input, { target: { value: String(value) } });
+      fireEvent.blur(input);
+      await waitFor(() => expect(saveAgentSettings).toHaveBeenCalledWith({ [name]: value }));
+      await waitFor(() => expect((screen.getByRole('spinbutton', { name: label }) as HTMLInputElement).disabled).toBe(false));
+    }
   });
 });

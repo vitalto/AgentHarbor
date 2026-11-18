@@ -217,7 +217,23 @@ export async function closeCodexWindow(appId: string) {
   return true;
 }
 
-type LiveThread = { providerSessionId: string; updatedAt?: number; activity: 'idle' | 'waiting' | 'working' | 'unknown'; pane: AgentPane | null };
+/** Delivers reminders and retries only to an owned terminal still showing the intended, idle thread. */
+export async function sendCodexRuntimePrompt(providerSessionId: string, pane: AgentPane, text: string,
+  acceptIdleScreen: (screen: Awaited<ReturnType<typeof readCodexScreen>>) => boolean | Promise<boolean> = () => true): Promise<boolean> {
+  const owner = await paneOwnership(pane);
+  if (!owner) return false;
+  const screen = await readCodexScreen(pane.paneId);
+  if (screen.activity !== 'idle') return false;
+  let threadId = await threadForTitle(screen.title, providerSessionId);
+  if (!threadId && !titleIdPrefix(screen.title) && owner.legacyThreadId === providerSessionId) {
+    const status = await readCodexStatusThread(pane.paneId, screen.title, AbortSignal.timeout(5000), true);
+    threadId = status.threadId;
+  }
+  if (threadId !== providerSessionId) return false;
+  return typeCodexInput(pane.paneId, text, [], screen.title, undefined, acceptIdleScreen);
+}
+
+type LiveThread = { providerSessionId: string; updatedAt?: number; activity: 'idle' | 'waiting' | 'working' | 'unknown'; backgroundTerminalCount?: number; pane: AgentPane | null };
 let snapshot: { expires: number; promise: Promise<LiveThread[]> } | null = null;
 
 async function queryLiveThreads(): Promise<LiveThread[]> {
@@ -236,7 +252,8 @@ async function queryLiveThreads(): Promise<LiveThread[]> {
     const id = fromTitle ?? (!titleIdPrefix(screen.title) ? owner.legacyThreadId : null);
     if (!id) return;
     const current = sessionsDb.getSessionByProviderSessionId(id);
-    live.set(id, { providerSessionId: id, activity: screen.activity, pane, updatedAt: current ? Date.parse(current.updated_at) : undefined });
+    live.set(id, { providerSessionId: id, activity: screen.activity, backgroundTerminalCount: screen.backgroundTerminalCount,
+      pane, updatedAt: current ? Date.parse(current.updated_at) : undefined });
   }));
   return [...live.values()];
 }

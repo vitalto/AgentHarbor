@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
 
-export type UnfinishedWork = 'turn' | 'background-command' | 'subagent';
+export type UnfinishedWork = 'turn' | 'background-command' | 'subagent' | 'api-retry';
 
 /** Mirrors the power module's WatchedAgent. */
 export type WatchedAgent = {
