@@ -4,6 +4,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { recoverSessionTranscript } from '@/shared/index.js';
 import { getAgentConfig, isClaudeUserHome } from '@/modules/tmux/agent-config.js';
 import { findSessionHolders, forgetWindowsProcessCache, readClaudeProcesses, type ClaudeProcess } from '@/modules/tmux/claude-status.js';
 import { buildAgentLaunch, writeHookSettings } from '@/modules/tmux/agent-launch.js';
@@ -284,6 +285,7 @@ async function launchAgentWindow(appSessionId: string): Promise<StartingWindow> 
   const isNewConversation = !providerSessionId;
   if (providerSessionId) {
     assertNotOpenElsewhere(await findSessionHolders(providerSessionId, config));
+    if (session.jsonl_path) await recoverSessionTranscript(session.jsonl_path);
   }
   if (!providerSessionId) {
     providerSessionId = randomUUID();

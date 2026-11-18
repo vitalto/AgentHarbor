@@ -1,8 +1,7 @@
-import fsSync from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import readline from 'node:readline';
 
+import { readCodexTranscriptEntries } from '@/shared/index.js';
 import { readCodexUsage } from '@/modules/providers/list/codex/codex-usage.js';
 import { sessionsDb } from '@/modules/database/index.js';
 import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
@@ -892,7 +891,7 @@ async function findCodexSubagentRollout(
   let directory = path.dirname(parentFilePath);
 
   for (let level = 0; level <= SUBAGENT_LOOKUP_PARENT_LEVELS; level += 1) {
-    const match = await findFileWithSuffix(directory, suffix, level === 0 ? 0 : level);
+    const match = await findFileWithSuffix(directory, suffix, level === 0 ? 0 : level, true);
     if (match) {
       return match;
     }
@@ -924,7 +923,7 @@ export async function findCodexRollout(threadId: string, searchArchive: boolean)
 }
 
 /** Depth-limited search for a file whose name ends with `suffix`. */
-async function findFileWithSuffix(directory: string, suffix: string, depth: number): Promise<string | null> {
+async function findFileWithSuffix(directory: string, suffix: string, depth: number, includeCompressed = false): Promise<string | null> {
   let entries;
   try {
     entries = await fsp.readdir(directory, { withFileTypes: true });
@@ -938,7 +937,7 @@ async function findFileWithSuffix(directory: string, suffix: string, depth: numb
       subdirectories.push(path.join(directory, entry.name));
       continue;
     }
-    if (entry.name.endsWith(suffix)) {
+    if (entry.name.endsWith(suffix) || (includeCompressed && entry.name.endsWith(suffix + '.zst'))) {
       return path.join(directory, entry.name);
     }
   }
@@ -948,7 +947,7 @@ async function findFileWithSuffix(directory: string, suffix: string, depth: numb
   }
 
   for (const subdirectory of subdirectories) {
-    const match = await findFileWithSuffix(subdirectory, suffix, depth - 1);
+    const match = await findFileWithSuffix(subdirectory, suffix, depth - 1, includeCompressed);
     if (match) {
       return match;
     }
@@ -976,27 +975,7 @@ async function readCodexSubagentTranscript(filePath: string): Promise<CodexSubag
   const transcript: CodexSubagentTranscript = { activity };
   const pendingResults = new Map<string, SubagentActivity>();
 
-  let fileStream;
-  try {
-    fileStream = fsSync.createReadStream(filePath);
-  } catch {
-    return transcript;
-  }
-
-  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
-  for await (const line of rl) {
-    if (!line.trim()) {
-      continue;
-    }
-
-    let entry: AnyRecord;
-    try {
-      entry = JSON.parse(line) as AnyRecord;
-    } catch {
-      continue;
-    }
-
+  for await (const entry of readCodexTranscriptEntries(filePath)) {
     const payload = readObjectRecord(entry.payload);
     if (!payload) {
       continue;
@@ -1195,21 +1174,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
     return { messages: [], total: 0, hasMore: false };
   }
 
-  async function* readEntries(file: string) {
-    const stream = fsSync.createReadStream(file);
-    const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
-    try {
-      for await (const line of lines) {
-        let entry: AnyRecord;
-        try { entry = JSON.parse(line); } catch { continue; }
-        if (entry) yield entry;
-      }
-    } finally {
-      lines.close();
-      stream.destroy();
-    }
-  }
-  return readCodexRollout(readEntries(sessionFilePath), sessionFilePath);
+  return readCodexRollout(readCodexTranscriptEntries(sessionFilePath), sessionFilePath);
 }
 
 /** Decodes both persisted history and the appended rows streamed by the Codex TUI runtime. */

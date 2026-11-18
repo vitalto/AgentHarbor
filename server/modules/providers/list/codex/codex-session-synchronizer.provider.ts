@@ -3,10 +3,10 @@ import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { getCodexCliConfig, toLocalPath } from '@/modules/tmux/index.js';
+import { isArchivedCodexRollout, readCodexTranscriptEntries, retainSessionTranscript } from '@/shared/index.js';
 import {
   buildLookupMap,
   getCodexHome,
-  extractFirstValidJsonlData,
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readLastTranscriptEntryTime,
@@ -17,6 +17,7 @@ type ParsedSession = {
   sessionId: string;
   projectPath: string;
   createdAt?: string;
+  lastEntry?: Date;
   sessionName?: string;
 };
 
@@ -29,21 +30,29 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
 
   // A Windows writer can append through WSL while the file mtime stays at its
   // opening time. Size catches live turns and an empty map backfills a new home.
-  private readonly scannedFiles = new Map<string, { size: number; mtime: number; nativeId?: string; title?: string }>();
+  private readonly scannedFiles = new Map<string, { size: bigint; mtime: bigint; inode: bigint; nativeId?: string; title?: string }>();
 
   async synchronize(): Promise<number> {
-    const [files, names] = await Promise.all([
-      findFilesRecursivelyCreatedAfter(path.join(this.codexHome, 'sessions'), '.jsonl', null),
+    const [activeFiles, archivedFiles, names] = await Promise.all([
+      findFilesRecursivelyCreatedAfter(path.join(this.codexHome, 'sessions'), '', null),
+      findFilesRecursivelyCreatedAfter(path.join(this.codexHome, 'archived_sessions'), '', null),
       this.readNames(),
     ]);
+    const files = [...archivedFiles, ...activeFiles].filter((file) => /\.jsonl(?:\.zst)?$/.test(file));
     let processed = 0;
+    const failures: string[] = [];
     for (const file of files) {
-      if (await this.indexFile(file, names)) processed++;
+      try {
+        if (await this.indexFile(file, names)) processed++;
+      } catch (error) {
+        failures.push(`${file}: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
     const present = new Set(files);
     for (const previous of this.scannedFiles.keys()) {
       if (!present.has(previous)) this.scannedFiles.delete(previous);
     }
+    if (failures.length) throw new Error(`Failed to synchronize ${failures.length} Codex rollout(s): ${failures[0]}`);
     return processed;
   }
 
@@ -52,16 +61,16 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   async synchronizeFile(filePath: string): Promise<string | null> {
-    if (!filePath.endsWith('.jsonl')) return null;
+    if (!/\.jsonl(?:\.zst)?$/.test(filePath)) return null;
     return this.indexFile(filePath, await this.readNames(), true);
   }
 
   private async indexFile(filePath: string, names: Map<string, string>, force = false): Promise<string | null> {
-    const file = await stat(filePath).catch(() => null);
+    const file = await stat(filePath, { bigint: true }).catch(() => null);
     if (!file) return null;
 
     const previous = this.scannedFiles.get(filePath);
-    if (!force && previous && previous.size === file.size && previous.mtime === file.mtimeMs
+    if (!force && previous && previous.size === file.size && previous.mtime === file.mtimeNs && previous.inode === file.ino
       && previous.title === (previous.nativeId ? names.get(previous.nativeId) : undefined)) {
       return null;
     }
@@ -69,17 +78,24 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
     const parsed = await this.processSessionFile(filePath, names);
     const title = parsed ? names.get(parsed.sessionId) : undefined;
     if (!parsed) {
-      this.scannedFiles.set(filePath, { size: file.size, mtime: file.mtimeMs });
+      this.scannedFiles.set(filePath, { size: file.size, mtime: file.mtimeNs, inode: file.ino });
       return null;
     }
 
-    const lastEntry = await readLastTranscriptEntryTime(filePath);
+    const previousPath = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)?.jsonl_path;
+    const lastEntry = parsed.lastEntry ?? (filePath.endsWith('.zst') ? null : await readLastTranscriptEntryTime(filePath));
     const appId = sessionsDb.createSession(
       parsed.sessionId, this.provider, parsed.projectPath, parsed.sessionName,
       parsed.createdAt ?? (file.birthtimeMs > 0 ? file.birthtime : file.mtime).toISOString(),
       lastEntry?.toISOString() ?? file.mtime.toISOString(), filePath, Boolean(title),
     );
-    this.scannedFiles.set(filePath, { size: file.size, mtime: file.mtimeMs, nativeId: parsed.sessionId, title });
+    if (isArchivedCodexRollout(filePath)) {
+      sessionsDb.updateSessionIsArchived(appId, true);
+    } else if (previousPath && isArchivedCodexRollout(previousPath)) {
+      sessionsDb.updateSessionIsArchived(appId, false);
+    }
+    await retainSessionTranscript(filePath);
+    this.scannedFiles.set(filePath, { size: file.size, mtime: file.mtimeNs, inode: file.ino, nativeId: parsed.sessionId, title });
     return appId;
   }
 
@@ -90,27 +106,28 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
     filePath: string,
     nameMap: Map<string, string>
   ): Promise<ParsedSession | null> {
-    const parsed = await extractFirstValidJsonlData(filePath, (rawData) => {
-      const data = rawData as Record<string, unknown>;
-      const payload = data.payload as Record<string, unknown> | undefined;
-      const sessionId = typeof payload?.id === 'string' ? payload.id : undefined;
-      const projectPath = typeof payload?.cwd === 'string' ? payload.cwd : undefined;
-
-      if (data.type !== 'session_meta' || !sessionId || !projectPath) {
-        return null;
+    let parsed: ParsedSession | null = null;
+    let compressedTitle: string | undefined;
+    try {
+      for await (const data of readCodexTranscriptEntries(filePath)) {
+        const payload = data.payload;
+        if (!parsed && data.type === 'session_meta' && typeof payload?.id === 'string' && typeof payload.cwd === 'string') {
+          if (this.isSubagentSessionMeta(payload)) return null;
+          parsed = { sessionId: payload.id, createdAt: data.timestamp, projectPath: toLocalPath(payload.cwd, getCodexCliConfig().pathConfig) };
+          if (!filePath.endsWith('.zst')) break;
+        }
+        if (parsed && typeof data.timestamp === 'string' && Number.isFinite(Date.parse(data.timestamp))) {
+          parsed.lastEntry = new Date(data.timestamp);
+        }
+        if (data.type === 'event_msg' && payload?.type === 'task_complete' && typeof payload.last_agent_message === 'string') {
+          compressedTitle = payload.last_agent_message;
+        }
       }
-
-      return {
-        sessionId,
-        createdAt: typeof data.timestamp === 'string' ? data.timestamp : undefined,
-        projectPath: toLocalPath(projectPath, getCodexCliConfig().pathConfig),
-        isSubagent: payload ? this.isSubagentSessionMeta(payload) : false,
-      };
-    });
-
-    if (!parsed || parsed.isSubagent) {
-      return null;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw error;
     }
+    if (!parsed) return null;
 
     // A thread a session was edited off is left on disk on purpose, but it is
     // nobody's conversation any more. Re-indexing it would add a sidebar entry
@@ -135,7 +152,7 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
 
     let sessionName = nameMap.get(parsed.sessionId);
     if (!sessionName) {
-      sessionName = await this.extractLastAgentMessageFromEnd(filePath);
+      sessionName = filePath.endsWith('.zst') ? compressedTitle : await this.extractLastAgentMessageFromEnd(filePath);
     }
 
     return {

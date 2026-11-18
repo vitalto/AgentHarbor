@@ -17,6 +17,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     rootPath: path.join(getCodexHome(), 'sessions'),
   },
   {
+    provider: 'codex',
+    rootPath: path.join(getCodexHome(), 'archived_sessions'),
+  },
+  {
     provider: 'claude',
     rootPath: path.join(getClaudeConfigDir(), 'projects'),
   },
@@ -57,7 +61,7 @@ let watcherRefreshInFlight = false;
 let watcherRescheduleAfterRefresh = false;
 
 function isWatcherTargetFile(filePath: string): boolean {
-  return filePath.endsWith('.jsonl');
+  return /\.jsonl(?:\.zst)?$/.test(filePath);
 }
 
 function clearPendingWatcherFlushTimer(): void {

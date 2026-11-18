@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { retainSessionTranscript } from '@/shared/index.js';
 import { toLocalPath } from '@/modules/tmux/index.js';
 import {
   buildLookupMap,
@@ -99,6 +100,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         filePath,
         parsed.sessionNameIsProviderTitle
       );
+      await retainSessionTranscript(filePath);
       processed += 1;
     }
 
@@ -132,7 +134,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     const timestamps = await this.readSessionTimestamps(filePath);
-    return sessionsDb.createSession(
+    const sessionId = sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
       parsed.projectPath,
@@ -142,6 +144,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       filePath,
       parsed.sessionNameIsProviderTitle
     );
+    await retainSessionTranscript(filePath);
+    return sessionId;
   }
 
   /**

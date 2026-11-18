@@ -4,6 +4,7 @@ import { access } from 'node:fs/promises';
 import { scanStateDb, sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { LLMProvider } from '@/shared/types.js';
+import { isManagedClaudeTranscript, recoverSessionTranscript, retainSessionTranscript, retrySessionTranscriptRetention } from '@/shared/index.js';
 
 type SessionSynchronizeResult = {
   processedByProvider: Record<LLMProvider, number>;
@@ -21,28 +22,33 @@ const pathExists = async (target: string): Promise<boolean> => {
   }
 };
 
-/**
- * Removes indexed sessions whose transcript file has disappeared from disk.
- *
- * Nothing else deletes these rows: the synchronizers only ever upsert, and the
- * watcher reacts to `add`/`change` but not `unlink`. A transcript removed by
- * hand — or written by a test run that pointed at the real `~/.claude` — left a
- * permanent sidebar entry that opened an empty "Untitled" session.
- *
- * A row is only dropped when its *containing directory* still exists. That
- * keeps an unmounted or not-yet-created home from being read as "every
- * transcript was deleted" and wiping the whole index.
- */
-const pruneOrphanedSessions = async (): Promise<number> => {
+let backfilledClaudeRetention = false;
+/** Recover indexed native conversations before pruning unmanaged artifacts whose containing directory is present. */
+const reconcileIndexedTranscripts = async (): Promise<number> => {
   const knownDirectoryExists = new Map<string, boolean>();
   let pruned = 0;
 
   // Checked concurrently: each check is a 9p round trip on WSL /mnt/<drive>.
   const indexedTranscripts = sessionsDb.getSessionsWithTranscriptPath();
   const transcriptExists = await Promise.all(indexedTranscripts.map(({ jsonl_path }) => pathExists(jsonl_path)));
+  if (!backfilledClaudeRetention) {
+    for (const [index, row] of indexedTranscripts.entries()) {
+      if (row.provider === 'claude' && transcriptExists[index] && isManagedClaudeTranscript(row.jsonl_path)) {
+        await retainSessionTranscript(row.jsonl_path);
+      }
+    }
+    backfilledClaudeRetention = true;
+  }
   const missingTranscripts = indexedTranscripts.filter((_, index) => !transcriptExists[index]);
 
-  for (const { session_id: sessionId, jsonl_path: jsonlPath } of missingTranscripts) {
+  for (const { session_id: sessionId, provider, jsonl_path: jsonlPath } of missingTranscripts) {
+    if (provider === 'codex' || isManagedClaudeTranscript(jsonlPath)) {
+      const recovered = await recoverSessionTranscript(jsonlPath);
+      if (provider === 'codex' && recovered && recovered !== jsonlPath) {
+        await providerRegistry.resolveProvider('codex').sessionSynchronizer.synchronizeFile(recovered);
+      }
+      continue;
+    }
     const directory = path.dirname(jsonlPath);
     let directoryExists = knownDirectoryExists.get(directory);
     if (directoryExists === undefined) {
@@ -100,6 +106,7 @@ async function runSessionSynchronization(): Promise<SessionSynchronizeResult> {
       processed: await provider.sessionSynchronizer.synchronize(lastScanAt ?? undefined),
     }))
   );
+  await retrySessionTranscriptRetention();
 
   for (const result of results) {
     if (result.status === 'fulfilled') {
@@ -113,7 +120,14 @@ async function runSessionSynchronization(): Promise<SessionSynchronizeResult> {
 
   // Pruning is skipped after a partial sync: a provider that just failed may
   // not have re-indexed transcripts it would otherwise have re-created.
-  const prunedOrphans = failures.length === 0 ? await pruneOrphanedSessions() : 0;
+  let prunedOrphans = 0;
+  if (failures.length === 0) {
+    try {
+      prunedOrphans = await reconcileIndexedTranscripts();
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
 
   if (failures.length === 0) {
     scanStateDb.updateLastScannedAt(scanBoundary);

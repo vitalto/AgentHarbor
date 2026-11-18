@@ -49,6 +49,8 @@ export function hookSettingsPath(config: AgentConfig): string {
 /** Returns the settings path as Claude must see it on its command line. */
 export function writeHookSettings(config: AgentConfig): string {
   const settings = {
+    // Claude accepts only positive retention periods. Its default sweep removes chats after 30 days.
+    cleanupPeriodDays: 365_000,
     // Agent view (← in the TUI, /background) parks the conversation in Claude's daemon under a NEW
     // session id: the window turns into a mere viewer, the conversation runs outside tmux, its
     // in-flight background commands end with exit code -1, and the daemon's spare process inherits

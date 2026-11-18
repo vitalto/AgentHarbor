@@ -32,8 +32,12 @@ async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promis
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
+  const previous = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = path.join(nextHomeDir, '.claude');
   (os as any).homedir = () => nextHomeDir;
   return () => {
+    if (previous === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = previous;
     (os as any).homedir = original;
   };
 };

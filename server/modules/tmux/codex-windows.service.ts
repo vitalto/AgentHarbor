@@ -6,6 +6,7 @@ import { sessionsDb } from '@/modules/database/index.js';
 import { quoteForShell } from '@/modules/tmux/agent-launch.js';
 import { AgentWindowError } from '@/modules/tmux/agent-windows.service.js';
 import { getCodexCliConfig } from '@/modules/tmux/codex-cli.js';
+import { isArchivedCodexRollout, recoverSessionTranscript } from '@/shared/index.js';
 import { listLockedCodexThreads } from '@/modules/tmux/codex-thread-locks.js';
 import { readCodexScreen, readCodexStatusThread, typeCodexInput } from '@/modules/tmux/codex-tui.js';
 import { toClaudePath, toLocalPath } from '@/modules/tmux/path-translation.js';
@@ -63,6 +64,12 @@ async function openWindow(appId: string) {
   const { executable, env, pathConfig } = getCodexCliConfig();
   if (!await tmuxService.hasSession()) throw new AgentWindowError(`tmux session "${pathConfig.tmuxSession}" is not running.`);
   const nativeId = row.provider_session_id;
+  if (nativeId && row.jsonl_path) {
+    const rollout = await recoverSessionTranscript(row.jsonl_path);
+    if (rollout && isArchivedCodexRollout(rollout)) {
+      throw new AgentWindowError('Restore this archived Codex session before resuming it.');
+    }
+  }
   if (nativeId && (await listLockedCodexThreads()).includes(nativeId)) {
     throw new AgentWindowError('Close this session in the other Codex client before resuming it in tmux.');
   }

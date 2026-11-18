@@ -78,11 +78,9 @@ An already running TUI keeps the permissions it was launched with.
   read-only and can be moved into tmux from the chat; a session is never resumed twice.
 - **Idle agents close themselves** after a time set in Settings -> Agents -> Runtime (the
   conversation stays and resumes on the next message).
-- **Shut down when all agents finish** - a one-shot switch in Settings -> Agents -> Runtime, like a
-  sleep timer, powers the computer off once no Claude process has a turn, a background command or a
-  running subagent for 2 minutes (an agent waiting for an answer does not count: such a prompt never
-  times out), with a 60 s OS countdown that can be cancelled from the same page. It is not kept across
-  a server restart.
+- **Shut down when all agents finish** - a one-shot switch waits for Claude and Codex to finish.
+  Active turns, running background work, and Codex sessions with unknown activity or a pending retry
+  hold off shutdown. After two quiet minutes it starts a 60-second OS countdown that can be cancelled in Runtime.
 - **File tree and editor**, **git panel** (stage, commit, branches, worktrees), MCP server and skills
   management, plugins. A bundled optional plugin, [Pages](plugins/pages/README.md), adds a sidebar button
   that shows a folder of HTML reports and dashboards as live thumbnails and opens them in place.
@@ -106,6 +104,11 @@ applies model and effort to the current conversation. You can also type `/model`
   the activity indicators.
 - For Codex, the tmux pane title identifies the native thread. AgentHarbor reads its rollout
   from `<CODEX_HOME>/sessions` and its current activity from the terminal.
+- AgentHarbor retains indexed Codex and Claude conversation transcripts under `agentharbor-history`
+  in each provider's local profile. It uses hard links where available, so both filenames share the
+  same contents. If the CLI removes a transcript during cleanup, AgentHarbor can restore its native
+  file for reading and resuming the chat. Deleting a conversation **from disk** in AgentHarbor
+  also deletes its retained transcript.
 - The server never runs Claude in SDK or `stream-json` mode.
 
 ## Requirements
@@ -180,9 +183,11 @@ Set variables in the environment or in a `.env` file in the repository root (see
 | `AH_CLAUDE_ARGS` | *(empty)* | Extra flags for every launch, e.g. `--permission-mode default` |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code's config directory (projects, sessions) |
 | `AH_STATE_DIR` | `~/.agentharbor` | AgentHarbor state (hook settings, pane registry). Must be writable by the Claude process |
-| `AH_IDLE_CLOSE_MINUTES` | `60` | Close Claude windows idle this long, unless a menu, running work or an open viewer keeps them (`0` = never). Default only: Settings -> Agents -> Runtime overrides it |
-| `AH_ATTACHMENT_RETENTION_DAYS` | `7` | Delete the copies of pasted files made for a Windows Claude after this many days. Default only, like the one above |
-| `AH_BACKGROUND_REMINDER_MINUTES` | `60` | Type a short reminder into an agent whose turn is over while a background command keeps running: after this many minutes, then 3x, 7x… from the start (`0` = never). Default only, like the ones above |
+| `AH_IDLE_CLOSE_MINUTES` | `60` | Close unattended idle Claude and Codex terminals after this many minutes. Set to `0` to keep them open. Runtime settings override these environment defaults for both providers. |
+| `AH_ATTACHMENT_RETENTION_DAYS` | `7` | Keep temporary copies of attachments staged for Windows for this many days. Conversation history is stored separately. |
+| `AH_BACKGROUND_REMINDER_MINUTES` | `60` | Remind an idle agent about background work after 1, 3, 7… intervals. For Codex, timing starts when AgentHarbor first observes a running background terminal. Set to `0` to disable. |
+| `AH_API_ERROR_RETRY_ATTEMPTS` | `3` | Maximum consecutive continuation prompts after transient API or connection errors. Set to `0` to disable. |
+| `AH_API_ERROR_RETRY_DELAY_MINUTES` | `1` | Delay before the first retry. Subsequent delays grow by a factor of three. |
 | `AH_PROJECTS_DIR` | *(none)* | Folder the New Project wizard lists first, to open a project from it or create one by typing a name (an absolute path; with a Windows Claude also `D:\Develop`). Default only: choosing another folder in the wizard overrides it |
 | `WORKSPACES_ROOT` | home folder | Projects must lie under this folder. With a Windows Claude every mounted drive (`/mnt/c`, `/mnt/d`...) is allowed as well; Windows system folders never are |
 | `AH_WINDOWS_RIPGREP` | *(none)* | WSL path to a Windows `rg.exe` ([ripgrep release](https://github.com/BurntSushi/ripgrep/releases)). Conversation search then reads transcripts on `/mnt/<drive>` with it instead of through the slow 9p mount, about 10x faster |

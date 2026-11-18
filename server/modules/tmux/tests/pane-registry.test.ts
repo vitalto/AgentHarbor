@@ -90,6 +90,7 @@ test('launch command registers the pane through the hook', async (t) => {
   assert.ok(settingsPath.startsWith('\\\\wsl.localhost\\Ubuntu\\') || /^[A-Z]:\\/.test(settingsPath));
   const settings = JSON.parse(await readFile(path.join(config.stateDir, 'hook-settings.json'), 'utf8'));
   assert.equal(settings.disableAgentView, true, 'agent view would move the conversation out of its window');
+  assert.ok(settings.cleanupPeriodDays >= 365_000, 'managed Claude launches must keep existing conversations');
 
   const resume = buildAgentLaunch(config, { resumeSessionId: 'abc' });
   assert.match(resume.command, /^export AH_PANE="\$\{TMUX_PANE#%\}-\$\$"; exec '\/mnt\/c\/claude\.exe' --settings '.+hook-settings\.json' --resume 'abc'$/);

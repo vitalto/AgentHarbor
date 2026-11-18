@@ -10,7 +10,7 @@ import {
   stageAttachmentForClaude, tmuxService, typeCodexInput, waitForCodexComposer,
 } from '@/modules/tmux/index.js';
 import {
-  appendFilesInputTag, createCompleteMessage, createNormalizedMessage, normalizeAttachmentDescriptors, readObjectRecord,
+  appendFilesInputTag, createCompleteMessage, createNormalizedMessage, normalizeAttachmentDescriptors, readObjectRecord, recoverSessionTranscript,
 } from '@/shared/index.js';
 import type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/index.js';
 
@@ -21,7 +21,10 @@ const turns = new Map<string, Turn>();
 async function resolveRollout(appId: string, nativeId: string, searchArchive: boolean) {
   const session = sessionsDb.getSessionById(appId);
   if (session?.provider_session_id !== nativeId) throw new Error('The Codex session changed before its transcript was opened.');
-  if (session.jsonl_path) return session.jsonl_path;
+  if (session.jsonl_path) {
+    const materialized = await recoverSessionTranscript(session.jsonl_path);
+    if (materialized && !materialized.endsWith('.zst')) return materialized;
+  }
   const file = await findCodexRollout(nativeId, searchArchive);
   if (file && session.project_path) {
     // The first reply can finish before the filesystem watcher has indexed the new rollout.

@@ -1,8 +1,8 @@
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { AppError } from '@/shared/utils.js';
+import { removeSessionTranscript } from '@/shared/index.js';
 
 function uniqueJsonlPathsFromSessions(
   sessions: Array<{ jsonl_path: string | null }>,
@@ -26,18 +26,6 @@ function uniqueJsonlPathsFromSessions(
   return result;
 }
 
-async function unlinkJsonlIfExists(filePath: string): Promise<void> {
-  try {
-    await fs.unlink(filePath);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
-      return;
-    }
-    console.warn(`[project-delete] Failed to remove ${filePath}:`, (error as Error).message);
-  }
-}
-
 /**
  * Loads all session rows for the project path and removes each distinct `jsonl_path` file on disk.
  */
@@ -54,7 +42,7 @@ export async function deleteSessionJsonlFilesForProjectPath(projectPath: string)
   ]);
 
   for (const filePath of paths) {
-    await unlinkJsonlIfExists(filePath);
+    await removeSessionTranscript(filePath);
   }
 
   for (const session of sessions) {

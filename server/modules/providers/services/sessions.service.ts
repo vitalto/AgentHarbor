@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { AgentBusyElsewhereError, AgentWindowError, clearAgentConversation, closeAgentWindow, closeCodexWindow, ensureAgentWindow, ensureCodexWindow, getLiveProcessStartTime, listCodexLiveThreads, moveSessionToTmux, paneRegistry, readClaudeProcesses, readClaudeStatuses, toLocalPath, trustFolderOnNextStart } from '@/modules/tmux/index.js';
+import { AgentBusyElsewhereError, AgentWindowError, clearAgentConversation, closeAgentWindow, closeCodexWindow, ensureAgentWindow, ensureCodexWindow, getCodexCliConfig, getLiveProcessStartTime, listCodexLiveThreads, moveSessionToTmux, paneRegistry, readClaudeProcesses, readClaudeStatuses, toLocalPath, trustFolderOnNextStart } from '@/modules/tmux/index.js';
 import { listBackgroundCommands, listRunningBackgroundCommands, type SessionBackgroundCommand } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
@@ -19,6 +21,7 @@ import type {
   SessionSubagent,
 } from '@/shared/types.js';
 import { AppError, sliceTailPage } from '@/shared/utils.js';
+import { isArchivedCodexRollout, recoverSessionTranscript, removeSessionTranscript } from '@/shared/index.js';
 
 const MAX_FINISHED_BACKGROUND_COMMANDS = 20;
 const BACKGROUND_OUTPUT_TAIL_BYTES = 16 * 1024;
@@ -104,22 +107,6 @@ const MAX_SESSION_NAME_WORDS = 4;
 function buildSessionNameFromMessage(initialMessage: string): string {
   const words = initialMessage.trim().split(/\s+/).filter(Boolean);
   return words.slice(0, MAX_SESSION_NAME_WORDS).join(' ') || 'Untitled Session';
-}
-
-/**
- * Removes one file if it exists.
- */
-async function removeFileIfExists(filePath: string): Promise<boolean> {
-  try {
-    await fsp.unlink(filePath);
-    return true;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
-      return false;
-    }
-    throw error;
-  }
 }
 
 /**
@@ -544,7 +531,14 @@ export const sessionsService = {
     // The Claude history reader parses `jsonl_path` itself, so a page can be
     // sliced from the stat-validated full-transcript cache instead of
     // re-parsing the whole file per request.
-    const transcriptPath = session.jsonl_path;
+    let transcriptPath = session.jsonl_path;
+    if (transcriptPath) {
+      const recovered = await recoverSessionTranscript(transcriptPath);
+      if (provider === 'codex' && recovered && recovered !== transcriptPath) {
+        await providerRegistry.resolveProvider('codex').sessionSynchronizer.synchronizeFile(recovered);
+        transcriptPath = recovered;
+      }
+    }
     const fullHistory = await sessionHistoryCache.getFullHistory({
       sessionId,
       transcriptPath,
@@ -807,7 +801,7 @@ export const sessionsService = {
         ...sessionsDb.getSupersededTranscriptPaths(sessionId),
       ];
       for (const transcript of transcripts) {
-        removedFromDisk = (await removeFileIfExists(transcript)) || removedFromDisk;
+        removedFromDisk = (await removeSessionTranscript(transcript)) || removedFromDisk;
       }
     }
 
@@ -979,7 +973,7 @@ export const sessionsService = {
   /**
    * Restores one archived session back into the active sidebar lists.
    */
-  restoreSessionById(sessionId: string): { sessionId: string; isArchived: false } {
+  async restoreSessionById(sessionId: string): Promise<{ sessionId: string; isArchived: false }> {
     const session = sessionsDb.getSessionById(sessionId);
     if (!session) {
       throw new AppError(`Session "${sessionId}" was not found.`, {
@@ -988,6 +982,18 @@ export const sessionsService = {
       });
     }
 
+    if (session.provider === 'codex' && session.provider_session_id && session.jsonl_path) {
+      const source = await recoverSessionTranscript(session.jsonl_path);
+      if (source && isArchivedCodexRollout(source)) {
+        const cli = getCodexCliConfig();
+        await promisify(execFile)(cli.executable, ['--no-daemon', 'unarchive', '--', session.provider_session_id], {
+          env: cli.env, windowsHide: true, timeout: 30_000,
+        });
+        const active = await recoverSessionTranscript(source);
+        if (!active || isArchivedCodexRollout(active)) throw new Error('Codex did not restore the archived rollout.');
+        await providerRegistry.resolveProvider('codex').sessionSynchronizer.synchronizeFile(active);
+      }
+    }
     sessionsDb.updateSessionIsArchived(sessionId, false);
     return { sessionId, isArchived: false };
   },

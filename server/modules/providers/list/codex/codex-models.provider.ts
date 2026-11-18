@@ -1,14 +1,13 @@
 import { execFile } from 'node:child_process';
-import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 
 import TOML from '@iarna/toml';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { getCodexCliConfig } from '@/modules/tmux/index.js';
+import { readCodexTranscriptEntries } from '@/shared/index.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type { ProviderCurrentActiveModel, ProviderModelOption, ProviderModelsDefinition } from '@/shared/types.js';
 import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
@@ -103,49 +102,36 @@ async function readCodexModelCatalog({ home, executable, env }: ReturnType<typeo
 }
 
 async function readReplyFromOffset(file: string, start: number): Promise<ProviderCurrentActiveModel | null> {
-  const stream = createReadStream(file, { encoding: 'utf8', start });
-  const lines = createInterface({ input: stream, crlfDelay: Infinity });
   let turn: ProviderCurrentActiveModel | null = null;
   let lastReply: ProviderCurrentActiveModel | null = null;
-  try {
-    for await (const line of lines) {
-      let event;
-      try {
-        event = readObjectRecord(JSON.parse(line));
-      } catch {
-        continue;
-      }
-      const payload = readObjectRecord(event?.payload);
-      if (!payload) continue;
-      if (event?.type === 'event_msg' && payload.type === 'task_started') turn = null;
-      if (event?.type === 'turn_context') {
-        const model = readOptionalString(payload.model);
-        const effort = readOptionalString(payload.effort)
-          ?? readOptionalString(payload.reasoning_effort)
-          ?? readOptionalString(payload.collaboration_mode?.settings?.reasoning_effort);
-        turn = model ? { model, ...(effort ? { effort } : {}) } : null;
-      }
-      const assistantMessage = event?.type === 'response_item' && payload.type === 'message'
-        && payload.role === 'assistant' && payload.phase !== 'commentary'
-        && Array.isArray(payload.content) && payload.content.some((item) => readOptionalString(item?.text));
-      const completedReply = event?.type === 'event_msg' && payload.type === 'task_complete'
-        && readOptionalString(payload.last_agent_message);
-      const finalAgentMessage = event?.type === 'event_msg' && payload.type === 'agent_message'
-        && payload.phase === 'final_answer' && readOptionalString(payload.message);
-      if (assistantMessage || completedReply || finalAgentMessage) lastReply = turn;
+  for await (const event of readCodexTranscriptEntries(file, start)) {
+    const payload = readObjectRecord(event?.payload);
+    if (!payload) continue;
+    if (event?.type === 'event_msg' && payload.type === 'task_started') turn = null;
+    if (event?.type === 'turn_context') {
+      const model = readOptionalString(payload.model);
+      const effort = readOptionalString(payload.effort)
+        ?? readOptionalString(payload.reasoning_effort)
+        ?? readOptionalString(payload.collaboration_mode?.settings?.reasoning_effort);
+      turn = model ? { model, ...(effort ? { effort } : {}) } : null;
     }
-    return lastReply;
-  } finally {
-    lines.close();
-    stream.destroy();
+    const assistantMessage = event?.type === 'response_item' && payload.type === 'message'
+      && payload.role === 'assistant' && payload.phase !== 'commentary'
+      && Array.isArray(payload.content) && payload.content.some((item) => readOptionalString(item?.text));
+    const completedReply = event?.type === 'event_msg' && payload.type === 'task_complete'
+      && readOptionalString(payload.last_agent_message);
+    const finalAgentMessage = event?.type === 'event_msg' && payload.type === 'agent_message'
+      && payload.phase === 'final_answer' && readOptionalString(payload.message);
+    if (assistantMessage || completedReply || finalAgentMessage) lastReply = turn;
   }
+  return lastReply;
 }
 
 /** Resolves the chat model badge from the turn that produced the last recorded reply. */
 export async function readCodexLastReplySelection(file: string): Promise<ProviderCurrentActiveModel | null> {
   const { size } = await stat(file);
   const start = Math.max(0, size - 256 * 1024);
-  if (start > 0) {
+  if (start > 0 && !file.endsWith('.zst')) {
     const recentReply = await readReplyFromOffset(file, start);
     if (recentReply) return recentReply;
   }

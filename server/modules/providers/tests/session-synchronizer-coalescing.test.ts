@@ -15,6 +15,8 @@ const previousHome = process.env.HOME;
 const previousUserProfile = process.env.USERPROFILE;
 process.env.HOME = fixtureHome;
 process.env.USERPROFILE = fixtureHome;
+process.env.AH_CODEX_HOME = path.join(fixtureHome, '.codex');
+process.env.CLAUDE_CONFIG_DIR = path.join(fixtureHome, '.claude');
 
 const { providerRegistry } = await import('@/modules/providers/provider.registry.js');
 const { sessionSynchronizerService } = await import(

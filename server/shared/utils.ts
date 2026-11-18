@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import fs, { type Dirent, type Stats } from 'node:fs';
 import {
   access,
+  copyFile,
+  link,
   lstat,
   mkdir,
   open,
@@ -9,12 +11,17 @@ import {
   readdir,
   readlink,
   realpath,
+  rename,
+  rm,
   stat,
+  statfs,
+  utimes,
   writeFile,
 } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
@@ -243,6 +250,186 @@ export function findForbiddenWorkspaceAncestor(normalizedPath: string): string |
 /** Server-visible directory containing the Codex CLI configuration and rollouts. */
 export function getCodexHome(): string {
   return process.env.AH_CODEX_HOME || process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+}
+
+//----------------- PROVIDER TRANSCRIPT RETENTION ------------
+/** Used by the provider indexer and explicit restore to respect Codex's native archive. */
+export function isArchivedCodexRollout(file: string): boolean {
+  return path.dirname(path.resolve(file)) === path.resolve(getCodexHome(), 'archived_sessions');
+}
+
+function codexRolloutLocations(file: string) {
+  const home = getCodexHome();
+  const plain = file.replace(/\.zst$/, '');
+  const name = path.basename(plain);
+  if (!name.startsWith('rollout-') || !name.endsWith('.jsonl')) return null;
+  const activeRoot = path.resolve(home, 'sessions');
+  const relative = path.relative(activeRoot, plain);
+  const archived = path.resolve(home, 'archived_sessions', name);
+  const inArchive = path.resolve(plain) === archived;
+  if (!inArchive && (relative.startsWith('..' + path.sep) || path.isAbsolute(relative))) return null;
+  const date = /^rollout-(\d{4})-(\d{2})-(\d{2})T/.exec(name);
+  const active = inArchive ? (date ? path.join(activeRoot, ...date.slice(1), name) : null) : plain;
+  return { active, archived, retained: path.join(home, 'agentharbor-history', name) };
+}
+
+function claudeTranscriptLocations(file: string) {
+  const home = getClaudeConfigDir();
+  const relative = path.relative(path.join(home, 'projects'), file);
+  if (path.isAbsolute(relative)) return null;
+  const parts = relative.split(path.sep);
+  if (parts.length !== 2 || parts[0] === '..' || !parts[0] || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}\.jsonl$/i.test(parts[1])) return null;
+  return { active: file, archived: null, retained: path.join(home, 'agentharbor-history', ...parts) };
+}
+
+/** Lets the provider synchronizer backfill and preserve top-level Claude UUID transcripts without importing subagent or tool artifacts. */
+export function isManagedClaudeTranscript(file: string): boolean {
+  return Boolean(claudeTranscriptLocations(file));
+}
+
+async function rolloutStat(file: string) {
+  try {
+    return await lstat(file, { bigint: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+const pendingRolloutOperations = new Map<string, Promise<unknown>>();
+const retentionRetryAt = new Map<string, number>();
+
+async function withRolloutLock<T>(key: string, action: () => Promise<T>): Promise<T> {
+  const pending = pendingRolloutOperations.get(key);
+  const result = (pending ? pending.catch(() => {}) : Promise.resolve()).then(action);
+  pendingRolloutOperations.set(key, result);
+  try {
+    return await result;
+  } finally {
+    if (pendingRolloutOperations.get(key) === result) pendingRolloutOperations.delete(key);
+  }
+}
+
+async function linkOrCopyRollout(from: string, to: string): Promise<'linked' | 'copied'> {
+  try {
+    await link(from, to);
+    return 'linked';
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code ?? '';
+    if (!['EXDEV', 'EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EMLINK'].includes(code)) throw error;
+    const [source, volume] = await Promise.all([stat(from), statfs(path.dirname(to))]);
+    const reserveBytes = /^(?:c:[\\/]|\/mnt\/c\/)/i.test(path.resolve(to)) ? 20 * 1024 ** 3 : 0;
+    if (volume.bavail * volume.bsize - source.size < reserveBytes) {
+      throw new Error('Insufficient free space to retain a session transcript on a filesystem without hard links.');
+    }
+    await copyFile(from, to, fs.constants.COPYFILE_EXCL);
+    await utimes(to, source.atime, source.mtime);
+    return 'copied';
+  }
+}
+
+/** Provider synchronizers keep an independent directory entry for each indexed top-level transcript. Hard links follow native appends without duplicating file contents. */
+export async function retainSessionTranscript(file: string): Promise<void> {
+  const paths = codexRolloutLocations(file) ?? claudeTranscriptLocations(file);
+  if (!paths || (retentionRetryAt.get(file) ?? 0) > Date.now()) return;
+  await withRolloutLock(paths.retained, async () => {
+    const target = paths.retained + (file.endsWith('.zst') ? '.zst' : '');
+    const superseded = file.endsWith('.zst') ? paths.retained : paths.retained + '.zst';
+    const [source, retained] = await Promise.all([rolloutStat(file), rolloutStat(target)]);
+    if (!source?.isFile()) return;
+    if (retained?.isFile() && source.ino !== 0n && source.dev === retained.dev && source.ino === retained.ino) return;
+    const fingerprint = [source.dev, source.ino, source.size, source.mtimeNs, source.ctimeNs].join('/');
+    const marker = paths.retained + '.copy-state';
+    if (retained?.isFile() && retained.size === source.size && await readFile(marker, 'utf8').catch(() => '') === fingerprint) return;
+    await mkdir(path.dirname(paths.retained), { recursive: true, mode: 0o700 });
+    const temporary = target + '.' + randomUUID() + '.tmp';
+    try {
+      const method = await linkOrCopyRollout(file, temporary);
+      await rename(temporary, target);
+      if (method === 'copied') await writeFile(marker, fingerprint, { mode: 0o600 });
+      await rm(superseded, { force: true });
+    } finally {
+      await rm(temporary, { force: true });
+    }
+  }).then(() => {
+    retentionRetryAt.delete(file);
+  }, (error: unknown) => {
+    retentionRetryAt.set(file, Date.now() + 60_000);
+    console.warn(`[Sessions] Could not retain ${file}; will retry:`, error instanceof Error ? error.message : String(error));
+  });
+}
+
+/** A later full provider scan retries failed retention writes even when the native transcript's metadata has not changed. */
+export async function retrySessionTranscriptRetention(): Promise<void> {
+  for (const [file, eligibleAt] of retentionRetryAt) {
+    if (eligibleAt <= Date.now()) await retainSessionTranscript(file);
+  }
+}
+
+/** Session indexing, history and tmux use this to recover a missing native transcript. A Codex archive move takes priority over recreating its old filename. */
+export async function recoverSessionTranscript(file: string): Promise<string | null> {
+  if ((await rolloutStat(file))?.isFile()) return file;
+  const paths = codexRolloutLocations(file) ?? claudeTranscriptLocations(file);
+  if (!paths) return null;
+  return withRolloutLock(paths.retained, async () => {
+    for (const location of [paths.active, paths.archived]) {
+      if (location && (await rolloutStat(location))?.isFile()) return location;
+      if (paths.archived && location && (await rolloutStat(location + '.zst'))?.isFile()) return location + '.zst';
+    }
+    const source = (await rolloutStat(paths.retained + '.zst'))?.isFile() ? paths.retained + '.zst' : paths.retained;
+    if (!(await rolloutStat(source))?.isFile()) return null;
+    const destination = file.replace(/\.zst$/, '') + (source.endsWith('.zst') ? '.zst' : '');
+    await mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
+    try {
+      await linkOrCopyRollout(source, destination);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    return destination;
+  });
+}
+
+/** Used by permanent session and project deletion to erase both native and retained entries, including a rollout recently moved into the native archive. */
+export async function removeSessionTranscript(file: string): Promise<boolean> {
+  const paths = codexRolloutLocations(file) ?? claudeTranscriptLocations(file);
+  return withRolloutLock(paths?.retained ?? file, async () => {
+    const files = paths ? [paths.retained, paths.active, paths.archived].flatMap((plain) => plain ? (paths.archived ? [plain, plain + '.zst'] : [plain]) : []) : [file];
+    if (paths) files.push(paths.retained + '.copy-state');
+    let removed = false;
+    for (const candidate of new Set(files)) {
+      if (!candidate) continue;
+      retentionRetryAt.delete(candidate);
+      try {
+        await fs.promises.unlink(candidate);
+        removed = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
+    return removed;
+  });
+}
+
+/** Streams Codex's native JSONL and Zstandard-compressed JSONL to the history reader, model badge and indexer. Byte offsets apply only to plain JSONL. */
+export async function* readCodexTranscriptEntries(file: string, start = 0): AsyncGenerator<AnyRecord> {
+  if (file.endsWith('.zst') && typeof zlib.createZstdDecompress !== 'function') {
+    throw new Error('Reading a compressed Codex rollout requires Node.js 22.15 or later.');
+  }
+  const source = fs.createReadStream(file, { start });
+  const input = file.endsWith('.zst') ? source.compose(zlib.createZstdDecompress()) : source;
+  const lines = readline.createInterface({ input, crlfDelay: Infinity });
+  try {
+    for await (const line of lines) {
+      try {
+        const entry = readObjectRecord(JSON.parse(line));
+        if (entry) yield entry;
+      } catch { /* A partial final row can be completed by the next CLI write. */ }
+    }
+  } finally {
+    lines.close();
+    input.destroy();
+    source.destroy();
+  }
 }
 
 /**
