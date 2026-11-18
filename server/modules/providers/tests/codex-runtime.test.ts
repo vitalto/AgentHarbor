@@ -69,11 +69,13 @@ for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'dra
     });
     t.mock.method(tmuxService, 'sendKeys', async (id: string, input: string[]) => {
       assert.equal(id, pane.paneId);
-      keys.push(...input);
+      const action = input.at(-1)!;
+      assert.deepEqual(input, action === 'Enter' ? ['End', 'Enter'] : ['Escape']);
+      keys.push(action);
       // While Codex is finishing a paste burst, Enter inserts a newline and the current turn can still finish.
       if (performance.now() - captionPastedAt < 120) draft += '\n';
       else {
-        if (input[0] === 'Enter') submittedDrafts.push(draft);
+        if (action === 'Enter') submittedDrafts.push(draft);
         draft = '';
       }
       if (!working) {
@@ -81,7 +83,7 @@ for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'dra
         working = true;
         acknowledgeSubmit();
       }
-      if (input[0] === 'Escape' || (scenario === 'interrupt' && keys.length === 1)) return;
+      if (action === 'Escape' || (scenario === 'interrupt' && keys.length === 1)) return;
       if (scenario === 'resume' && keys.length === 1) return;
       await appendFile(file, event('response_item', { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'new reply' }] })
         + event('event_msg', { type: 'task_complete', turn_id: 'turn' }));

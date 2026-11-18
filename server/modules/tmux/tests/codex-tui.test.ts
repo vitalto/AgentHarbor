@@ -8,6 +8,45 @@ import { tmuxService } from '@/modules/tmux/tmux.service.js';
 
 const base = { title: 'thread', dead: false, cursorVisible: true, cursorX: 2, cursorY: 1 };
 
+test('a stable partial Windows paste submits the whole multiline caption with four images once', async (t) => {
+  const caption = Array.from({ length: 10 }, (_, i) => `Строка ${i} с текстом`).join('\n\n');
+  const images = ['one.png', 'two.png', 'three.png', 'four.png'];
+  const markers = images.map((_, index) => `[Image #${index + 1}] `).join('');
+  const submitted: string[] = [];
+  let draft = '';
+  let pending = '';
+  let pasteBurst = false;
+  t.mock.method(tmuxService, 'pasteText', async (_pane: string, value: string) => {
+    if (value === caption) {
+      draft += value.slice(0, 6);
+      pending = value.slice(6);
+      pasteBurst = true;
+    } else {
+      assert.equal(value, images[draft.match(/\[Image/g)?.length ?? 0]);
+      draft += `[Image #${images.indexOf(value) + 1}] `;
+    }
+  });
+  t.mock.method(tmuxService, 'inspectPane', async () => {
+    const lines = ('› ' + draft).split('\n');
+    return { ...base, lines, cursorY: lines.length - 1, cursorX: lines.at(-1)!.length };
+  });
+  t.mock.method(tmuxService, 'sendKeys', async (_pane: string, keys: string[]) => {
+    // ConPTY keeps delivering the paste while Codex displays only its first word.
+    draft += pending;
+    pending = '';
+    for (const key of keys) {
+      if (key === 'End') pasteBurst = false;
+      else if (key === 'Enter' && pasteBurst) draft += '\n';
+      else if (key === 'Enter') {
+        submitted.push(draft);
+        draft = '';
+      } else assert.fail('Unexpected key ' + key);
+    }
+  });
+  await typeCodexInput('%1', caption, images, base.title);
+  assert.deepEqual(submitted, [markers + caption]);
+});
+
 for (const withText of [true, false]) {
   test('Codex waits out paste-burst Enter suppression for ' + (withText ? 'an image with a caption' : 'an image alone'), async (t) => {
     let draft = '';
@@ -30,7 +69,7 @@ for (const withText of [true, false]) {
       return { ...base, cursorX: 2 + draft.length, lines: ['', '› ' + draft] };
     });
     const enter = t.mock.method(tmuxService, 'sendKeys', async (_pane: string, keys: string[]) => {
-      assert.deepEqual(keys, ['Enter']);
+      assert.deepEqual(keys, ['End', 'Enter']);
       if (performance.now() - lastChange <= 120) {
         draft += '\n';
         return;

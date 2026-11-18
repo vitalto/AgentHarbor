@@ -80,7 +80,7 @@ for (const scenario of ['matching', 'switched', 'clipped', 'clipped and switched
     });
     t.mock.method(tmuxService, 'pasteText', async (_pane: string, text: string) => { pasted.push(text); draft = text; });
     t.mock.method(tmuxService, 'sendKeys', async (_pane: string, keys: string[]) => {
-      assert.deepEqual(keys, ['Enter']);
+      assert.deepEqual(keys, ['End', 'Enter']);
       assert.equal(draft, '/status');
       draft = '';
       statusVisible = true;

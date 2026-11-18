@@ -112,8 +112,8 @@ export async function readCodexStatusThread(paneId: string, title: string, signa
 
 type Screen = ReturnType<typeof parseCodexScreen>;
 
-async function waitForScreen(paneId: string, accepts: (screen: Screen) => boolean, error: string, signal?: AbortSignal) {
-  const deadline = Date.now() + 3000;
+async function waitForScreen(paneId: string, accepts: (screen: Screen) => boolean, error: string, signal?: AbortSignal, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
   do {
     signal?.throwIfAborted();
     const screen = await readCodexScreen(paneId);
@@ -162,9 +162,13 @@ export async function typeCodexInput(paneId: string, text: string, imagePaths: s
     return performance.now() - stableSince >= pasteSettleMs;
   }, 'The pasted Codex message did not finish appearing in the terminal.', signal);
   signal?.throwIfAborted();
-  await tmuxService.sendKeys(paneId, ['Enter']);
+  // ConPTY can show a stable prefix while the rest of the paste is still queued.
+  // End closes Codex's paste burst without editing the draft, before Enter reaches it.
+  await tmuxService.sendKeys(paneId, ['End', 'Enter']);
+  // Windows can deliver long pastes character by character ahead of these keys.
+  const submitTimeoutMs = 3000 + Math.min(text.length * 2, 120_000);
   await waitForScreen(paneId, (screen) => {
     if (screen.title !== expectedTitle) throw new AgentWindowError('The terminal switched to a different Codex session.');
     return screen.empty || screen.dialog !== null;
-  }, 'Codex did not submit the draft after Enter.');
+  }, 'Codex did not submit the draft after Enter.', undefined, submitTimeoutMs);
 }
