@@ -33,6 +33,14 @@ function readFolderAccessPrompt(lines: string[]): TuiPrompt | null {
     preview: [], questionTabs: false, safeguardPause: false, unreadable: false };
 }
 
+function hasInterruptHint(lines: string[], prompt: number) {
+  // The follow-up queue sits between the live status and the composer and can span any number of rows.
+  let row = prompt - 1;
+  while (row >= 0 && (!lines[row] || /^\s/.test(lines[row]))) row--;
+  const end = lines[row] === '• Queued follow-up inputs' ? row : prompt;
+  return lines.slice(Math.max(0, end - 6), end).some((line) => /esc to interrupt/i.test(line));
+}
+
 /** Used by the Codex window registry, input driver and chat watcher to interpret the same pane capture. */
 export function parseCodexScreen(capture: PaneCapture) {
   if (capture.dead) throw new AgentWindowError('The Codex terminal closed.');
@@ -47,7 +55,7 @@ export function parseCodexScreen(capture: PaneCapture) {
   const placeholder = composer && /^\s*(?:\x1b\[[\d;:]*m)*›(?:\x1b\[[\d;:]*m)*\s+\x1b\[(?:[\d;]*;)?2(?:;[\d;]*)?m/u.test(capture.lines[prompt]);
   const empty = composer && capture.cursorX === 2 && capture.cursorY === prompt
     && (placeholder || lines[prompt] === '›');
-  const working = composer && lines.slice(Math.max(0, prompt - 6), prompt + 1).some((line) => /esc to interrupt/i.test(line));
+  const working = composer && hasInterruptHint(lines, prompt);
   return {
     title: capture.title, lines, composer, empty,
     dialog: menu ? readFolderAccessPrompt(lines) ?? unreadablePrompt(lines) : null,

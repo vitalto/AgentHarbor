@@ -67,6 +67,19 @@ test('Codex identifies the empty composer, a draft with the cursor at Home, and 
   assert.equal(parseCodexScreen({ ...base, lines: ['• Working (5s • esc to interrupt)', placeholder] }).activity, 'working');
 });
 
+test('queued follow-up inputs keep the activity of the Codex turn above them', () => {
+  const queue = ['', '• Queued follow-up inputs', '  ? 1 question', '    shift+← to answer', '', ''];
+  const capture = { ...base, cursorY: 1 + queue.length, lines: [
+    '• Working (3m 06s • esc to interrupt)', ...queue, '›', '', '  ? for shortcuts',
+  ] };
+  assert.equal(parseCodexScreen(capture).activity, 'working');
+  capture.lines[0] = '  Worked for 3m 06s';
+  assert.equal(parseCodexScreen(capture).activity, 'idle');
+  capture.lines.splice(3, 0, '  A queued message mentioning esc to interrupt');
+  capture.cursorY++;
+  assert.equal(parseCodexScreen(capture).activity, 'idle');
+});
+
 test('pasted or wrapped menu instructions stay in the editable Codex draft', () => {
   for (const rows of [['› Why did I see enter continue · esc back?'], ['› Terminal output:', '  enter continue · esc back']]) {
     const draft = parseCodexScreen({ ...base, cursorY: rows.length - 1, cursorX: rows.at(-1)!.length,
