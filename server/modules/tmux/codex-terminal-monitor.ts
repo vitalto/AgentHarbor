@@ -4,7 +4,7 @@ import { sessionsDb } from '@/modules/database/index.js';
 import { findCodexWindow, inspectCodexWindow } from '@/modules/tmux/codex-windows.service.js';
 import type { MonitorSocket } from '@/modules/tmux/session-monitor.service.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
-import { unreadablePrompt } from '@/modules/tmux/tui-prompt.js';
+import { keysForOption } from '@/modules/tmux/tui-prompt.js';
 
 type ChatWatch = { sockets: Set<MonitorSocket>; prompt: string | null; output: string; size?: number };
 
@@ -28,8 +28,8 @@ export function createCodexTerminalMonitor(isProcessing: (appId: string) => bool
       await Promise.all([...watches].map(async ([appId, watch]) => {
         const owned = await findCodexWindow(appId, panes);
         const state = owned && await inspectCodexWindow(appId, owned.pane).catch(() => null);
-        const prompt = state?.screen.activity === 'waiting'
-          ? JSON.stringify({ kind: 'tui_prompt', sessionId: appId, prompt: unreadablePrompt(state.screen.lines) }) : null;
+        const prompt = state?.screen.dialog
+          ? JSON.stringify({ kind: 'tui_prompt', sessionId: appId, prompt: state.screen.dialog }) : null;
         if (prompt !== watch.prompt) {
           watch.prompt = prompt;
           broadcast(watch, prompt ?? JSON.stringify({ kind: 'tui_prompt_cleared', sessionId: appId }));
@@ -76,6 +76,14 @@ export function createCodexTerminalMonitor(isProcessing: (appId: string) => bool
         clearInterval(timer);
         timer = undefined;
       }
+    },
+    async chooseOption(appId: string, optionIndex: number) {
+      const owned = await findCodexWindow(appId);
+      if (!owned) return false;
+      const { screen } = await inspectCodexWindow(appId, owned.pane);
+      if (!Number.isInteger(optionIndex) || !screen.dialog?.options[optionIndex]) return false;
+      await tmuxService.sendKeys(owned.pane.paneId, keysForOption(screen.dialog, optionIndex));
+      return true;
     },
     async sendKeys(appId: string, keys: string[]) {
       const owned = await findCodexWindow(appId);

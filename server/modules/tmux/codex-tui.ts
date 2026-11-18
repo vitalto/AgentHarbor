@@ -2,9 +2,34 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { AgentWindowError } from '@/modules/tmux/agent-windows.service.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
+import { unreadablePrompt, type TuiPrompt } from '@/modules/tmux/tui-prompt.js';
 
 type PaneCapture = Awaited<ReturnType<typeof tmuxService.inspectPane>>;
 const sgr = /\x1b\[[0-9;:]*m/g;
+
+function readFolderAccessPrompt(lines: string[]): TuiPrompt | null {
+  const rows = lines.map((line) => line.trim());
+  const title = rows.lastIndexOf('Folder access');
+  if (title < 0) return null;
+  const sections = rows.slice(title + 1).join('\n').trim().split(/\n{2,}/);
+  const footer = sections.pop();
+  const choices = sections.pop()?.split('\n') ?? [];
+  const description = sections.pop();
+  const question = 'Trust this folder?';
+  if (!/^enter continue\s*(?:·\s*)?esc back$/i.test(footer ?? '') || !sections[0]
+    || !description?.startsWith(question) || choices.length !== 2) return null;
+
+  const labels = ['Trust and continue', 'Back to Agent Command Center'];
+  if (!labels.every((label, index) => choices[index].replace(/^›\s*/, '') === `${index + 1}. ${label}`)) return null;
+  const options = labels.map((label, index) => ({
+    label, selected: choices[index].startsWith('›'), detail: null, checked: null, freeText: false, confirmsSelection: false,
+  }));
+  if (options.filter((option) => option.selected).length !== 1) return null;
+
+  const explanation = description.slice(question.length).trim().replace(/\n/g, ' ');
+  return { question, body: [...sections, explanation].filter(Boolean), options,
+    preview: [], questionTabs: false, safeguardPause: false, unreadable: false };
+}
 
 /** Used by the Codex window registry, input driver and chat watcher to interpret the same pane capture. */
 export function parseCodexScreen(capture: PaneCapture) {
@@ -21,6 +46,7 @@ export function parseCodexScreen(capture: PaneCapture) {
   const working = composer && lines.slice(Math.max(0, prompt - 6), prompt + 1).some((line) => /esc to interrupt/i.test(line));
   return {
     title: capture.title, lines, composer, empty,
+    dialog: menu ? readFolderAccessPrompt(lines) ?? unreadablePrompt(lines) : null,
     output: working ? lines.slice(0, prompt).filter((line) => line.trim()).slice(-14) : [],
     input: composer ? lines.slice(prompt, capture.cursorY + 1).join('\n') : '',
     activity: menu ? 'waiting' as const : working ? 'working' as const : empty ? 'idle' as const : 'unknown' as const,
