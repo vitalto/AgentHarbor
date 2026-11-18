@@ -6,10 +6,10 @@ import test from 'node:test';
 import {
   buildStoredAttachmentRecords,
   buildStoredImageRecords,
+  createStoredFileName,
   isAllowedImageMimeType,
   resolveAttachmentAssetFile,
   resolveImageAssetFile,
-  sanitizeStoredFileName,
 } from '@/modules/assets/services/image-assets.service.js';
 
 const ASSETS_DIR = path.join(os.homedir(), '.agentharbor', 'assets');
@@ -61,10 +61,19 @@ test('buildStoredImageRecords decodes a Cyrillic name from multer latin1 mojibak
   assert.equal(records[0].path, `${ASSETS_DIR.replace(/\\/g, '/')}/123-456-Снимок.png`);
 });
 
-test('sanitizeStoredFileName keeps Unicode letters and digits but drops spaces and punctuation', () => {
-  assert.equal(sanitizeStoredFileName('Отчёт за март.pdf'), 'Отчёт_за_март.pdf');
-  assert.equal(sanitizeStoredFileName('shot.png'), 'shot.png');
-  assert.equal(sanitizeStoredFileName('a (1)/b.txt'), 'a__1__b.txt');
+test('stored names keep short Unicode names readable and remove characters the asset route cannot serve', () => {
+  assert.ok(createStoredFileName('Отчёт за март.pdf').endsWith('-Отчёт_за_март.pdf'));
+  assert.ok(createStoredFileName('shot.png').endsWith('-shot.png'));
+  assert.ok(createStoredFileName('a (1)/b.txt').endsWith('-a__1__b.txt'));
+  assert.ok(resolveImageAssetFile(createStoredFileName('отчёт...май.pdf')));
+});
+
+test('uploads with the same shortened name stay distinct and even an oversized extension fits on disk', () => {
+  const longName = `${'я'.repeat(160)}.docx`;
+  assert.notEqual(createStoredFileName(longName), createStoredFileName(longName));
+  const longExtension = createStoredFileName(`notes.${'字'.repeat(100)}`);
+  assert.ok(Buffer.byteLength(longExtension) <= 255);
+  assert.ok(resolveImageAssetFile(longExtension));
 });
 
 test('resolveImageAssetFile resolves plain filenames inside the assets dir', () => {

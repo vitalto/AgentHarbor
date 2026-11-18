@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fsSync, { promises as fs } from 'node:fs';
 import path from 'node:path';
 
@@ -43,15 +44,29 @@ export function isAllowedImageMimeType(mimeType: string): boolean {
   return ALLOWED_IMAGE_MIME_TYPES.has(mimeType);
 }
 
-/**
- * Builds the on-disk name for a stored upload from its (already UTF-8 decoded)
- * original name. Unicode letters and digits are kept so a Cyrillic or other
- * non-ASCII name stays readable and findable; everything else (spaces, path
- * separators, punctuation) collapses to `_`, and a unique prefix supplied by
- * the caller guarantees uniqueness and blocks traversal.
- */
-export function sanitizeStoredFileName(name: string): string {
-  return name.replace(/[^\p{L}\p{N}._-]/gu, '_');
+const MAX_STORED_FILENAME_BYTES = 255;
+
+/** Both upload routes use this disk name. The attachment record keeps the original display name. */
+export function createStoredFileName(originalName: string): string {
+  const uploadId = randomUUID();
+  const prefix = uploadId + '-';
+  const safeName = originalName.replace(/[^\p{L}\p{N}._-]/gu, '_').replace(/\.{2,}|\.$/g, '_');
+  if (Buffer.byteLength(prefix + safeName) <= MAX_STORED_FILENAME_BYTES) return prefix + safeName;
+
+  const extension = path.extname(safeName);
+  let remainingBytes = MAX_STORED_FILENAME_BYTES - Buffer.byteLength(prefix + extension);
+  if (remainingBytes <= 0) {
+    return Buffer.byteLength(uploadId + extension) <= MAX_STORED_FILENAME_BYTES ? uploadId + extension : uploadId;
+  }
+
+  let stem = '';
+  for (const character of path.basename(safeName, extension)) {
+    const bytes = Buffer.byteLength(character);
+    if (bytes > remainingBytes) break;
+    stem += character;
+    remainingBytes -= bytes;
+  }
+  return prefix + stem.replace(/\.$/, '') + extension;
 }
 
 /** Creates the global `~/.agentharbor/assets` folder if needed and returns it. */

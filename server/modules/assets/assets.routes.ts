@@ -4,10 +4,10 @@ import multer from 'multer';
 import {
   buildStoredAttachmentRecords,
   buildStoredImageRecords,
+  createStoredFileName,
   ensureImageAssetsDir,
   isAllowedImageMimeType,
   openStoredAttachmentAsset,
-  sanitizeStoredFileName,
 } from '@/modules/assets/services/image-assets.service.js';
 import { decodeMultipartFilename } from '@/shared/upload-filename.js';
 
@@ -22,9 +22,7 @@ const storage = multer.diskStorage({
       .catch((error) => cb(error as Error, ''));
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const sanitizedName = sanitizeStoredFileName(decodeMultipartFilename(file.originalname));
-    cb(null, `${uniqueSuffix}-${sanitizedName}`);
+    cb(null, createStoredFileName(decodeMultipartFilename(file.originalname)));
   },
 });
 
