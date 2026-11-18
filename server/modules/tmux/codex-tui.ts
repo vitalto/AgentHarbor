@@ -3,6 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { AgentWindowError } from '@/modules/tmux/agent-windows.service.js';
 import { readCodexBackgroundTerminalCount } from '@/modules/tmux/codex-background-terminals.js';
+import { pasteCodexText } from '@/modules/tmux/codex-cli.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
 import { unreadablePrompt, type TuiPrompt } from '@/modules/tmux/tui-prompt.js';
 
@@ -207,14 +208,14 @@ async function submitCodexInput(paneId: string, text: string, imagePaths: string
   let lastInput = first.input;
   for (const imagePath of imagePaths) {
     signal?.throwIfAborted();
-    await tmuxService.pasteText(paneId, imagePath);
+    await pasteCodexText(paneId, imagePath);
     const attached = await waitForScreen(paneId, (screen) => screen.title === expectedTitle && screen.input !== lastInput
       && /\[Image #\d+\]\s*$/i.test(screen.input), 'Codex could not attach this image. Review the draft in Terminal.', signal);
     lastInput = attached.input;
   }
   if (text.trim()) {
     signal?.throwIfAborted();
-    await tmuxService.pasteText(paneId, text);
+    await pasteCodexText(paneId, text);
     const pasted = await waitForScreen(paneId, (screen) => screen.title === expectedTitle && screen.composer && !screen.empty && screen.input !== lastInput,
       'Codex did not accept the paste. Review the draft in Terminal.', signal);
     lastInput = pasted.input;

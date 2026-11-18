@@ -2,11 +2,23 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { pasteCodexText } from '@/modules/tmux/codex-cli.js';
 import { createCodexTerminalMonitor } from '@/modules/tmux/codex-terminal-monitor.js';
 import { parseCodexScreen, typeCodexInput } from '@/modules/tmux/codex-tui.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
 
 const base = { title: 'thread', dead: false, cursorVisible: true, cursorX: 2, cursorY: 1 };
+
+test('Codex pastes preserve punctuation across Windows console input and native terminals', async (t) => {
+  const paste = t.mock.method(tmuxService, 'pasteText', async () => {});
+  const text = 'A — €\nБ😀';
+  await pasteCodexText('%1', text, true);
+  await pasteCodexText('%2', text, false);
+  assert.deepEqual(paste.mock.calls.map((call) => call.arguments), [
+    ['%1', 'A \x1b[0;0;8212;1;0;1_ \x1b[0;0;8364;1;0;1_\n\x1b[0;0;1041;1;0;1_😀'],
+    ['%2', text],
+  ]);
+});
 
 test('an automatic prompt does not submit text typed by the user during its paste', async (t) => {
   let draft = '';
