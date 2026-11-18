@@ -15,7 +15,8 @@ const appId = 'app-session';
 const event = (type: string, payload: AnyRecord) => JSON.stringify({ timestamp: new Date().toISOString(), type, payload }) + '\n';
 
 for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'draft', 'switched']) {
-  test('Codex TUI transport: ' + scenario, async (t) => {
+  const description = scenario === 'resume' ? 'a busy image follow-up leaves the composer ready for the next turn' : scenario;
+  test('Codex TUI transport: ' + description, async (t) => {
     const home = await mkdtemp(path.join(os.tmpdir(), 'ah-codex-'));
     const originalHome = process.env.AH_CODEX_HOME;
     process.env.AH_CODEX_HOME = home;
@@ -43,12 +44,20 @@ for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'dra
     t.mock.method(tmuxService, 'readWindowOption', async (_id: string, name: string) =>
       name === '@agentharbor-codex-pane' ? pane.paneId : '["default","default"]');
     let draft = scenario === 'draft' ? 'already typed' : '';
+    let captionPastedAt = -Infinity;
+    let working = false;
     const title = scenario === 'switched' ? '01999999-1234-7456-9876-123456789abc' : nativeId.slice(0, 29) + '...';
-    t.mock.method(tmuxService, 'inspectPane', async () => ({
-      title, dead: false, cursorVisible: true, cursorX: 2 + draft.length, cursorY: 1,
-      lines: ['', draft ? '› ' + draft : '› \x1b[2mAsk anything\x1b[0m', '', '  ? for shortcuts'],
-    }));
+    t.mock.method(tmuxService, 'inspectPane', async () => {
+      const draftLines = draft.split('\n');
+      const [firstLine, ...continuation] = draftLines;
+      return {
+        title, dead: false, cursorVisible: true, cursorX: 2 + draftLines.at(-1)!.length, cursorY: draftLines.length,
+        lines: [working ? '• Working (1s • esc to interrupt)' : '',
+          draft ? '› ' + firstLine : '› \x1b[2mAsk anything\x1b[0m', ...continuation.map((line) => '  ' + line), '', '  ? for shortcuts'],
+      };
+    });
     const pasted: string[] = [];
+    const submittedDrafts: string[] = [];
     const keys: string[] = [];
     let acknowledgeSubmit!: () => void;
     const submitted = new Promise<void>((resolve) => { acknowledgeSubmit = resolve; });
@@ -56,19 +65,27 @@ for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'dra
       assert.equal(id, pane.paneId);
       pasted.push(text);
       draft += text.endsWith('.png') ? '[Image #1]' : text;
+      if (text === 'follow-up caption') captionPastedAt = performance.now();
     });
     t.mock.method(tmuxService, 'sendKeys', async (id: string, input: string[]) => {
       assert.equal(id, pane.paneId);
       keys.push(...input);
-      draft = '';
-      if (keys.length === 1) {
+      // While Codex is finishing a paste burst, Enter inserts a newline and the current turn can still finish.
+      if (performance.now() - captionPastedAt < 120) draft += '\n';
+      else {
+        if (input[0] === 'Enter') submittedDrafts.push(draft);
+        draft = '';
+      }
+      if (!working) {
         await appendFile(file, event('event_msg', { type: 'task_started', turn_id: 'turn' }));
+        working = true;
         acknowledgeSubmit();
       }
       if (input[0] === 'Escape' || (scenario === 'interrupt' && keys.length === 1)) return;
       if (scenario === 'resume' && keys.length === 1) return;
       await appendFile(file, event('response_item', { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'new reply' }] })
         + event('event_msg', { type: 'task_complete', turn_id: 'turn' }));
+      working = false;
     });
 
     const messages: AnyRecord[] = [];
@@ -80,7 +97,9 @@ for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'dra
     const run = runCodexTmuxTurn('line one\nline two', { sessionId: appId, images: [{ path: 'one.png' }], files: [{ path: 'notes.txt' }] }, {
       isWebSocketWriter: true, send: (msg) => messages.push(msg as AnyRecord),
     }, context);
-    if (scenario === 'resume') assert.equal(await steerCodexTurn(appId, 'follow-up', {}), true);
+    if (scenario === 'resume') {
+      assert.equal(await steerCodexTurn(appId, 'follow-up caption', { images: [{ path: 'follow-up.png' }] }), true);
+    }
     if (scenario === 'interrupt') {
       await submitted;
       assert.equal(await codexRuntime.abort(appId), true);
@@ -110,5 +129,15 @@ for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'dra
       assert.equal(messages.at(-1)?.success, true);
     }
     assert.equal(await steerCodexTurn(appId, 'after completion', {}), false);
+    if (scenario === 'resume') {
+      const nextMessages: AnyRecord[] = [];
+      await runCodexTmuxTurn('fixed?', { sessionId: appId }, {
+        isWebSocketWriter: true, send: (msg) => nextMessages.push(msg as AnyRecord),
+      }, context);
+      assert.deepEqual(nextMessages.filter((msg) => msg.kind === 'error').map((msg) => msg.content), []);
+      assert.equal(nextMessages.at(-1)?.success, true);
+      assert.deepEqual(pasted.slice(2), ['follow-up.png', 'follow-up caption', 'fixed?']);
+      assert.deepEqual(submittedDrafts.slice(1), ['[Image #1]follow-up caption', 'fixed?']);
+    }
   });
 }
