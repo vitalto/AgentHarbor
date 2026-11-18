@@ -6,6 +6,8 @@ import { unreadablePrompt, type TuiPrompt } from '@/modules/tmux/tui-prompt.js';
 
 type PaneCapture = Awaited<ReturnType<typeof tmuxService.inspectPane>>;
 const sgr = /\x1b\[[0-9;:]*m/g;
+// Codex keeps Enter mapped to newline for 120 ms after a paste burst, even after rendering it.
+const pasteSettleMs = 150;
 
 function readFolderAccessPrompt(lines: string[]): TuiPrompt | null {
   const rows = lines.map((line) => line.trim());
@@ -102,9 +104,10 @@ export async function readCodexStatusThread(paneId: string, title: string, signa
 
 type Screen = ReturnType<typeof parseCodexScreen>;
 
-async function waitForScreen(paneId: string, accepts: (screen: Screen) => boolean, error: string) {
+async function waitForScreen(paneId: string, accepts: (screen: Screen) => boolean, error: string, signal?: AbortSignal) {
   const deadline = Date.now() + 3000;
   do {
+    signal?.throwIfAborted();
     const screen = await readCodexScreen(paneId);
     if (accepts(screen)) return screen;
     await delay(50);
@@ -124,15 +127,31 @@ export async function typeCodexInput(paneId: string, text: string, imagePaths: s
     signal?.throwIfAborted();
     await tmuxService.pasteText(paneId, imagePath);
     const attached = await waitForScreen(paneId, (screen) => screen.title === expectedTitle && screen.input !== lastInput
-      && /\[Image #\d+\]\s*$/i.test(screen.input), 'Codex could not attach this image. Review the draft in Terminal.');
+      && /\[Image #\d+\]\s*$/i.test(screen.input), 'Codex could not attach this image. Review the draft in Terminal.', signal);
     lastInput = attached.input;
   }
   if (text.trim()) {
     signal?.throwIfAborted();
     await tmuxService.pasteText(paneId, text);
-    await waitForScreen(paneId, (screen) => screen.title === expectedTitle && screen.composer && !screen.empty && screen.input !== lastInput,
-      'Codex did not accept the paste. Review the draft in Terminal.');
+    const pasted = await waitForScreen(paneId, (screen) => screen.title === expectedTitle && screen.composer && !screen.empty && screen.input !== lastInput,
+      'Codex did not accept the paste. Review the draft in Terminal.', signal);
+    lastInput = pasted.input;
   }
+  let stableSince = performance.now();
+  await waitForScreen(paneId, (screen) => {
+    if (screen.title !== expectedTitle || !screen.composer || screen.empty) {
+      throw new AgentWindowError('The Codex input changed before the message could be sent.');
+    }
+    if (screen.input !== lastInput) {
+      lastInput = screen.input;
+      stableSince = performance.now();
+    }
+    return performance.now() - stableSince >= pasteSettleMs;
+  }, 'The pasted Codex message did not finish appearing in the terminal.', signal);
   signal?.throwIfAborted();
   await tmuxService.sendKeys(paneId, ['Enter']);
+  await waitForScreen(paneId, (screen) => {
+    if (screen.title !== expectedTitle) throw new AgentWindowError('The terminal switched to a different Codex session.');
+    return screen.empty || screen.dialog !== null;
+  }, 'Codex did not submit the draft after Enter.');
 }

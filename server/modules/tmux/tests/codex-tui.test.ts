@@ -3,10 +3,54 @@ import test from 'node:test';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { createCodexTerminalMonitor } from '@/modules/tmux/codex-terminal-monitor.js';
-import { parseCodexScreen } from '@/modules/tmux/codex-tui.js';
+import { parseCodexScreen, typeCodexInput } from '@/modules/tmux/codex-tui.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
 
 const base = { title: 'thread', dead: false, cursorVisible: true, cursorX: 2, cursorY: 1 };
+
+for (const withText of [true, false]) {
+  test('Codex waits out paste-burst Enter suppression for ' + (withText ? 'an image with a caption' : 'an image alone'), async (t) => {
+    let draft = '';
+    let lastChange = 0;
+    let submitted = 0;
+    let settlingReads = 0;
+    t.mock.method(tmuxService, 'pasteText', async (_pane: string, value: string) => {
+      draft = value === 'test.png' ? '[Image #1]' : '[Image #1] подп';
+      lastChange = performance.now();
+    });
+    t.mock.method(tmuxService, 'inspectPane', async () => {
+      if (draft.endsWith('подп') && ++settlingReads === 3) {
+        draft += 'ись';
+        lastChange = performance.now();
+      }
+      return { ...base, cursorX: 2 + draft.length, lines: ['', '› ' + draft] };
+    });
+    const enter = t.mock.method(tmuxService, 'sendKeys', async (_pane: string, keys: string[]) => {
+      assert.deepEqual(keys, ['Enter']);
+      if (performance.now() - lastChange <= 120) {
+        draft += '\n';
+        return;
+      }
+      assert.equal(draft, withText ? '[Image #1] подпись' : '[Image #1]');
+      submitted++;
+      draft = '';
+    });
+    await typeCodexInput('%1', withText ? 'подпись' : '', ['test.png'], base.title);
+    assert.equal(submitted, 1);
+    assert.equal(enter.mock.callCount(), 1);
+  });
+}
+
+test('Codex reports a stuck draft when the terminal consumes Enter as a newline', async (t) => {
+  let lines = ['', '›'];
+  t.mock.method(tmuxService, 'inspectPane', async () => ({
+    ...base, lines, cursorY: lines.length - 1, cursorX: lines.at(-1) === '› hello' ? 7 : 2,
+  }));
+  t.mock.method(tmuxService, 'pasteText', async () => { lines = ['', '› hello']; });
+  const enter = t.mock.method(tmuxService, 'sendKeys', async () => { lines.push(''); });
+  await assert.rejects(typeCodexInput('%1', 'hello', [], base.title), /did not submit/i);
+  assert.equal(enter.mock.callCount(), 1);
+});
 
 test('Codex identifies the empty composer, a draft with the cursor at Home, and a native selection menu', () => {
   const placeholder = '\x1b[1m›\x1b[0m \x1b[2mAsk Codex to do anything\x1b[0m';
