@@ -7,11 +7,12 @@ import { quoteForShell } from '@/modules/tmux/agent-launch.js';
 import { AgentWindowError } from '@/modules/tmux/agent-windows.service.js';
 import { getCodexCliConfig } from '@/modules/tmux/codex-cli.js';
 import { listLockedCodexThreads } from '@/modules/tmux/codex-thread-locks.js';
-import { readCodexScreen, typeCodexInput } from '@/modules/tmux/codex-tui.js';
+import { readCodexScreen, readCodexStatusThread, typeCodexInput } from '@/modules/tmux/codex-tui.js';
 import { toClaudePath, toLocalPath } from '@/modules/tmux/path-translation.js';
 import { tmuxService, type AgentPane } from '@/modules/tmux/tmux.service.js';
 
 const nativeIdOption = '@agentharbor-codex-thread';
+const observedIdOption = '@agentharbor-codex-current-thread';
 const paneIdOption = '@agentharbor-codex-pane';
 const selectionOption = '@agentharbor-codex-selection';
 const uuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
@@ -22,29 +23,36 @@ function titleIdPrefix(title: string) {
   return /^([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]+)(?:\.\.\.|…)$/i.exec(title)?.[1];
 }
 
-async function windowFor(appId: string, panes: AgentPane[]) {
-  const row = sessionsDb.getSessionById(appId);
-  if (row?.provider !== 'codex') return null;
-  for (const pane of panes) {
-    if (pane.dead || !pane.windowName.startsWith('codex-')) continue;
-    const prefix = titleIdPrefix(pane.title ?? '');
-    const matches = row.provider_session_id && prefix ? row.provider_session_id.startsWith(prefix) : null;
-    // /new and /resume switch the conversation in place, while tmux keeps the original window name.
-    if (matches === false || (!matches && pane.windowName !== `codex-${appId}`)) continue;
-    const owner = await tmuxService.readWindowOption(pane.windowId, paneIdOption).catch(() => null);
-    if (owner === pane.paneId) return { pane, providerSessionId: row.provider_session_id };
-    // Previous releases tagged remote windows with just the native id. Keep them attachable for migration.
-    if (!owner && row.provider_session_id && pane.command.includes(row.provider_session_id)
-      && await tmuxService.readWindowOption(pane.windowId, nativeIdOption).catch(() => null) === row.provider_session_id) {
-      return { pane, providerSessionId: row.provider_session_id };
-    }
-  }
-  return null;
+async function paneOwnership(pane: AgentPane) {
+  if (pane.dead || !pane.windowName.startsWith('codex-')) return null;
+  const readOption = (key: string) => tmuxService.readWindowOption(pane.windowId, key).catch(() => null);
+  const owner = await readOption(paneIdOption);
+  if (owner) return owner === pane.paneId ? { legacyThreadId: null } : null;
+  // Legacy tags belong to a window; the resume command singles out its original pane after a split.
+  const initial = await readOption(nativeIdOption);
+  if (!initial || !uuid.test(initial)) return null;
+  const resumeArgs = ['--remote', 'unix://', 'resume', initial].map(quoteForShell).join(' ');
+  if (!pane.command.includes(resumeArgs)) return null;
+  const observed = await readOption(observedIdOption);
+  return { legacyThreadId: observed && uuid.test(observed) ? observed : initial };
 }
 
 /** Looks up the terminal for a chat without opening a new window or taking ownership of an external session. */
 export async function findCodexWindow(appId: string, panes?: AgentPane[]) {
-  return windowFor(appId, panes ?? await tmuxService.listPanes());
+  const row = sessionsDb.getSessionById(appId);
+  if (row?.provider !== 'codex') return null;
+  const nativeId = row.provider_session_id;
+  for (const pane of panes ?? await tmuxService.listPanes()) {
+    const prefix = titleIdPrefix(pane.title ?? '');
+    if (prefix && nativeId && !nativeId.startsWith(prefix)) continue;
+    const owner = await paneOwnership(pane);
+    if (!owner) continue;
+    // /new and /resume can switch threads without renaming the tmux window.
+    const matches = prefix && nativeId ? nativeId.startsWith(prefix)
+      : owner.legacyThreadId ? owner.legacyThreadId === nativeId : pane.windowName === `codex-${appId}`;
+    if (matches) return { pane, providerSessionId: nativeId, ...owner };
+  }
+  return null;
 }
 
 async function openWindow(appId: string) {
@@ -80,7 +88,7 @@ async function openWindow(appId: string) {
     await tmuxService.setWindowOption(pane.windowId, paneIdOption, pane.paneId);
     await tmuxService.setWindowOption(pane.windowId, selectionOption, JSON.stringify([row.model || 'default', row.effort || 'default']));
     if (!nativeId) void registerNewTerminal(appId, pane);
-    return { pane, providerSessionId: nativeId };
+    return { pane, providerSessionId: nativeId, legacyThreadId: null };
   } catch (error) {
     await tmuxService.killWindow(pane.windowId).catch(() => {});
     throw error;
@@ -142,12 +150,23 @@ export async function inspectCodexWindow(appId: string, pane: AgentPane) {
 }
 
 /** Waits for the real Codex composer and binds its native UUID before the chat types anything. */
-export async function waitForCodexComposer(appId: string, pane: AgentPane, signal: AbortSignal) {
+export async function waitForCodexComposer(appId: string, pane: AgentPane, signal: AbortSignal, legacyThreadId: string | null) {
   let deadline = Date.now() + 15_000;
   do {
     signal.throwIfAborted();
     const { screen, providerSessionId } = await inspectCodexWindow(appId, pane);
     if (screen.empty && providerSessionId) return { screen, providerSessionId };
+    if (screen.empty && legacyThreadId && !titleIdPrefix(screen.title)) {
+      if (screen.activity === 'working') throw new AgentWindowError('Wait for this Codex turn to finish before sending from chat.');
+      const status = await readCodexStatusThread(pane.paneId, screen.title, signal);
+      if (status.threadId !== legacyThreadId) {
+        await tmuxService.setWindowOption(pane.windowId, observedIdOption, status.threadId);
+      }
+      if (status.threadId !== sessionsDb.getSessionById(appId)?.provider_session_id) {
+        throw new AgentWindowError('The terminal switched to a different Codex session. Open that conversation to continue.');
+      }
+      return { screen: status.screen, providerSessionId: status.threadId };
+    }
     if (screen.activity === 'waiting') deadline = Date.now() + 15_000;
     if (screen.composer && !screen.empty) throw new AgentWindowError('Finish the draft in the Codex terminal before sending.');
     await delay(150);
@@ -159,7 +178,12 @@ export async function waitForCodexComposer(appId: string, pane: AgentPane, signa
 export async function applyCodexSelection(pane: AgentPane, title: string, model: string, effort: string,
   resolveDefaults: () => Promise<{ model?: string; effort?: string }>) {
   const selection = JSON.stringify([model, effort]);
-  if (await tmuxService.readWindowOption(pane.windowId, selectionOption) === selection) return;
+  const previous = await tmuxService.readWindowOption(pane.windowId, selectionOption);
+  if (previous === selection) return;
+  if (!previous && model === 'default' && effort === 'default') {
+    await tmuxService.setWindowOption(pane.windowId, selectionOption, selection);
+    return;
+  }
   const defaults = await resolveDefaults();
   const target = model === 'default' ? defaults.model : model;
   const level = effort === 'default' ? defaults.effort : effort;
@@ -200,12 +224,14 @@ async function queryLiveThreads(): Promise<LiveThread[]> {
   await Promise.all(panes.filter((pane) => !pane.dead && pane.windowName.startsWith('codex-')).map(async (pane) => {
     const appId = pane.windowName.slice('codex-'.length);
     const row = sessionsDb.getSessionById(appId);
-    if (await tmuxService.readWindowOption(pane.windowId, paneIdOption).catch(() => null) !== pane.paneId) return;
+    const owner = await paneOwnership(pane);
+    if (!owner) return;
     const screen = await readCodexScreen(pane.paneId).catch(() => null);
     if (!screen) return;
-    const id = row?.provider === 'codex' && !row.provider_session_id
+    const fromTitle = row?.provider === 'codex' && !row.provider_session_id
       ? await bindScreen(appId, screen.title)
       : await threadForTitle(screen.title, row?.provider_session_id ?? null);
+    const id = fromTitle ?? (!titleIdPrefix(screen.title) ? owner.legacyThreadId : null);
     if (!id) return;
     const current = sessionsDb.getSessionByProviderSessionId(id);
     live.set(id, { providerSessionId: id, activity: screen.activity, pane, updatedAt: current ? Date.parse(current.updated_at) : undefined });

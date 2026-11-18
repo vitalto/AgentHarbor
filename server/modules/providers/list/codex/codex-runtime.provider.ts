@@ -88,8 +88,8 @@ export async function runCodexTmuxTurn(command: string, options: AnyRecord, writ
     startup: new AbortController(), submitted: false, interrupted: false };
   turns.set(appId, turn);
   try {
-    const { pane, providerSessionId: previousId } = await ensureCodexWindow(appId);
-    const { screen, providerSessionId } = await waitForCodexComposer(appId, pane, turn.startup.signal);
+    const { pane, providerSessionId: previousId, legacyThreadId } = await ensureCodexWindow(appId);
+    const { screen, providerSessionId } = await waitForCodexComposer(appId, pane, turn.startup.signal, legacyThreadId);
     writer.setSessionId?.(providerSessionId);
     const destination = { paneId: pane.paneId, title: screen.title };
     const session = sessionsDb.getSessionById(appId);
