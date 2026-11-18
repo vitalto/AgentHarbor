@@ -11,6 +11,8 @@ export type TuiPromptOption = {
 };
 
 export type TuiPrompt = {
+  /** Identifies the visible Codex question and choices so a stale browser cannot answer the next question. */
+  codexQuestionId?: string;
   /** The line asking the user something, or the whole dialog text when no line is a question. */
   question: string;
   /** Dialog text above the options (title, command, diff preview), top to bottom. */

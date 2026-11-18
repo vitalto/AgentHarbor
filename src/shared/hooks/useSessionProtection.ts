@@ -20,6 +20,7 @@ const backgroundTasksKey = (tasks: readonly BackgroundTaskSummary[] | undefined)
 
 const sessionActivitiesMatch = (left: SessionActivity, right: SessionActivity): boolean =>
   left.statusText === right.statusText
+  && Boolean(left.terminalOnly) === Boolean(right.terminalOnly)
   && left.canInterrupt === right.canInterrupt
   && left.startedAt === right.startedAt
   && Boolean(left.background) === Boolean(right.background)
@@ -86,6 +87,7 @@ export function useSessionProtection() {
 
       if (
         continuing
+        && !continuing.terminalOnly
         && continuing.statusText === next.statusText
         && continuing.canInterrupt === next.canInterrupt
       ) {
@@ -193,13 +195,14 @@ export function useSessionProtection() {
             snapshot.statusText !== undefined ? snapshot.statusText : existing?.statusText ?? null,
           canInterrupt: snapshot.canInterrupt ?? existing?.canInterrupt ?? true,
           startedAt: snapshotStartedAt ?? existing?.startedAt ?? now,
+          ...(snapshot.terminalOnly ? { terminalOnly: true } : {}),
           ...(snapshot.background ? { background: true } : {}),
           ...(snapshot.tasks ? { tasks: snapshot.tasks } : {}),
         });
       }
 
       for (const [sessionId, activity] of prev) {
-        if (!incoming.has(sessionId) && now - activity.startedAt < LOCAL_ACTIVITY_GRACE_MS) {
+        if (!incoming.has(sessionId) && !activity.terminalOnly && now - activity.startedAt < LOCAL_ACTIVITY_GRACE_MS) {
           updated.set(sessionId, activity);
         }
       }

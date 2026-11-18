@@ -165,6 +165,8 @@ export type BackgroundTaskSummary = {
 
 /** What a busy session is doing, as shown by the activity indicator: producing a response, or only running background tasks. */
 export type SessionActivity = {
+  /** A live terminal turn observed outside the chat-run registry; only the terminal poll can declare it idle. */
+  terminalOnly?: boolean;
   /** Provider-supplied status line; null renders the default activity label. */
   statusText: string | null;
   canInterrupt: boolean;
@@ -218,6 +220,8 @@ export type IsSessionProcessing = (sessionId?: string | null) => boolean;
 
 /** One running session as reported by the server, before it is folded into the client-side activity map. */
 export type SessionActivitySnapshot = {
+  /** The server observed a turn in the terminal that has no matching registered chat run. */
+  terminalOnly?: boolean;
   sessionId: string;
   statusText?: string | null;
   canInterrupt?: boolean;

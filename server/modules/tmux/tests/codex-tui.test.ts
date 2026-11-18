@@ -141,6 +141,68 @@ test('pasted or wrapped menu instructions stay in the editable Codex draft', () 
   }
 });
 
+test('the Codex queue exposes unanswered questions without resetting the working clock or counting a pasted copy', () => {
+  const queue = ['• Queued follow-up inputs', '  ? 2 questions', '    shift+← to answer'];
+  const lines = ['◦ Working (16m 08s • esc to interrupt) · 1 b…', '', ...queue, '', '›', '', '? for shortcuts'];
+  const screen = parseCodexScreen({ ...base, cursorY: 6, lines });
+  assert.equal(screen.activity, 'working');
+  assert.equal(screen.pendingQuestionCount, 2);
+  assert.deepEqual(screen.turnStatus, { label: 'Working', elapsedSeconds: 968 });
+  assert.equal(parseCodexScreen({ ...base, cursorY: 6, lines: [...lines.slice(0, 6), '› a draft', ...queue] }).pendingQuestionCount, 2);
+  assert.equal(parseCodexScreen({ ...base, cursorY: 3, lines: ['› copied output', ...queue, '  shortcuts'] }).pendingQuestionCount, 0);
+  assert.equal(parseCodexScreen({ ...base, cursorY: 4, lines: [...queue, '', '›'] }).activity, 'idle');
+});
+
+const questionLines = [
+  '', '  Where should the', '  sample go?', '', '  › 1. First option', '    2. Second option', '',
+  '  enter submit   ctrl+] skip   option 1/3', '  shift+→ main prompt', '',
+];
+
+test('a narrow native question panel exposes its wrapped title and only the choices visible in this capture', () => {
+  const drawer = parseCodexScreen({ ...base, cursorVisible: false, lines: questionLines });
+  assert.equal(drawer.activity, 'waiting');
+  assert.equal(drawer.dialog?.question, 'Where should the sample go?');
+  assert.ok(drawer.dialog.codexQuestionId);
+  assert.deepEqual(drawer.dialog.options.map(({label}) => label), ['First option', 'Second option']);
+  const typed = parseCodexScreen({ ...base, cursorY: 4,
+    lines: ['  Can you share', '  the document?', '', '  › my existing draft', '', '  enter submit   ctrl+] skip', '  shift+→ main prompt'] });
+  assert.equal(typed.dialog?.question, 'Can you share the document?');
+  assert.deepEqual(typed.dialog.options, []);
+});
+
+test('opening and closing the native queue never submits; an explicit answer is sent once to the matching live question', async (t) => {
+  const nativeId = '00000000-0000-4000-8000-000000000001';
+  const queue = ['• Queued follow-up inputs', '  ? 1 question', '    shift+← to answer', '', '›'];
+  let lines = queue;
+  t.mock.method(sessionsDb, 'getSessionById', () => ({ provider: 'codex', provider_session_id: nativeId }));
+  t.mock.method(tmuxService, 'listPanes', async () => [{ paneId: '%1', windowName: 'codex-app', windowId: '@1', title: nativeId }]);
+  t.mock.method(tmuxService, 'readWindowOption', async () => '%1');
+  t.mock.method(tmuxService, 'inspectPane', async () => ({
+    ...base, title: nativeId, cursorY: lines.length - 1, cursorVisible: lines === queue, lines,
+  }));
+  const keys: string[] = [];
+  t.mock.method(tmuxService, 'sendKeys', async (_pane: string, delivered: string[]) => {
+    keys.push(...delivered);
+    if (delivered[0] === 'S-Left') lines = questionLines;
+    if (delivered[0] === 'S-Right') lines = queue;
+    if (delivered[0] === 'Down') lines = questionLines.map(line => line.replace('› 1.', '  1.').replace('  2.', '› 2.'));
+    if (delivered[0] === 'Enter') lines = ['›'];
+  });
+  const monitor = createCodexTerminalMonitor(() => false);
+  assert.equal(await monitor.focusQuestions('app', true), true);
+  assert.equal(await monitor.focusQuestions('app', true), true);
+  const questionId = parseCodexScreen({ ...base, lines, cursorVisible: false }).dialog?.codexQuestionId;
+  assert.equal(await monitor.chooseOption('app', 1, 'previous-question'), false);
+  assert.equal(await monitor.focusQuestions('app', false), true);
+  assert.equal(await monitor.chooseOption('app', 1, questionId), false);
+  assert.deepEqual(keys, ['S-Left', 'S-Right']);
+  assert.equal(await monitor.focusQuestions('app', true), true);
+  assert.equal(await monitor.chooseOption('app', 1, questionId), true);
+  assert.equal(await monitor.chooseOption('app', 1, questionId), false);
+  assert.equal(await monitor.focusQuestions('app', true), false);
+  assert.deepEqual(keys, ['S-Left', 'S-Right', 'S-Left', 'Down', 'Enter']);
+});
+
 test('Codex folder access exposes the scope and answers the live selection in either direction', async (t) => {
   const trust = '1. Trust and continue';
   const back = '2. Back to Agent Command Center';

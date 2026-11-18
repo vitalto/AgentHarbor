@@ -1,16 +1,18 @@
 import { stat } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { findCodexWindow, inspectCodexWindow } from '@/modules/tmux/codex-windows.service.js';
 import type { MonitorSocket } from '@/modules/tmux/session-monitor.service.js';
 import { tmuxService } from '@/modules/tmux/tmux.service.js';
-import { keysForOption } from '@/modules/tmux/tui-prompt.js';
+import { keysForOption, keysToReachOption } from '@/modules/tmux/tui-prompt.js';
 
-type ChatWatch = { sockets: Set<MonitorSocket>; prompt: string | null; output: string; size?: number };
+type ChatWatch = { sockets: Set<MonitorSocket>; prompt?: string | null; output: string; size?: number };
 
 /** Mirrors native menus and changes typed directly in the Codex terminal to subscribed web chats. */
 export function createCodexTerminalMonitor(isProcessing: (appId: string) => boolean) {
   const watches = new Map<string, ChatWatch>();
+  const answering = new Set<string>();
   let timer: NodeJS.Timeout | undefined;
   let ticking = false;
   const broadcast = (watch: ChatWatch, frame: string) => {
@@ -61,10 +63,12 @@ export function createCodexTerminalMonitor(isProcessing: (appId: string) => bool
       return watches.get(appId)?.sockets ?? [];
     },
     watch(appId: string, socket: MonitorSocket) {
-      const watch = watches.get(appId) ?? { sockets: new Set<MonitorSocket>(), prompt: null, output: '' };
+      const watch: ChatWatch = watches.get(appId) ?? { sockets: new Set<MonitorSocket>(), output: '' };
       watch.sockets.add(socket);
       watches.set(appId, watch);
-      if (watch.prompt && socket.readyState === 1) socket.send(watch.prompt);
+      if (watch.prompt !== undefined && socket.readyState === 1) {
+        socket.send(watch.prompt ?? JSON.stringify({ kind: 'tui_prompt_cleared', sessionId: appId }));
+      }
       timer ??= setInterval(() => void tick(), 750).unref();
     },
     unwatchSocket(socket: MonitorSocket) {
@@ -77,11 +81,50 @@ export function createCodexTerminalMonitor(isProcessing: (appId: string) => bool
         timer = undefined;
       }
     },
-    async chooseOption(appId: string, optionIndex: number) {
+    async focusQuestions(appId: string, open: boolean) {
       const owned = await findCodexWindow(appId);
-      if (!owned) return false;
-      const { screen } = await inspectCodexWindow(appId, owned.pane);
-      if (!Number.isInteger(optionIndex) || !screen.dialog?.options[optionIndex]) return false;
+      if (!owned || answering.has(appId)) return false;
+      const { screen, providerSessionId } = await inspectCodexWindow(appId, owned.pane);
+      if (!providerSessionId || providerSessionId !== owned.providerSessionId) return false;
+      if (open && screen.dialog?.codexQuestionId) return true;
+      if (open ? !screen.composer || !screen.pendingQuestionCount : !screen.dialog?.codexQuestionId) return false;
+      await tmuxService.sendKeys(owned.pane.paneId, [open ? 'S-Left' : 'S-Right']);
+      return true;
+    },
+    async chooseOption(appId: string, optionIndex: number, questionId?: string) {
+      const owned = await findCodexWindow(appId);
+      if (!owned || answering.has(appId)) return false;
+      const { screen, providerSessionId } = await inspectCodexWindow(appId, owned.pane);
+      const option = screen.dialog?.options[optionIndex];
+      if (!screen.dialog || !Number.isInteger(optionIndex) || !option || screen.dialog.codexQuestionId !== questionId) return false;
+      if (questionId) {
+        if (!providerSessionId || providerSessionId !== owned.providerSessionId || option.freeText || answering.has(appId)) return false;
+        answering.add(appId);
+        try {
+          const moves = keysToReachOption(screen.dialog, optionIndex);
+          if (moves.length) await tmuxService.sendKeys(owned.pane.paneId, moves);
+          const deadline = Date.now() + 1500;
+          do {
+            const current = await inspectCodexWindow(appId, owned.pane);
+            const dialog = current.screen.dialog;
+            if (current.providerSessionId !== providerSessionId || !dialog?.codexQuestionId || dialog.question !== screen.dialog.question) return false;
+            if (dialog.options.some((choice) => choice.selected && choice.label === option.label)) {
+              await tmuxService.sendKeys(owned.pane.paneId, ['Enter']);
+              // Keep double taps out until the TUI has consumed this answer.
+              do {
+                await delay(50);
+                const after = await inspectCodexWindow(appId, owned.pane);
+                if (after.screen.dialog?.codexQuestionId !== dialog.codexQuestionId) break;
+              } while (Date.now() < deadline);
+              return true;
+            }
+            await delay(40);
+          } while (Date.now() < deadline);
+          return false;
+        } finally {
+          answering.delete(appId);
+        }
+      }
       await tmuxService.sendKeys(owned.pane.paneId, keysForOption(screen.dialog, optionIndex));
       return true;
     },

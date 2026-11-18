@@ -33,6 +33,15 @@
     "searchResults": "результаты"
   },
   "interaction": {
+    "history": "Вопросы в истории ({{count}})",
+    "openQuestions_one": "Открыть {{count}} вопрос Codex",
+    "openQuestions_few": "Открыть {{count}} вопроса Codex",
+    "openQuestions_many": "Открыть {{count}} вопросов Codex",
+    "openQuestions_other": "Открыть вопросы Codex ({{count}})",
+    "nativeQuestion": "Вопрос от Codex",
+    "submitNative": "Отправить ответ",
+    "terminalReply": "Другие варианты в терминале",
+    "closeNative": "Вернуться в чат",
     "reply": "Ответить",
     "customReply": "Свой ответ"
   },

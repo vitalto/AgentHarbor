@@ -30,6 +30,7 @@ import type { SessionMessagesRequestOptions } from '@/modules/chat/utils/session
 export type SessionStatus = 'idle' | 'loading' | 'streaming' | 'error';
 
 export type SessionSlot = {
+  codexQuestionMessages?: NormalizedMessage[];
   serverMessages: NormalizedMessage[];
   realtimeMessages: NormalizedMessage[];
   merged: NormalizedMessage[];
@@ -76,6 +77,7 @@ function createEmptySlot(): SessionSlot {
 }
 
 type SessionHistoryPage = {
+  codexQuestionMessages: NormalizedMessage[];
   messages: NormalizedMessage[];
   total: number;
   hasMore: boolean;
@@ -109,6 +111,7 @@ async function requestSessionHistoryPage(
 
   return {
     messages,
+    codexQuestionMessages: Array.isArray(data.codexQuestionMessages) ? data.codexQuestionMessages : EMPTY,
     total: typeof data.total === 'number' ? data.total : messages.length,
     hasMore: Boolean(data.hasMore),
     ...(
@@ -544,6 +547,7 @@ async function refreshLatestSlotFromServer(
   }
 
   slot.serverMessages = nextServerMessages;
+  slot.codexQuestionMessages = latestPage.codexQuestionMessages;
   slot.total = latestPage.total;
   slot.offset = nextServerMessages.length;
   slot.hasMore = nextHasMore;
@@ -620,6 +624,7 @@ export function useSessionStore() {
       try {
         const data = await requestSessionHistoryPage(sessionId, requestOptions);
         slot.serverMessages = data.messages;
+        if (!requestOptions.offset) slot.codexQuestionMessages = data.codexQuestionMessages;
         slot.total = data.total;
         slot.hasMore = data.hasMore;
         slot.offset = (requestOptions.offset ?? 0) + data.messages.length;
@@ -739,6 +744,10 @@ export function useSessionStore() {
     );
     if (cutIndex < 0) return;
 
+    if (slot.codexQuestionMessages?.length) {
+      const removedIds = new Set(slot.serverMessages.slice(cutIndex).map((message) => message.id));
+      slot.codexQuestionMessages = slot.codexQuestionMessages.filter((question) => !removedIds.has(question.id));
+    }
     slot.serverMessages = slot.serverMessages.slice(0, cutIndex);
     // Anything already streamed belonged to the turn being replaced — except
     // the replacement itself. The client that made the edit appends its

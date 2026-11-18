@@ -21,6 +21,7 @@ const renderHandlers = () => {
   const stored: NormalizedMessage[] = [];
   const syncs: string[] = [];
   const activityBySession = new Map<string, SessionActivity>();
+  const idled: string[] = [];
 
   renderHook(() => useChatRealtimeHandlers({
     isActive: true,
@@ -39,6 +40,7 @@ const renderHandlers = () => {
     lastSeqRef: { current: new Map() },
     statusCheckSentAtRef: { current: new Map() },
     getSessionActivity: (sessionId) => activityBySession.get(sessionId),
+    onSessionIdle: (sessionId) => { if (sessionId) idled.push(sessionId); },
     requestLatestMessages: async (sessionId) => { syncs.push(sessionId); },
     sessionStore: {
       appendRealtime: (_sessionId: string, msg: NormalizedMessage) => { stored.push(msg); },
@@ -55,8 +57,19 @@ const renderHandlers = () => {
   const markBackgroundOnly = (sessionId: string) => {
     activityBySession.set(sessionId, { statusText: null, canInterrupt: false, startedAt: 0, background: true });
   };
-  return { dispatch, syncs, markResponseInFlight, markBackgroundOnly };
+  return { dispatch, syncs, markResponseInFlight, markBackgroundOnly, activityBySession, idled };
 };
+
+test('a registry-only idle acknowledgement preserves a running terminal turn after switching conversations', () => {
+  const { dispatch, activityBySession, idled } = renderHandlers();
+  activityBySession.set('viewed-session', { statusText: 'Working', canInterrupt: false, startedAt: 1, terminalOnly: true });
+  const ack = { kind: 'chat_subscribed', sessionId: 'viewed-session', isProcessing: false } as ServerEvent;
+  dispatch(ack);
+  assert.deepEqual(idled, []);
+  activityBySession.delete('viewed-session');
+  dispatch(ack);
+  assert.deepEqual(idled, ['viewed-session']);
+});
 
 const upserted = (sessionId: string): ServerEvent => ({
   id: `event-${Math.random()}`,

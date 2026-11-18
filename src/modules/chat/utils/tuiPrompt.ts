@@ -12,6 +12,8 @@ export type TuiPromptOption = {
 };
 
 export type TuiPrompt = {
+  /** The live Codex drawer snapshot to match before submitting its selected answer. */
+  codexQuestionId?: string;
   question: string;
   body: string[];
   options: TuiPromptOption[];

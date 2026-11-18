@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowDownIcon } from 'lucide-react';
+import { ArrowDownIcon, MessageCircleQuestion } from 'lucide-react';
 
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { useNavigate } from 'react-router-dom';
@@ -13,6 +13,7 @@ import { useReportViewedChat } from '@/modules/chat/hooks/useReportViewedChat';
 import OutsideTmuxNotice from '@/modules/chat/composer/OutsideTmuxNotice';
 import SessionAgentsPanel from '@/modules/chat/composer/SessionAgentsPanel';
 import SessionProcessesPanel from '@/modules/chat/composer/SessionProcessesPanel';
+import { CodexQuestionHistory } from '@/modules/chat/composer/CodexQuestionHistory';
 import { readComposerActivity } from '@/modules/chat/utils/backgroundTasks';
 import PermissionModePicker from '@/modules/chat/composer/PermissionModePicker';
 import ComposerModelButton from '@/modules/chat/composer/ComposerModelButton';
@@ -48,6 +49,7 @@ type ChatInterfaceProps = {
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
+  onOpenTerminal?: () => void;
   onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
   onShowSettings?: () => void;
@@ -70,6 +72,7 @@ function ChatInterface({
   ws,
   sendMessage,
   onFileOpen,
+  onOpenTerminal,
   onNavigateToSession,
   onSessionEstablished,
   onShowSettings,
@@ -316,9 +319,12 @@ function ChatInterface({
   }, [viewedSessionId]);
   const chooseTuiOption = useCallback((optionIndex: number, freeText?: string) => {
     if (viewedSessionId) {
-      sendMessage({ type: 'chat.tui-keys', sessionId: viewedSessionId, optionIndex, freeText });
+      sendMessage({ type: 'chat.tui-keys', sessionId: viewedSessionId, optionIndex, freeText, codexQuestionId: viewedTui.prompt?.codexQuestionId });
     }
-  }, [sendMessage, viewedSessionId]);
+  }, [sendMessage, viewedSessionId, viewedTui.prompt?.codexQuestionId]);
+  const focusCodexQuestions = (questionView: 'open' | 'back') => {
+    if (viewedSessionId) sendMessage({ type: 'chat.tui-keys', sessionId: viewedSessionId, questionView });
+  };
   const pressTuiKey = useCallback((key: TuiKey) => {
     if (viewedSessionId) {
       sendMessage({ type: 'chat.tui-keys', sessionId: viewedSessionId, keys: [key] });
@@ -375,7 +381,7 @@ function ChatInterface({
   usePaletteOpsRegister({ insertComposerText });
 
   useEffect(() => {
-    if (!canAbortSession) {
+    if (!canAbortSession || viewedTui.prompt) {
       return;
     }
 
@@ -392,7 +398,7 @@ function ChatInterface({
     return () => {
       document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
     };
-  }, [canAbortSession, handleAbortSession]);
+  }, [canAbortSession, handleAbortSession, viewedTui.prompt]);
 
   useEffect(() => {
     return () => {
@@ -536,6 +542,19 @@ function ChatInterface({
 
           {/* The composer's activity pill ("Brewing… / Stop") floats above it; keep these panels clear of it. */}
           <div className={hasActivityIndicator ? 'mb-9' : undefined}>
+          {viewedSessionId && provider === 'codex' && !viewedTui.prompt && (
+            <TranscriptSessionContext.Provider value={transcriptSessionValue}>
+              <CodexQuestionHistory key={viewedSessionId} sessionId={viewedSessionId}
+                saved={sessionStore.getSessionSlot(viewedSessionId)?.codexQuestionMessages} live={chatMessages} />
+            </TranscriptSessionContext.Provider>
+          )}
+          {Boolean(viewedAgent?.pendingQuestionCount) && !viewedTui.prompt && (
+            <button type="button" onClick={() => focusCodexQuestions('open')} disabled={!isConnected}
+              className="mx-auto mb-1 flex max-w-full items-center gap-2 rounded-lg border border-primary/40 bg-card px-3 py-2 text-sm font-medium text-primary hover:bg-accent disabled:opacity-50">
+              <MessageCircleQuestion size={16} aria-hidden />
+              {t('interaction.openQuestions', { count: viewedAgent?.pendingQuestionCount })}
+            </button>
+          )}
           {viewedSessionId && (
             <SessionProcessesPanel sessionId={viewedSessionId} refreshKey={chatMessages.length} />
           )}
@@ -569,6 +588,8 @@ function ChatInterface({
 
           <ChatComposer
           tuiPrompt={viewedTui.prompt}
+          onCloseCodexQuestion={() => focusCodexQuestions('back')}
+          onOpenTerminal={onOpenTerminal}
           tuiAutoAnswerAt={viewedTui.autoAnswerAt}
           onTuiChoose={chooseTuiOption}
           onTuiKey={pressTuiKey}

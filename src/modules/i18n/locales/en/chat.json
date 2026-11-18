@@ -33,6 +33,13 @@
     "searchResults": "results"
   },
   "interaction": {
+    "history": "Question history ({{count}})",
+    "openQuestions_one": "Open {{count}} Codex question",
+    "openQuestions_other": "Open {{count}} Codex questions",
+    "nativeQuestion": "Question from Codex",
+    "submitNative": "Send answer",
+    "terminalReply": "More options in Terminal",
+    "closeNative": "Back to chat",
     "reply": "Reply",
     "customReply": "Write a reply"
   },

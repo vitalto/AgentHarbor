@@ -20,6 +20,8 @@ export type AgentWindow = {
   windowName: string | null;
   pid: number | null;
   activity: AgentWindowActivity;
+  /** Native questions in the Codex queue, including while the current turn continues. */
+  pendingQuestionCount?: number;
   /** More than one Claude process holds this session. */
   duplicateProcesses: boolean;
 };

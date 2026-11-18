@@ -3,6 +3,8 @@ import type { FormEvent } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
+import { CodexQuestionHistory } from '@/modules/chat/composer/CodexQuestionHistory';
+import { CodexQuestionPanel } from '@/modules/chat/composer/CodexQuestionPanel';
 import { buildTranscriptMarkdown } from '@/modules/chat/export/buildTranscriptMarkdown';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
@@ -38,6 +40,35 @@ const draw = (message: ChatMessage, viewedSession = sessionId, reply = vi.fn()) 
 );
 
 describe('Codex interactions in the transcript', () => {
+  it('keeps older questions accessible on a tail-only page, deduplicates live echoes and scopes the list to the current session', () => {
+    const live = normalizedToChatMessages([ask, accepted]);
+    const view = render(<CodexQuestionHistory sessionId={sessionId} saved={[ask]} live={live} />);
+    const details = view.container.querySelector('details')!;
+    expect(details.open).toBe(false);
+    fireEvent.click(details.querySelector('summary')!);
+    expect(view.container.querySelectorAll('fieldset')).toHaveLength(2);
+    view.rerender(<CodexQuestionHistory sessionId={sessionId} saved={[ask]} live={[]} />);
+    expect(screen.getByText(question)).toBeTruthy();
+    view.rerender(<CodexQuestionHistory sessionId="other" saved={[ask]} live={live} />);
+    expect(view.container.querySelector('details')).toBeNull();
+  });
+
+  it('sends a native answer only after explicit submission, and keeps opening Terminal and going back independent of answering', () => {
+    const choose = vi.fn(), back = vi.fn(), open = vi.fn();
+    const options = ['Main', 'Other'].map((label, index) => ({ label, selected: index === 0, detail: null, freeText: index === 1 }));
+    const view = render(<CodexQuestionPanel prompt={{ codexQuestionId: 'native-1', question, body: [], options }}
+      onChoose={choose} onBack={back} onOpenTerminal={open} />);
+    const [submit, terminal, close] = Array.from(view.container.querySelectorAll('button'));
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: 'Main' }));
+    fireEvent.click(terminal);
+    fireEvent.click(close);
+    expect(open).toHaveBeenCalledOnce();
+    expect(back).toHaveBeenCalledOnce();
+    expect(choose).not.toHaveBeenCalled();
+    fireEvent.click(submit);
+    expect(choose).toHaveBeenCalledExactlyOnceWith(0);
+  });
   it('keeps the same visible questions live and on reload, without grouping separate calls or printing a receipt', () => {
     const pending = normalizedToChatMessages([ask]);
     const live = normalizedToChatMessages([ask, accepted]);

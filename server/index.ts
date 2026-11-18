@@ -142,9 +142,10 @@ const chatGateway: ChatWebSocketDependencies = {
             sessionMonitor.unwatchSocket(socket);
             codexMonitor.unwatchSocket(socket);
         },
-        chooseOption: (sessionId, optionIndex, freeText) => isCodexSession(sessionId)
-          ? codexMonitor.chooseOption(sessionId, optionIndex)
-          : sessionMonitor.chooseOption(sessionId, optionIndex, freeText),
+        focusQuestions: async (sessionId, open) => isCodexSession(sessionId) && codexMonitor.focusQuestions(sessionId, open),
+        chooseOption: (sessionId, optionIndex, freeText, codexQuestionId) => isCodexSession(sessionId)
+          ? codexMonitor.chooseOption(sessionId, optionIndex, codexQuestionId)
+          : codexQuestionId ? Promise.resolve(false) : sessionMonitor.chooseOption(sessionId, optionIndex, freeText),
         switchQuestion: async (sessionId, step) => !isCodexSession(sessionId) && sessionMonitor.switchQuestion(sessionId, step),
         sendKeys: (sessionId, keys) => (isCodexSession(sessionId) ? codexMonitor : sessionMonitor).sendKeys(sessionId, keys),
         typeWhileBusy: async (sessionId, text, attachments) => {

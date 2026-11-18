@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { AgentWindowError } from '@/modules/tmux/agent-windows.service.js';
@@ -34,12 +35,51 @@ function readFolderAccessPrompt(lines: string[]): TuiPrompt | null {
     preview: [], questionTabs: false, safeguardPause: false, unreadable: false };
 }
 
-function hasInterruptHint(lines: string[], prompt: number) {
+function readComposerStatus(lines: string[], prompt: number) {
   // The follow-up queue sits between the live status and the composer and can span any number of rows.
   let row = prompt - 1;
   while (row >= 0 && (!lines[row] || /^\s/.test(lines[row]))) row--;
-  const end = lines[row] === '• Queued follow-up inputs' ? row : prompt;
-  return lines.slice(Math.max(0, end - 6), end).some((line) => /esc to interrupt/i.test(line));
+  const hasQueue = lines[row] === '• Queued follow-up inputs';
+  const end = hasQueue ? row : prompt;
+  const queue = hasQueue ? lines.slice(row + 1, prompt).join('\n') : '';
+  const pendingQuestionCount = [...queue.matchAll(/^  \? (\d+) questions?\s+(?:·\s*)?shift\+(?:←|left) to answer\s*$/gim)]
+    .reduce((total, match) => total + Number(match[1]), 0);
+  const status = lines.slice(Math.max(0, end - 6), end).reverse().find((line) => /esc to interrupt/i.test(line));
+  const timing = status?.match(/^\s*(?:[•◦·✶]\s+)?([^()]+?)\s+\((?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s)?\s*[•·]\s*esc to interrupt\)/i);
+  const turnStatus = timing && timing.slice(2).some(Boolean) ? {
+    label: timing[1].trim(),
+    elapsedSeconds: Number(timing[2] || 0) * 3600 + Number(timing[3] || 0) * 60 + Number(timing[4] || 0),
+  } : null;
+  return { working: Boolean(status), pendingQuestionCount, turnStatus };
+}
+
+function readQuestionDrawer(lines: string[], footer: string): TuiPrompt | null {
+  if (!/shift\+(?:→|right)\s+main prompt/i.test(footer)) return null;
+  const help = lines.map((line) => /shift\+(?:→|right)\s+main prompt/i.test(line)).lastIndexOf(true);
+  let end = help;
+  while (end > 0 && /(?:enter\s+submit|ctrl\+\]\s+skip|option\s+\d+\/\d+)/i.test(lines[end - 1])) end--;
+  const body = lines.slice(0, end).map((line) => line.trimEnd());
+  const optionPattern = /^\s*(›\s+)?(\d+)\.\s+(.+)$/u;
+  const firstOption = body.findIndex((line) => optionPattern.test(line));
+  const firstInput = firstOption < 0 ? body.findIndex((line) => /^\s*›/u.test(line)) : firstOption;
+  const titleLines = body.slice(0, firstInput < 0 ? body.length : firstInput);
+  const question = titleLines.map((line) => line.trim()).join('\n').trim().split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/\n/g, ' ')).join('\n\n');
+  const choices: { number: number; label: string; selected: boolean }[] = [];
+  for (const line of firstOption < 0 ? [] : body.slice(firstOption)) {
+    const match = optionPattern.exec(line);
+    if (match) choices.push({ number: Number(match[2]), label: match[3].trim(), selected: Boolean(match[1]) });
+    else if (line.trim() && choices.length) choices[choices.length - 1].label += ' ' + line.trim();
+  }
+  const canChoose = Boolean(question) && choices.filter((choice) => choice.selected).length === 1
+    && new Set(choices.map((choice) => choice.label)).size === choices.length
+    && choices.every((choice, index) => choice.number === choices[0].number + index);
+  const options = canChoose ? choices.map(({ label, selected }) => ({
+    label, selected, detail: null, freeText: label === 'Other', checked: null, confirmsSelection: false,
+  })) : [];
+  const codexQuestionId = createHash('sha256').update(JSON.stringify([question, choices.map(({ number, label }) => [number, label])])).digest('hex');
+  return { codexQuestionId, question, options, body: question ? [] : body,
+    questionTabs: false, safeguardPause: false, preview: [], unreadable: false };
 }
 
 /** Used by the Codex window registry, input driver and chat watcher to interpret the same pane capture. */
@@ -51,16 +91,18 @@ export function parseCodexScreen(capture: PaneCapture) {
   // A pasted terminal transcript can contain the exact menu hints inside the editable draft.
   const footerRows = capture.cursorVisible && prompt >= 0 ? lines.slice(capture.cursorY + 1) : lines;
   const bottom = footerRows.filter((line) => line.trim()).slice(-2).join(' ');
-  const menu = /(?:enter|return) (?:to )?(?:select|confirm|continue|submit)|esc (?:to )?(?:cancel|go back|skip|dismiss)/i.test(bottom);
+  const questionDrawer = readQuestionDrawer(lines, bottom);
+  const menu = Boolean(questionDrawer) || /(?:enter|return) (?:to )?(?:select|confirm|continue|submit)|esc (?:to )?(?:cancel|go back|skip|dismiss)/i.test(bottom);
   const composer = capture.cursorVisible && prompt >= 0 && !menu;
   const placeholder = composer && /^\s*(?:\x1b\[[\d;:]*m)*›(?:\x1b\[[\d;:]*m)*\s+\x1b\[(?:[\d;]*;)?2(?:;[\d;]*)?m/u.test(capture.lines[prompt]);
   const empty = composer && capture.cursorX === 2 && capture.cursorY === prompt
     && (placeholder || lines[prompt] === '›');
-  const working = composer && hasInterruptHint(lines, prompt);
+  const { working, pendingQuestionCount, turnStatus } = composer ? readComposerStatus(lines, prompt)
+    : { working: false, pendingQuestionCount: 0, turnStatus: null };
   return {
-    title: capture.title, lines, composer, empty,
+    title: capture.title, lines, composer, empty, pendingQuestionCount, turnStatus,
     backgroundTerminalCount: composer ? readCodexBackgroundTerminalCount(lines, prompt) : 0,
-    dialog: menu ? readFolderAccessPrompt(lines) ?? unreadablePrompt(lines) : null,
+    dialog: questionDrawer ?? (menu ? readFolderAccessPrompt(lines) ?? unreadablePrompt(lines) : null),
     output: working ? lines.slice(0, prompt).filter((line) => line.trim()).slice(-14) : [],
     input: composer ? lines.slice(prompt, capture.cursorY + 1).join('\n') : '',
     activity: menu ? 'waiting' as const : working ? 'working' as const : empty ? 'idle' as const : 'unknown' as const,

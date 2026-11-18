@@ -109,7 +109,9 @@ export type TerminalGateway = {
   /** Attach viewers already subscribed before a different browser or the CLI started this run. */
   attachViewers?(sessionId: string): void;
   /** `freeText` answers a free-text option (AskUserQuestion's "Type something."). */
-  chooseOption(sessionId: string, optionIndex: number, freeText?: string): Promise<boolean>;
+  chooseOption(sessionId: string, optionIndex: number, freeText?: string, codexQuestionId?: string): Promise<boolean>;
+  /** Opens the native Codex question queue or returns to the composer without answering. */
+  focusQuestions?(sessionId: string, open: boolean): Promise<boolean>;
   /** Moves an AskUserQuestion set to its previous or next question (or the review step). */
   switchQuestion(sessionId: string, step: 'previous' | 'next'): Promise<boolean>;
   sendKeys(sessionId: string, keys: string[]): Promise<boolean>;
@@ -412,8 +414,11 @@ async function handleTuiKeys(ws: WebSocket, data: AnyRecord, dependencies: ChatW
     sendProtocolError(ws, 'TUI_NOT_AVAILABLE', 'No terminal backend is configured.', sessionId);
     return;
   }
-  const delivered = typeof data.optionIndex === 'number'
-    ? await terminal.chooseOption(sessionId, data.optionIndex, typeof data.freeText === 'string' ? data.freeText : undefined)
+  const delivered = data.questionView === 'open' || data.questionView === 'back'
+    ? await terminal.focusQuestions?.(sessionId, data.questionView === 'open')
+    : typeof data.optionIndex === 'number'
+    ? await terminal.chooseOption(sessionId, data.optionIndex, typeof data.freeText === 'string' ? data.freeText : undefined,
+      typeof data.codexQuestionId === 'string' ? data.codexQuestionId : undefined)
     : data.questionStep === 'previous' || data.questionStep === 'next'
     ? await terminal.switchQuestion(sessionId, data.questionStep)
     : await terminal.sendKeys(
@@ -421,7 +426,7 @@ async function handleTuiKeys(ws: WebSocket, data: AnyRecord, dependencies: ChatW
       (Array.isArray(data.keys) ? data.keys : []).filter((key: unknown): key is string => typeof key === 'string' && TUI_KEYS.has(key)),
     );
   if (!delivered) {
-    sendProtocolError(ws, 'TUI_NOT_AVAILABLE', 'The session has no live Claude window or the menu is gone.', sessionId);
+    sendProtocolError(ws, 'TUI_NOT_AVAILABLE', 'The terminal or question changed. Open the current prompt and try again.', sessionId);
   }
 }
 

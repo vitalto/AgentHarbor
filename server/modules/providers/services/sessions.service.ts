@@ -44,9 +44,10 @@ const BACKGROUND_OUTPUT_TAIL_BYTES = 16 * 1024;
 type RunningSessionEntry = {
   sessionId: string;
   provider: LLMProvider;
-  startedAt: number;
+  startedAt?: number;
   lastSeq: number;
   background?: true;
+  terminalOnly?: true;
   canInterrupt?: false;
   statusText?: string;
   tasks?: BackgroundTaskSummary[];
@@ -143,6 +144,7 @@ export type LiveAgent = {
   windowName: string | null;
   pid: number | null;
   activity: 'busy' | 'waiting' | 'idle' | 'unknown';
+  pendingQuestionCount?: number;
   /** More than one Claude process holds this session (they would both write its history). */
   duplicateProcesses: boolean;
 };
@@ -249,11 +251,18 @@ export const sessionsService = {
     for (const thread of codexThreads) {
       if (thread.activity === 'idle' || thread.activity === 'unknown') continue;
       const session = sessionsDb.getSessionByProviderSessionId(thread.providerSessionId);
-      if (!session || entries.some((entry) => entry.sessionId === session.session_id)) continue;
+      if (!session) continue;
+      const active = runningById.get(session.session_id);
+      if (active) {
+        if (thread.turnStartedAt !== undefined) active.startedAt = thread.turnStartedAt;
+        if (thread.statusText) active.statusText = thread.statusText;
+        continue;
+      }
+      if (entries.some((entry) => entry.sessionId === session.session_id)) continue;
       entries.push({
-        sessionId: session.session_id, provider: 'codex', startedAt: Date.parse(session.updated_at),
+        sessionId: session.session_id, provider: 'codex', startedAt: thread.turnStartedAt, terminalOnly: true,
         lastSeq: chatRunRegistry.getRun(session.session_id)?.lastSeq ?? 0, canInterrupt: false,
-        statusText: thread.activity === 'waiting' ? 'Waiting for your answer' : 'Working in the terminal',
+        statusText: thread.statusText ?? (thread.activity === 'waiting' ? 'Waiting for your answer' : 'Working in the terminal'),
       });
     }
 
@@ -572,8 +581,11 @@ export const sessionsService = {
       });
     }
 
+    const { codexQuestionMessages, ...historyPage } = result;
     return {
-      ...result,
+      ...historyPage,
+      ...(codexQuestionMessages && requestedOffset === 0
+        ? { codexQuestionMessages: codexQuestionMessages.map((message) => ({ ...message, sessionId })) } : {}),
       messages: result.messages.map((message) => ({
         ...message,
         sessionId,
@@ -877,6 +889,7 @@ export const sessionsService = {
         ...known, providerSessionId: thread.providerSessionId,
         location: thread.pane ? 'tmux' : 'elsewhere', windowName: thread.pane?.windowName ?? null,
         pid: null, activity, duplicateProcesses: false,
+        ...(thread.pendingQuestionCount ? { pendingQuestionCount: thread.pendingQuestionCount } : {}),
       });
     }
     return agents;

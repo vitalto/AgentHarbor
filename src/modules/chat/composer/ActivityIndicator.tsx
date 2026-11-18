@@ -84,7 +84,8 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
   const actionWords = ACTION_KEYS.map((key, i) => t(key, { defaultValue: DEFAULT_ACTION_WORDS[i] }));
   const label = isBackground
     ? t('claudeStatus.backgroundWork', 'Background work')
-    : (renderedActivity.statusText || actionWords[Math.floor(elapsedSeconds / 4) % actionWords.length])
+    : (renderedActivity.statusText === 'Working' ? t('claudeStatus.actions.working', { defaultValue: 'Working' })
+      : renderedActivity.statusText || actionWords[Math.floor(elapsedSeconds / 4) % actionWords.length])
       .replace(/[.…\s]+$/u, '');
   const detail = isBackground ? describeBackgroundTasks(renderedActivity.tasks ?? [], t) : '';
 

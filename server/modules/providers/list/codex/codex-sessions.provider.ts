@@ -1963,9 +1963,12 @@ export class CodexSessionsProvider implements IProviderSessions {
     const normalizedOffset = Math.max(0, offset);
     const normalizedLimit = limit === null ? null : Math.max(0, limit);
     const { page, hasMore } = sliceTailPage(transcript, normalizedLimit, normalizedOffset);
+    const questions = transcript.filter((message) => message.kind === 'tool_use'
+      && /^(?:functions\.)?request_user_input_async$/.test(message.toolName ?? '') && !message.parentToolUseId);
 
     return {
       messages: page,
+      ...(questions.length && normalizedOffset === 0 ? { codexQuestionMessages: questions } : {}),
       total,
       hasMore,
       offset: normalizedOffset,

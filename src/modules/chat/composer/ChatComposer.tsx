@@ -29,6 +29,7 @@ import ComposerAttachment from '@/modules/chat/composer/ComposerAttachment';
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
 import TuiPromptPanel from '@/modules/chat/composer/TuiPromptPanel';
+import { CodexQuestionPanel } from '@/modules/chat/composer/CodexQuestionPanel';
 import type { QuestionStep, TuiKey, TuiPrompt } from '@/modules/chat/utils/tuiPrompt';
 
 type MentionableFile = {
@@ -41,6 +42,8 @@ type ChatComposerProps = {
   tuiPrompt: TuiPrompt | null;
   /** When a safeguard pause will be auto-answered (epoch ms), for the countdown; null when there is none. */
   tuiAutoAnswerAt?: number | null;
+  onCloseCodexQuestion?: () => void;
+  onOpenTerminal?: () => void;
   onTuiChoose: (optionIndex: number, freeText?: string) => void;
   onTuiKey: (key: TuiKey) => void;
   onTuiQuestionStep: (step: QuestionStep) => void;
@@ -105,6 +108,8 @@ type ChatComposerProps = {
 export default function ChatComposer({
   tuiPrompt,
   tuiAutoAnswerAt,
+  onCloseCodexQuestion,
+  onOpenTerminal,
   onTuiChoose,
   onTuiKey,
   onTuiQuestionStep,
@@ -200,6 +205,7 @@ export default function ChatComposer({
   // A live TUI takes the message right away (Claude reads it once the current step ends), so nothing is queued.
   const canSendWhileBusy = isLoading && hasLiveWindow && hasDraft;
   const canQueueDraft = isLoading && !hasLiveWindow && hasDraft;
+  const canStop = isLoading && activity?.canInterrupt === true;
   const submitHint = canSendWhileBusy
     ? t('input.hintText.sendWhileBusy', { defaultValue: 'Enter to send now — Claude reads it as soon as the current step ends' })
     : canQueueDraft
@@ -215,7 +221,7 @@ export default function ChatComposer({
     ? hasQueuedDraft
       ? t('input.queue.update', { defaultValue: 'Update queued message' })
       : t('input.queue.sendNext', { defaultValue: 'Queue next message' })
-    : isLoading
+    : canStop
       ? t('input.stop')
       : t('input.send');
 
@@ -227,7 +233,10 @@ export default function ChatComposer({
         </div>
       )}
 
-      {tuiPrompt && (
+      {tuiPrompt?.codexQuestionId && onCloseCodexQuestion ? (
+        <CodexQuestionPanel key={tuiPrompt.codexQuestionId} prompt={tuiPrompt} onChoose={onTuiChoose}
+          onBack={onCloseCodexQuestion} onOpenTerminal={onOpenTerminal} />
+      ) : tuiPrompt && (
         <div className="mx-auto max-w-[54.25rem]">
           <TuiPromptPanel
             prompt={tuiPrompt}
@@ -295,7 +304,7 @@ export default function ChatComposer({
 
         <PromptInput
           onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void}
-          status={isLoading ? 'streaming' : 'ready'}
+          status={canStop ? 'streaming' : 'ready'}
           className={[
             isTextareaExpanded ? 'chat-input-expanded' : '',
             hasActivityIndicator ? 'rounded-t-none' : '',
@@ -411,11 +420,11 @@ export default function ChatComposer({
                       e.preventDefault();
                       onSubmit(e);
                     }
-                  : isLoading
+                  : canStop
                     ? onAbortSession
                     : undefined
               }
-              disabled={isLoading ? false : !input.trim() && attachedFiles.length === 0}
+              disabled={!hasDraft && !canStop}
               aria-label={submitAriaLabel}
               title={submitAriaLabel}
               className="h-10 w-10 sm:h-10 sm:w-10"

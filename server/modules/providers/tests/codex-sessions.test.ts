@@ -264,6 +264,36 @@ test('Codex history translates wrapped exec scripts into the tools they ran', { 
   }
 });
 
+test('the latest Codex history page includes earlier questions without adding or counting their rows twice', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-question-history-'));
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    const nativeId = 'codex-questions';
+    const file = await writeCodexTranscript(tempRoot, nativeId, tempRoot, 'Start');
+    const entries = [
+      { type: 'function_call', name: 'request_user_input_async', call_id: 'q1', arguments: JSON.stringify({ questions: [{ title: 'Which file?' }] }) },
+      { type: 'function_call_output', call_id: 'q1', output: '{"accepted":true}' },
+      { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Later in this conversation' }] },
+    ];
+    await writeFile(file, entries.map(payload => JSON.stringify({ type: 'response_item', payload })).join('\n') + '\n', { flag: 'a' });
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('question-history', 'codex', tempRoot);
+      sessionsDb.assignProviderSessionId('question-history', nativeId);
+      await new CodexSessionSynchronizer().synchronize();
+      const provider = new CodexSessionsProvider();
+      const page = await provider.fetchHistory('question-history', { limit: 1 });
+      assert.equal(page.messages.length, 1);
+      assert.equal(page.messages[0].content, 'Later in this conversation');
+      assert.deepEqual(page.codexQuestionMessages?.map(row => row.toolId), ['q1']);
+      assert.equal(page.codexQuestionMessages?.[0].toolResult?.content, '{"accepted":true}');
+      assert.equal((await provider.fetchHistory('question-history', { limit: 1, offset: 1 })).codexQuestionMessages, undefined);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Codex history strips the sandbox envelopes from shell output', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-exec-output-'));
   const workspacePath = path.join(tempRoot, 'workspace');

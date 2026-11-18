@@ -14,6 +14,7 @@ import type { BackgroundTaskSummary, GetSessionActivity, IsSessionProcessing, Ma
 import { api } from '@/shared/api';
 
 type RunningSessionApiItem = {
+  terminalOnly?: unknown;
   sessionId?: unknown;
   startedAt?: unknown;
   statusText?: unknown;
@@ -151,6 +152,7 @@ export function SessionProtectionProvider({ children }: { children: ReactNode })
 
             return {
               sessionId: session.sessionId,
+              ...(session.terminalOnly === true ? { terminalOnly: true } : {}),
               startedAt: parseStartedAt(session.startedAt),
               statusText: typeof session.statusText === 'string' ? session.statusText : undefined,
               canInterrupt: typeof session.canInterrupt === 'boolean' ? session.canInterrupt : undefined,

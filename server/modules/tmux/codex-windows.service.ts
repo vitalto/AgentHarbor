@@ -240,7 +240,7 @@ export async function sendCodexRuntimePrompt(providerSessionId: string, pane: Ag
   return typeCodexInput(pane.paneId, text, [], screen.title, undefined, acceptIdleScreen);
 }
 
-type LiveThread = { providerSessionId: string; updatedAt?: number; activity: 'idle' | 'waiting' | 'working' | 'unknown'; backgroundTerminalCount?: number; pane: AgentPane | null };
+type LiveThread = { providerSessionId: string; updatedAt?: number; activity: 'idle' | 'waiting' | 'working' | 'unknown'; backgroundTerminalCount?: number; pendingQuestionCount?: number; statusText?: string; turnStartedAt?: number; pane: AgentPane | null };
 let snapshot: { expires: number; promise: Promise<LiveThread[]> } | null = null;
 
 async function queryLiveThreads(): Promise<LiveThread[]> {
@@ -259,8 +259,15 @@ async function queryLiveThreads(): Promise<LiveThread[]> {
     const id = fromTitle ?? (!titleIdPrefix(screen.title) ? owner.legacyThreadId : null);
     if (!id) return;
     const current = sessionsDb.getSessionByProviderSessionId(id);
-    live.set(id, { providerSessionId: id, activity: screen.activity, backgroundTerminalCount: screen.backgroundTerminalCount,
-      pane, updatedAt: current ? Date.parse(current.updated_at) : undefined });
+    live.set(id, {
+      providerSessionId: id, activity: screen.activity, backgroundTerminalCount: screen.backgroundTerminalCount,
+      pendingQuestionCount: screen.pendingQuestionCount,
+      ...(screen.turnStatus && {
+        statusText: screen.turnStatus.label,
+        turnStartedAt: (Math.floor(Date.now() / 1000) - screen.turnStatus.elapsedSeconds) * 1000,
+      }),
+      pane, updatedAt: current ? Date.parse(current.updated_at) : undefined,
+    });
   }));
   return [...live.values()];
 }

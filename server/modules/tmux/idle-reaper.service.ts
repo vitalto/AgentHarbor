@@ -86,15 +86,15 @@ export async function sweepIdleAgents(listCodexThreads = listCodexLiveThreads): 
     }
   }
   const nextIdleSince = new Map<string, number>();
-  for (const { pane, providerSessionId, activity, updatedAt, backgroundTerminalCount } of await listCodexThreads()) {
-    if (!pane || activity !== 'idle' || !updatedAt || backgroundTerminalCount || isAwaitingApiErrorRetry(providerSessionId)) continue;
+  for (const { pane, providerSessionId, activity, updatedAt, backgroundTerminalCount, pendingQuestionCount } of await listCodexThreads()) {
+    if (!pane || activity !== 'idle' || !updatedAt || backgroundTerminalCount || pendingQuestionCount || isAwaitingApiErrorRetry(providerSessionId)) continue;
     const threadPane = `${pane.paneId}:${providerSessionId}`;
     const idleSince = Math.max(updatedAt, codexIdleSince.get(threadPane) ?? Date.now());
     nextIdleSince.set(threadPane, idleSince);
     if (Date.now() - idleSince < idleLimitMs || await tmuxService.countViewers(pane.windowId) > 0) continue;
     // The shared list is briefly cached; a new turn or draft may already be on screen.
     const screen = await readCodexScreen(pane.paneId).catch(() => null);
-    if (screen?.activity !== 'idle' || screen.backgroundTerminalCount || isWritingCodexInput(pane.paneId)
+    if (screen?.activity !== 'idle' || screen.backgroundTerminalCount || screen.pendingQuestionCount || isWritingCodexInput(pane.paneId)
       || (pane.title && pane.title !== screen.title)) {
       nextIdleSince.delete(threadPane);
       continue;

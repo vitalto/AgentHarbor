@@ -719,6 +719,8 @@ export type FetchHistoryOptions = {
  * Use this as the contract for APIs that return paginated conversation history.
  */
 export type FetchHistoryResult = {
+  /** Codex question calls with their paired results, before pagination, for the chat question history. */
+  codexQuestionMessages?: NormalizedMessage[];
   messages: NormalizedMessage[];
   total: number;
   hasMore: boolean;

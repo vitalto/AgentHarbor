@@ -149,6 +149,7 @@ function WorkspaceMain({
                 ws={ws}
                 sendMessage={sendMessage}
                 onFileOpen={handleFileOpen}
+                onOpenTerminal={() => setActiveTab('shell')}
                 onNavigateToSession={onNavigateToSession}
                 onSessionEstablished={onSessionEstablished}
                 onShowSettings={onShowSettings}
