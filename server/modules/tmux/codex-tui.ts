@@ -37,7 +37,9 @@ export function parseCodexScreen(capture: PaneCapture) {
   const lines = capture.lines.map((line) => line.replace(sgr, '').trimEnd());
   let prompt = capture.cursorY;
   while (prompt >= 0 && !/^›(?:\s|$)/u.test(lines[prompt] ?? '')) prompt--;
-  const bottom = lines.filter((line) => line.trim()).slice(-2).join(' ');
+  // A pasted terminal transcript can contain the exact menu hints inside the editable draft.
+  const footerRows = capture.cursorVisible && prompt >= 0 ? lines.slice(capture.cursorY + 1) : lines;
+  const bottom = footerRows.filter((line) => line.trim()).slice(-2).join(' ');
   const menu = /(?:enter|return) (?:to )?(?:select|confirm|continue|submit)|esc (?:to )?(?:cancel|go back|skip|dismiss)/i.test(bottom);
   const composer = capture.cursorVisible && prompt >= 0 && !menu;
   const placeholder = composer && /^\s*(?:\x1b\[[\d;:]*m)*›(?:\x1b\[[\d;:]*m)*\s+\x1b\[(?:[\d;]*;)?2(?:;[\d;]*)?m/u.test(capture.lines[prompt]);

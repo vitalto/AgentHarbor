@@ -19,6 +19,16 @@ test('Codex identifies the empty composer, a draft with the cursor at Home, and 
   assert.equal(parseCodexScreen({ ...base, lines: ['• Working (5s • esc to interrupt)', placeholder] }).activity, 'working');
 });
 
+test('pasted or wrapped menu instructions stay in the editable Codex draft', () => {
+  for (const rows of [['› Why did I see enter continue · esc back?'], ['› Terminal output:', '  enter continue · esc back']]) {
+    const draft = parseCodexScreen({ ...base, cursorY: rows.length - 1, cursorX: rows.at(-1)!.length,
+      lines: [...rows, '', '  GPT-6.2-Astra high · D:\\Develop\\CardMatch'] });
+    assert.equal(draft.input, rows.join('\n'));
+    assert.equal(draft.empty, false);
+    assert.equal(draft.dialog, null);
+  }
+});
+
 test('Codex folder access exposes the scope and answers the live selection in either direction', async (t) => {
   const trust = '1. Trust and continue';
   const back = '2. Back to Agent Command Center';
