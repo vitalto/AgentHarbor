@@ -198,7 +198,11 @@ export async function typeCodexInput(paneId: string, text: string, imagePaths: s
 
 async function submitCodexInput(paneId: string, text: string, imagePaths: string[], expectedTitle: string,
   signal: AbortSignal | undefined, acceptIdleScreen?: AcceptIdleScreen) {
-  const first = await readCodexScreen(paneId);
+  let first = await readCodexScreen(paneId);
+  if (!acceptIdleScreen && first.title === expectedTitle && !first.composer && !first.dialog) {
+    first = await waitForScreen(paneId, screen => screen.title !== expectedTitle || screen.composer || Boolean(screen.dialog),
+      'Codex is still redrawing its input. Check the terminal before sending.', signal);
+  }
   if (acceptIdleScreen) {
     if (first.activity !== 'idle' || first.title !== expectedTitle || !await acceptIdleScreen(first)) return false;
     // A retry can check the transcript on disk before it claims the prompt.
@@ -214,7 +218,7 @@ async function submitCodexInput(paneId: string, text: string, imagePaths: string
   let lastInput = first.input;
   for (const imagePath of imagePaths) {
     signal?.throwIfAborted();
-    await pasteCodexText(paneId, imagePath);
+    await pasteCodexText(paneId, imagePath, { imagePath: true });
     const attached = await waitForScreen(paneId, (screen) => screen.title === expectedTitle && screen.input !== lastInput
       && /\[Image #\d+\]\s*$/i.test(screen.input), 'Codex could not attach this image. Review the draft in Terminal.', signal);
     lastInput = attached.input;

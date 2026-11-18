@@ -9,18 +9,41 @@ import { tmuxService } from '@/modules/tmux/tmux.service.js';
 
 const base = { title: 'thread', dead: false, cursorVisible: true, cursorX: 2, cursorY: 1 };
 
+test('a follow-up waits through a working terminal repaint before typing, and protects an existing draft', async (t) => {
+  let captures = 0;
+  let draft = '';
+  const placeholder = '\x1b[1m›\x1b[0m \x1b[2mAsk Codex';
+  t.mock.method(tmuxService, 'inspectPane', async () => {
+    captures++;
+    return { ...base, cursorVisible: captures > 1, cursorX: 2 + draft.length, lines: [
+      '◦ Working (3m 56s • esc to interrupt)', draft ? '› ' + draft : placeholder, '', '  tab to queue message',
+    ] };
+  });
+  const paste = t.mock.method(tmuxService, 'pasteText', async (_pane: string, text: string) => { draft = text; });
+  const submit = t.mock.method(tmuxService, 'sendKeys', async () => { draft = ''; });
+  assert.equal(await typeCodexInput('%1', 'Is the file ready?', [], base.title), true);
+  assert.equal(submit.mock.callCount(), 1);
+  draft = 'a draft typed in the terminal';
+  await assert.rejects(typeCodexInput('%1', 'another question', [], base.title));
+  assert.equal(paste.mock.callCount(), 1);
+  assert.equal(draft, 'a draft typed in the terminal');
+});
+
 test('Codex pastes preserve punctuation across Windows console input and native terminals', async (t) => {
   const paste = t.mock.method(tmuxService, 'pasteText', async () => {});
-  const text = '> две сессии — €\n\nПерезапустить сейчас 😀';
-  await pasteCodexText('%1', text, true);
-  await pasteCodexText('%2', text, false);
+  const text = '?[цитата] > две сессии — € ☒\n\n\tПерезапустить сейчас 👩‍💻?';
+  await pasteCodexText('%1', text, { windowsInterop: true });
+  await pasteCodexText('%2', text, { windowsInterop: false });
   const [[pane, windowsInput], nativePaste] = paste.mock.calls.map((call) => call.arguments);
   assert.equal(pane, '%1');
   assert.ok(typeof windowsInput === 'string');
-  assert.ok(windowsInput.startsWith('\x1b[0;0;62;1;0;1_\x1b[0;0;62;0;0;1_'));
-  const decoded = windowsInput.replace(/\x1b\[0;0;(\d+);1;0;1_\x1b\[0;0;\1;0;0;1_/g,
-    (_, code: string) => String.fromCharCode(Number(code)));
-  assert.equal(decoded, text);
+  const end = '\x1b[35;79;0;1;256;1_\x1b[35;79;0;0;256;1_';
+  assert.ok(windowsInput.includes(end + '\x1b[0;0;63;1;0;1_'));
+  assert.ok(windowsInput.includes('\x1b[265;15;9;1;0;1_'));
+  assert.ok(windowsInput.includes('\x1b[13;28;13;1;16;1_'));
+  const decoded = windowsInput.replaceAll(end, '').replace(/\x1b\[(\d+);(\d+);(\d+);1;(\d+);1_\x1b\[\1;\2;\3;0;\4;1_/g,
+    (_, virtualKey: string, _scan: string, code: string) => virtualKey === '13' ? '\n' : String.fromCharCode(Number(code)));
+  assert.equal(decoded, ' ' + text);
   assert.deepEqual(nativePaste, ['%2', text]);
 });
 
