@@ -58,6 +58,7 @@ describe('Codex interactions in the transcript', () => {
     const options = ['Main', 'Other'].map((label, index) => ({ label, selected: index === 0, detail: null, freeText: index === 1 }));
     const view = render(<CodexQuestionPanel prompt={{ codexQuestionId: 'native-1', question, body: [], options }}
       onChoose={choose} onBack={back} onOpenTerminal={open} />);
+    expect(screen.getByRole('group', { name: question }).contains(screen.getByRole('radio', { name: 'Main' }))).toBe(true);
     const [submit, terminal, close] = Array.from(view.container.querySelectorAll('button'));
     expect(submit.disabled).toBe(true);
     fireEvent.click(screen.getByRole('radio', { name: 'Main' }));

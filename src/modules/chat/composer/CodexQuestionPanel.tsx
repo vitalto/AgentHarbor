@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { TuiPrompt } from '@/modules/chat/utils/tuiPrompt';
@@ -11,12 +11,12 @@ export function CodexQuestionPanel({ prompt, onChoose, onBack, onOpenTerminal }:
   onOpenTerminal?: () => void;
 }) {
   const { t } = useTranslation('chat');
+  const questionId = useId();
   // A choice stays local until the user sends it. The composer remounts this panel when the native question changes.
   const [selected, setSelected] = useState<number | null>(null);
   return (
-    <fieldset className="mx-auto mb-2 max-h-[42dvh] min-w-0 max-w-[54.25rem] overflow-y-auto rounded-xl border border-border bg-card p-3 text-sm">
-      <legend className="px-1 font-medium">{t('interaction.nativeQuestion')}</legend>
-      <p dir="auto" className="whitespace-pre-wrap break-words">{prompt.question || prompt.body.join('\n')}</p>
+    <fieldset aria-labelledby={questionId} className="mx-auto mb-2 max-h-[42dvh] min-w-0 max-w-[54.25rem] overflow-y-auto rounded-xl border border-border bg-card px-4 py-3 text-sm text-card-foreground">
+      <p id={questionId} dir="auto" className="whitespace-pre-wrap text-[15px] leading-6 [overflow-wrap:anywhere]">{prompt.question || prompt.body.join('\n') || t('interaction.nativeQuestion')}</p>
       <div className="mt-2 space-y-1">
         {prompt.options.map((option, index) => !option.freeText && (
           <label key={index} className="flex cursor-pointer items-start gap-2 rounded-md px-1 py-1.5 hover:bg-accent">
