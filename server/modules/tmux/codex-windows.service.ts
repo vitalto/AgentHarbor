@@ -69,13 +69,14 @@ async function openWindow(appId: string) {
   const cwd = toLocalPath(row.project_path || process.cwd(), pathConfig);
   const args = [
     executable, '--no-daemon', '-C', toClaudePath(cwd, pathConfig),
-    '--ask-for-approval', 'on-request', '-c', 'approvals_reviewer="auto_review"',
     '-c', 'tui.terminal_title=["session-id"]',
   ];
   const sandbox = env.AH_CODEX_SANDBOX_MODE?.trim();
-  if (!nativeId && sandbox) {
-    // Older hosts used full access to suppress prompts. Auto-review needs a sandbox boundary to review escapes.
-    args.push('--sandbox', sandbox === 'danger-full-access' ? 'workspace-write' : sandbox);
+  if (sandbox === 'danger-full-access') {
+    args.push('--dangerously-bypass-approvals-and-sandbox');
+  } else {
+    args.push('--ask-for-approval', 'on-request', '-c', 'approvals_reviewer="auto_review"');
+    if (!nativeId && sandbox) args.push('--sandbox', sandbox);
   }
   if (row.model && row.model !== 'default') args.push('--model', row.model);
   if (row.effort && row.effort !== 'default') args.push('-c', `model_reasoning_effort=${JSON.stringify(row.effort)}`);
@@ -151,6 +152,7 @@ export async function inspectCodexWindow(appId: string, pane: AgentPane) {
 
 /** Waits for the real Codex composer and binds its native UUID before the chat types anything. */
 export async function waitForCodexComposer(appId: string, pane: AgentPane, signal: AbortSignal, legacyThreadId: string | null) {
+  if (legacyThreadId) await tmuxService.restoreShrunkWindow(pane.windowId);
   let deadline = Date.now() + 15_000;
   do {
     signal.throwIfAborted();

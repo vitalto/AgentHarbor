@@ -55,8 +55,10 @@ pending dialog or terminal draft before sending another message from the chat.
 AgentHarbor starts Codex with on-request approvals and its automatic reviewer. Routine
 commands run in the session's sandbox. The reviewer evaluates requests for additional
 access and can deny destructive actions. Set `AH_CODEX_SANDBOX_MODE=workspace-write`
-or `read-only` to choose the sandbox for new conversations. A legacy
-`AH_CODEX_SANDBOX_MODE=danger-full-access` setting now selects `workspace-write`.
+or `read-only` to choose the sandbox for new conversations. To grant the CLI full access
+under the host account, set `AH_CODEX_SANDBOX_MODE=danger-full-access`. This passes
+`--dangerously-bypass-approvals-and-sandbox` when AgentHarbor starts or resumes a TUI.
+An already running TUI keeps the permissions it was launched with.
 
 ## Features
 

@@ -45,10 +45,16 @@ test('a TUI routes approvals to review, honors a read-only host and resumes only
   row.provider_session_id = null;
   process.env.AH_CODEX_SANDBOX_MODE = 'danger-full-access';
   await ensureCodexWindow('test-app');
-  assert.match(launches[2], /'--sandbox' 'workspace-write'/);
-  for (const command of launches) {
+  row.provider_session_id = '01999999-abcd-7123-9876-123456789abc';
+  await ensureCodexWindow('test-app');
+  assert.ok(launches[3].endsWith(`'resume' '${row.provider_session_id}'`));
+  for (const command of launches.slice(0, 2)) {
     assert.match(command, /'--ask-for-approval' 'on-request'/);
     assert.ok(command.includes('approvals_reviewer="auto_review"'));
     assert.doesNotMatch(command, /danger-full-access|bypass|--remote/);
+  }
+  for (const command of launches.slice(2)) {
+    assert.ok(command.includes("'--dangerously-bypass-approvals-and-sandbox'"));
+    assert.doesNotMatch(command, /'--sandbox'|'--ask-for-approval'|approvals_reviewer|--remote/);
   }
 });

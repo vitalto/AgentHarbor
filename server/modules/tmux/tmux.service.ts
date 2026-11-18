@@ -201,7 +201,8 @@ export function createTmuxService(options: { socketName?: string; session?: stri
     },
 
     async capturePane(paneId: string, historyLines = 0): Promise<string[]> {
-      const history = historyLines > 0 ? ['-J', '-S', String(-historyLines)] : [];
+      // ConPTY can mark a whole alternate screen as soft-wrapped. Keep its physical rows.
+      const history = historyLines > 0 ? ['-S', String(-historyLines)] : [];
       const output = await run(['capture-pane', '-p', ...history, '-t', paneId]);
       return output.replace(/\n$/, '').split('\n').map((line) => line.trimEnd());
     },

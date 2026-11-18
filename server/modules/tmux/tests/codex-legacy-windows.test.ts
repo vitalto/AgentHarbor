@@ -54,21 +54,30 @@ test('listing and opening recognize the same legacy pane and exclude split panes
   assert.equal((await findCodexWindow('original', [{ ...legacyPane, title: initialId }]))?.pane.paneId, '%4');
 });
 
-for (const scenario of ['matching', 'switched', 'draft', 'busy'] as const) {
+for (const scenario of ['matching', 'switched', 'clipped', 'clipped and switched', 'identical redraw', 'partial ID', 'draft', 'busy'] as const) {
   test('legacy Codex composer verifies native identity: ' + scenario, async (t) => {
-    const actualId = scenario === 'switched' ? otherId : initialId;
+    const switched = scenario === 'switched' || scenario === 'clipped and switched';
+    const actualId = switched ? otherId : initialId;
     let draft = scenario === 'draft' ? 'unfinished' : '';
     let statusVisible = false;
     const pasted: string[] = [];
     const observed: string[] = [];
+    t.mock.method(tmuxService, 'restoreShrunkWindow', async () => false);
     t.mock.method(sessionsDb, 'getSessionById', () => ({ provider: 'codex', provider_session_id: initialId }));
     t.mock.method(tmuxService, 'inspectPane', async () => ({
       title: 'host', dead: false, cursorVisible: true, cursorX: 2 + draft.length, cursorY: 1,
       lines: [scenario === 'busy' ? 'working · esc to interrupt' : '', draft ? '› ' + draft : placeholder],
     }));
-    t.mock.method(tmuxService, 'capturePane', async () => statusVisible
-      ? ['  Session:', '    ' + actualId.slice(0, 17) + '     ' + actualId.slice(17), '  Token usage: 100', '› Ask anything']
-      : ['› Ask anything']);
+    const clipped = ['› previous message', '                       ' + actualId.slice(0, 22), '                       ' + actualId.slice(22),
+      '', '  Context window:      74% left', '  Weekly limit:        90% left', '', '› Ask anything'];
+    if (scenario === 'partial ID') clipped.splice(1, 1);
+    t.mock.method(tmuxService, 'capturePane', async () => {
+      if (!statusVisible && scenario !== 'identical redraw') return ['› Ask anything'];
+      if (scenario === 'matching' || scenario === 'switched') {
+        return ['  Session:', '    ' + actualId.slice(0, 17) + '     ' + actualId.slice(17), '  Token usage: 100', '› Ask anything'];
+      }
+      return clipped;
+    });
     t.mock.method(tmuxService, 'pasteText', async (_pane: string, text: string) => { pasted.push(text); draft = text; });
     t.mock.method(tmuxService, 'sendKeys', async (_pane: string, keys: string[]) => {
       assert.deepEqual(keys, ['Enter']);
@@ -80,10 +89,13 @@ for (const scenario of ['matching', 'switched', 'draft', 'busy'] as const) {
       assert.equal(key, '@agentharbor-codex-current-thread');
       observed.push(id);
     });
-    const result = waitForCodexComposer('original', legacyPane, new AbortController().signal, initialId);
-    if (scenario === 'matching') assert.equal((await result).providerSessionId, initialId);
-    else await assert.rejects(result, scenario === 'switched' ? /different Codex session/ : scenario === 'draft' ? /draft/ : /turn to finish/);
+    const signal = scenario === 'partial ID' ? AbortSignal.timeout(150) : new AbortController().signal;
+    const result = waitForCodexComposer('original', legacyPane, signal, initialId);
+    if (switched) await assert.rejects(result, /different Codex session/);
+    else if (scenario === 'partial ID') await assert.rejects(result, { name: 'TimeoutError' });
+    else if (scenario === 'draft' || scenario === 'busy') await assert.rejects(result, scenario === 'draft' ? /draft/ : /turn to finish/);
+    else assert.equal((await result).providerSessionId, initialId);
     assert.deepEqual(pasted, scenario === 'busy' || scenario === 'draft' ? [] : ['/status']);
-    assert.deepEqual(observed, scenario === 'switched' ? [otherId] : []);
+    assert.deepEqual(observed, switched ? [otherId] : []);
   });
 }
