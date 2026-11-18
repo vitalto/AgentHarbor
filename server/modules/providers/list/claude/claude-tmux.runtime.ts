@@ -54,6 +54,7 @@ export const claudeTmuxRuntime: IProviderRuntime = {
       await applyAgentSelection(appSessionId, pane.pane, { model: options.model, effort: options.effort });
       const turnEnded = getSessionMonitor().beginTurn(appSessionId);
       await typePromptWithAttachments(pane.pane.paneId, command, options);
+      options.onInputSubmitted?.();
       return await turnEnded;
     } catch (error) {
       writer.send(createNormalizedMessage({

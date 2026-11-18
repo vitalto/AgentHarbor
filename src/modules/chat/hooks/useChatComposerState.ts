@@ -67,7 +67,7 @@ type UseChatComposerStateArgs = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
   scrollToBottom: () => void;
-  addMessage: (msg: ChatMessage) => void;
+  addMessage: (msg: ChatMessage, sessionId?: string, provider?: LLMProvider) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
 };
@@ -873,8 +873,11 @@ export function useChatComposerState({
       }
 
       const attachmentRecords = uploadedAttachments as ChatAttachment[];
+      // getRandomValues is available on LAN HTTP origins as well as HTTPS.
+      const clientMessageId = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
       const userMessage: ChatMessage = {
         type: 'user',
+        clientMessageId,
         content: currentInput,
         images: attachmentRecords.filter(isImageAttachmentDescriptor),
         files: attachmentRecords.filter((attachment) => !isImageAttachmentDescriptor(attachment)),
@@ -885,7 +888,7 @@ export function useChatComposerState({
         ...(editingAnchorId ? { replacesAnchorId: editingAnchorId } : {}),
       };
 
-      addMessage(userMessage);
+      addMessage(userMessage, targetSessionId, provider);
       // Mark this request as processing in the per-session activity map (the
       // single source of truth the indicator derives from). The id is always
       // concrete at this point — no pending placeholder exists anymore.
@@ -905,6 +908,7 @@ export function useChatComposerState({
         // shape of the conversation, so it gets validated separately and can
         // report why it was refused.
         type: editingAnchorId ? 'chat.edit-send' : 'chat.send',
+        clientMessageId,
         sessionId: targetSessionId,
         ...(editingAnchorId ? { anchorId: editingAnchorId } : {}),
         content: messageContent,

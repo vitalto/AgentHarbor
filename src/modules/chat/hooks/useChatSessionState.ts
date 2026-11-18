@@ -140,7 +140,7 @@ function chatMessageToNormalized(
   sessionId: string,
   provider: LLMProvider,
 ): NormalizedMessage | null {
-  const id = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = msg.clientMessageId ? `local_send_${msg.clientMessageId}` : `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const ts = msg.timestamp instanceof Date
     ? msg.timestamp.toISOString()
     : typeof msg.timestamp === 'number'
@@ -428,16 +428,15 @@ export function useChatSessionState({
   /*  addMessage                                                       */
   /* ---------------------------------------------------------------- */
 
-  const addMessage = useCallback((msg: ChatMessage) => {
-    if (!activeSessionId) {
+  const addMessage = useCallback((msg: ChatMessage, sessionId = activeSessionId, provider = readSelectedProvider()) => {
+    if (!sessionId) {
       // No session yet — show as pending until the backend creates one
       setPendingUserMessage(msg);
       return;
     }
-    const prov = readSelectedProvider();
-    const normalized = chatMessageToNormalized(msg, activeSessionId, prov);
+    const normalized = chatMessageToNormalized(msg, sessionId, provider);
     if (normalized) {
-      sessionStore.appendRealtime(activeSessionId, recordPriorAttachmentTurns(normalized, sessionStore.getMessages(activeSessionId)));
+      sessionStore.appendRealtime(sessionId, recordPriorAttachmentTurns(normalized, sessionStore.getMessages(sessionId)));
     }
   }, [activeSessionId, sessionStore]);
 

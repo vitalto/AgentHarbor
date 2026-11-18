@@ -799,6 +799,28 @@ export function useSessionStore() {
     notify(sessionId);
   }, [getSlot, notify]);
 
+  const acknowledgeInput = useCallback((sessionId: string, clientMessageId: string) => {
+    const slot = storeRef.current.get(sessionId);
+    if (!slot) return;
+    const id = `local_send_${clientMessageId}`;
+    const remaining = slot.realtimeMessages.filter(row => row.id !== id);
+    if (remaining.length === slot.realtimeMessages.length) return;
+    slot.realtimeMessages = remaining;
+    recomputeMergedIfNeeded(slot);
+    notify(sessionId);
+  }, [notify]);
+
+  const discardDisconnectedInputs = useCallback((resubmittedIds: unknown[]) => {
+    const resubmitted = new Set(resubmittedIds.map(id => `local_send_${id}`));
+    for (const [sessionId, slot] of storeRef.current) {
+      const remaining = slot.realtimeMessages.filter(row => !row.id.startsWith('local_send_') || resubmitted.has(row.id));
+      if (remaining.length === slot.realtimeMessages.length) continue;
+      slot.realtimeMessages = remaining;
+      recomputeMergedIfNeeded(slot);
+      notify(sessionId);
+    }
+  }, [notify]);
+
   /**
    * Refreshes only the persisted tail and stitches it onto the contiguous
    * cached suffix. Large turns request a small offset bridge rather than the
@@ -907,6 +929,8 @@ export function useSessionStore() {
     fetchFromServer,
     fetchMore,
     appendRealtime,
+    acknowledgeInput,
+    discardDisconnectedInputs,
     truncateAt,
     refreshLatestFromServer,
     setActiveSession,
@@ -916,7 +940,7 @@ export function useSessionStore() {
     getMessages,
     getSessionSlot,
   }), [
-    fetchFromServer, fetchMore, appendRealtime, truncateAt, refreshLatestFromServer,
+    fetchFromServer, fetchMore, appendRealtime, acknowledgeInput, discardDisconnectedInputs, truncateAt, refreshLatestFromServer,
     setActiveSession, isStale, updateStreaming, finalizeStreaming,
     getMessages, getSessionSlot,
   ]);

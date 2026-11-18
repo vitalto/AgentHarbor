@@ -210,6 +210,7 @@ export type ProviderSessionModel = {
  */
 export type MessageKind =
   | 'text'
+  | 'input_submitted'
   | 'tool_use'
   | 'tool_result'
   | 'thinking'
@@ -312,6 +313,7 @@ export type CompactionInfo = {
 
 export type NormalizedMessage = {
   id: string;
+  clientMessageId?: string;
   /**
    * The provider's own identifier for the transcript row this message came
    * from, when the provider has stable per-row identity (today: Claude's

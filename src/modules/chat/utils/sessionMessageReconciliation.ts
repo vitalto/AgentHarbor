@@ -147,7 +147,9 @@ export function removeOptimisticUserEchoes(
   const claimedServerIds = new Set<string>();
 
   return realtimeMessages.filter((message) => {
-    if (!message.id.startsWith('local_')) {
+    // Identified web sends retire on their own delivery receipt. Identical
+    // text in another tab or in a previous turn cannot acknowledge them.
+    if (!message.id.startsWith('local_') || message.id.startsWith('local_send_')) {
       return true;
     }
 

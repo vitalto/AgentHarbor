@@ -98,6 +98,21 @@ test('a photo sent without text while Claude is busy reaches its window', async 
   });
 });
 
+test('accepted terminal follow-ups acknowledge their individual send IDs and can replay the receipts', async () => {
+  await withBusySession(async ({ socket }) => {
+    const ids = ['1'.repeat(32), '2'.repeat(32)];
+    chatRunRegistry.getRun(SESSION_ID)!.writer.updateWebSocket(socket as never);
+    for (const clientMessageId of ids) socket.emit('message', JSON.stringify({
+      type: 'chat.send', sessionId: SESSION_ID, content: '☒ [одно и то же]?', clientMessageId,
+    }));
+    await settle();
+    const receipts = (events: Array<{ kind?: unknown; clientMessageId?: unknown }>) =>
+      events.filter(event => event.kind === 'input_submitted').map(event => event.clientMessageId);
+    assert.deepEqual(receipts(socket.frames), ids);
+    assert.deepEqual(receipts(chatRunRegistry.getRun(SESSION_ID)!.events), ids);
+  });
+});
+
 test('a busy send keeps files apart from images and drops paths outside the upload store', async () => {
   await withBusySession(async ({ socket, typed }) => {
     socket.emit('message', JSON.stringify({

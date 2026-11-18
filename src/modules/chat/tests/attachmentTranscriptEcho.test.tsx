@@ -20,11 +20,34 @@ const first: ProjectSession = { id: 'first', __provider: 'codex' };
 const second: ProjectSession = { id: 'second', __provider: 'codex' };
 const noop = () => {};
 
+it('only retires the addressed preview, including across tabs, repeated text and reconnects', () => {
+  const { result } = renderHook(() => useSessionStore());
+  const row = (id: string, content: string): NormalizedMessage => ({
+    id, content, timestamp: '2026-11-18T20:57:00Z', sessionId: first.id, provider: 'codex', kind: 'text', role: 'user',
+  });
+  act(() => {
+    for (const id of ['a', 'b']) result.current.appendRealtime(first.id, row('local_send_' + id, '☒?'));
+    result.current.appendRealtime(second.id, row('local_send_a', 'другая вкладка'));
+    result.current.appendRealtime(first.id, row('terminal', '☒?'));
+    result.current.acknowledgeInput(first.id, 'a');
+    result.current.appendRealtime(first.id, row('first-delivered', 'другое отображение'));
+    result.current.acknowledgeInput(first.id, 'a');
+  });
+  expect(result.current.getMessages(first.id).map(item => item.id)).toEqual(['local_send_b', 'terminal', 'first-delivered']);
+  expect(result.current.getMessages(second.id)).toHaveLength(1);
+  act(() => result.current.discardDisconnectedInputs(['b']));
+  expect(result.current.getMessages(second.id)).toHaveLength(0);
+  expect(result.current.getMessages(first.id)).toHaveLength(3);
+  act(() => result.current.acknowledgeInput(first.id, 'b'));
+  expect(result.current.getMessages(first.id).map(item => item.id)).toEqual(['terminal', 'first-delivered']);
+});
+
 it.each([
   { name: 'photo.png', mime: 'image/png', kind: 'images', prompt: 'Here is the photo', inline: false },
   { name: 'photo.png', mime: 'image/png', kind: 'images', prompt: '', inline: true },
   { name: 'notes.txt', mime: 'text/plain', kind: 'files', prompt: '', inline: false },
   { name: 'drawing.svg', mime: 'image/svg+xml', kind: 'files', prompt: 'Here is the drawing', inline: false },
+  { name: 'данные.txt', mime: 'text/plain', kind: 'files', prompt: '[цитата] > ВЭМ ☒?', inline: false },
 ] as const)('keeps each send of $name once during live delivery, history refresh and dialog switches ($prompt)', async ({ name, mime, kind, prompt, inline }) => {
   const history: NormalizedMessage[] = [];
   const sendMessage = vi.fn();
@@ -67,15 +90,21 @@ it.each([
     kind: 'text', role: 'user', provider: 'codex', content: prompt,
     [kind]: [inline ? { data: 'data:image/png;base64,QQ==' } : { path: `C:/staging/${number}-${name}`, name }],
   });
-  const deliver = (row: NormalizedMessage) => act(() => view.result.current.store.appendRealtime(first.id, row));
+  const deliver = (row: NormalizedMessage, sendIndex: number) => act(() => {
+    const { clientMessageId } = sendMessage.mock.calls[sendIndex][0];
+    expect(clientMessageId).toMatch(/^[a-f0-9]{32}$/);
+    view.result.current.store.acknowledgeInput(first.id, clientMessageId);
+    view.result.current.store.appendRealtime(first.id, row);
+  });
   const select = (selectedSession: ProjectSession) => act(async () => view.rerender({ selectedSession }));
 
   await send();
   expect(sendMessage.mock.calls.map(([frame]) => [frame.type, frame.sessionId, frame.content])).toEqual([['chat.send', first.id, prompt]]);
   expect(userRows()).toEqual([[prompt, { name, path: `/uploads/1-${name}`, mimeType: mime }]]);
   const firstEcho = echo(1);
-  deliver(firstEcho);
-  expect(userRows()).toEqual([[prompt, firstEcho[kind]?.[0]]]);
+  if (prompt.includes('☒')) firstEcho.content = 'цитата ВЭМ';
+  deliver(firstEcho, 0);
+  expect(userRows()).toEqual([[firstEcho.content, firstEcho[kind]?.[0]]]);
   history.push(firstEcho);
   await select(second);
   expect(userRows()).toEqual([]);
@@ -84,12 +113,13 @@ it.each([
   await send();
   expect(sendMessage).toHaveBeenCalledTimes(2);
   expect(userRows()).toEqual([
-    [prompt, firstEcho[kind]?.[0]], [prompt, { name, path: `/uploads/2-${name}`, mimeType: mime }],
+    [firstEcho.content, firstEcho[kind]?.[0]], [prompt, { name, path: `/uploads/2-${name}`, mimeType: mime }],
   ]);
   const secondEcho = echo(2);
-  deliver(secondEcho);
+  expect(sendMessage.mock.calls[0][0].clientMessageId).not.toBe(sendMessage.mock.calls[1][0].clientMessageId);
+  deliver(secondEcho, 1);
   history.push(secondEcho);
   await select(second);
   await select(first);
-  expect(userRows()).toEqual([[prompt, firstEcho[kind]?.[0]], [prompt, secondEcho[kind]?.[0]]]);
+  expect(userRows()).toEqual([[firstEcho.content, firstEcho[kind]?.[0]], [prompt, secondEcho[kind]?.[0]]]);
 });

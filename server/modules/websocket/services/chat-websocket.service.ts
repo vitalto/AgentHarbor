@@ -19,7 +19,7 @@ import type {
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { createNormalizedMessage, parseIncomingJsonObject } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -202,11 +202,19 @@ async function handleChatSend(
     return;
   }
 
-  if (chatRunRegistry.isProcessing(resolved.sessionId)) {
+  const activeRun = chatRunRegistry.getRun(resolved.sessionId);
+  if (activeRun?.status === 'running') {
     // Claude's TUI queues input typed while it works, so a busy session takes the message too.
     const content = typeof data.content === 'string' ? data.content : '';
     const { images, files } = readVerifiedAttachments((data.options ?? {}) as AnyRecord);
-    if (await dependencies.terminal?.typeWhileBusy(resolved.sessionId, content, { images, files })) {
+    try {
+      if (await dependencies.terminal?.typeWhileBusy(resolved.sessionId, content, { images, files })) {
+        activeRun.writer.updateWebSocket(ws);
+        acknowledgeSubmittedInput(activeRun, data.clientMessageId);
+        return;
+      }
+    } catch (error) {
+      sendProtocolError(ws, 'INPUT_NOT_SUBMITTED', error instanceof Error ? error.message : String(error), resolved.sessionId);
       return;
     }
   }
@@ -221,6 +229,13 @@ type ResolvedSendTarget = {
 };
 
 type SendTargetError = { code: string; error: string };
+
+function acknowledgeSubmittedInput(run: NonNullable<ReturnType<typeof chatRunRegistry.getRun>>, clientMessageId: unknown) {
+  if (typeof clientMessageId !== 'string' || !/^[0-9a-f]{32}$/.test(clientMessageId)) return;
+  run.writer.send(createNormalizedMessage({
+    kind: 'input_submitted', provider: run.provider, sessionId: run.appSessionId, clientMessageId,
+  }));
+}
 
 /** The session row and provider come from the database, never from the client. */
 function findSendTarget(
@@ -361,6 +376,7 @@ async function dispatchRun(
   const runtimeOptions: AnyRecord = {
     ...clientOptions,
     ...extraRuntimeOptions,
+    onInputSubmitted: () => acknowledgeSubmittedInput(run, data.clientMessageId),
     // Attachments are re-validated server-side: only direct children of the
     // global upload store may reach provider runtimes or their file tools.
     attachments: verifiedAttachments.all,
@@ -564,6 +580,7 @@ function handleChatSubscribe(
       isProcessing,
       lastSeq: run?.lastSeq ?? 0,
       pendingPermissions,
+      submittedInputIds: run?.events.filter(event => event.kind === 'input_submitted').map(event => event.clientMessageId) ?? [],
       timestamp: new Date().toISOString(),
     });
 

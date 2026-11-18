@@ -112,6 +112,7 @@ export async function runCodexTmuxTurn(command: string, options: AnyRecord, writ
     await tail?.poll();
     await typeMessage(destination, command, options, turn.startup.signal);
     turn.submitted = true;
+    options.onInputSubmitted?.();
     resolveReady(destination);
     let aborted = false;
     let failure: string | null = null;

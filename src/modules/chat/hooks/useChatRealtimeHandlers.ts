@@ -129,7 +129,13 @@ export function useChatRealtimeHandlers({
       }
 
       switch (msg.kind) {
+        case 'input_submitted':
+          if (typeof msg.sessionId === 'string' && typeof msg.clientMessageId === 'string') {
+            sessionStore.acknowledgeInput(msg.sessionId, msg.clientMessageId);
+          }
+          return;
         case 'websocket_reconnected':
+          sessionStore.discardDisconnectedInputs(Array.isArray(msg.resubmittedIds) ? msg.resubmittedIds : []);
           onWebSocketReconnect?.();
           return;
 
@@ -147,6 +153,9 @@ export function useChatRealtimeHandlers({
           // Ack for chat.subscribe: authoritative processing state plus any
           // pending tool-permission prompts for the run.
           if (!sid) return;
+          if (Array.isArray(msg.submittedInputIds)) {
+            for (const id of msg.submittedInputIds) if (typeof id === 'string') sessionStore.acknowledgeInput(sid, id);
+          }
 
           if (msg.isProcessing) {
             onSessionProcessing?.(sid);
@@ -182,7 +191,7 @@ export function useChatRealtimeHandlers({
             // A refused stop request is not about the run: the task had
             // already settled, and idling here would drop a response in
             // flight on that session.
-            if (msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED' && msg.code !== 'TUI_NOT_AVAILABLE') {
+            if (msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED' && msg.code !== 'TUI_NOT_AVAILABLE' && msg.code !== 'INPUT_NOT_SUBMITTED') {
               onSessionIdle?.(sid);
             }
             sessionStore.appendRealtime(sid, {

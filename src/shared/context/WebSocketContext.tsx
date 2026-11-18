@@ -125,7 +125,8 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         }
         if (hasConnectedRef.current) {
           // This is a reconnect — signal so components can catch up on missed messages
-          dispatch({ kind: 'websocket_reconnected', timestamp: Date.now() });
+          const resubmittedIds = heldMessages.map(message => JSON.parse(message).clientMessageId);
+          dispatch({ kind: 'websocket_reconnected', resubmittedIds, timestamp: Date.now() });
         }
         hasConnectedRef.current = true;
       };
