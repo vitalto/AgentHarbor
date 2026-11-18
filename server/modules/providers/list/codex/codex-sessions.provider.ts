@@ -1180,7 +1180,14 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
 /** Decodes both persisted history and the appended rows streamed by the Codex TUI runtime. */
 export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessionFilePath?: string, onMessage?: (message: AnyRecord) => void): Promise<CodexHistoryResult> {
   const messages: AnyRecord[] = [];
+  const idlessPromptsPerTimestamp = new Map<string, number>();
   const publish = (message: AnyRecord) => {
+    // Older rollouts omit item IDs. Two queued prompts can share a timestamp.
+    if (message.type === 'user' && !message.uuid) {
+      const ordinal = idlessPromptsPerTimestamp.get(message.timestamp) ?? 0;
+      idlessPromptsPerTimestamp.set(message.timestamp, ordinal + 1);
+      message.uuid = `codex-user:${message.timestamp}:${ordinal}`;
+    }
     messages.push(message);
     onMessage?.(message);
   };
@@ -1332,6 +1339,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
             }
             const row: AnyRecord = {
               type: 'user',
+              uuid: readNonEmptyString(item.id),
               timestamp,
               message: { role: 'user', content },
               ...(images ? { images } : {}),
@@ -1880,9 +1888,7 @@ export class CodexSessionsProvider implements IProviderSessions {
         content: parsedFiles.text,
         images: rawImages,
         files,
-        // The enclosing turn, when the reader could name one. `baseId` is not
-        // usable for this: Codex rows carry no id, so it is synthesized per
-        // read and would address a different message every time.
+        // Edits rewind a whole turn, which can contain several user messages.
         transcriptAnchorId: readNonEmptyString(raw.turnId),
       })];
     }

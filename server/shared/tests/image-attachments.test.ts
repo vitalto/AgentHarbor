@@ -119,6 +119,22 @@ test('parseFilesInputTag handles Windows-flattened provider prompts', () => {
   ]);
 });
 
+test('restores the trailing file block when the terminal strips its angle brackets', () => {
+  const prompt = 'Explain this literal <files_input>example</files_input>.';
+  const attachments = [{ path: 'C:/uploads/brief.md', name: 'brief.md' }];
+  const terminalText = appendFilesInputTag(prompt, attachments)
+    .replace('\n<files_input>\n', '\nfiles_input\n')
+    .replace('\n</files_input>', '\n/files_input');
+  assert.deepEqual(parseFilesInputTag(terminalText), {
+    text: prompt, filePaths: ['C:/uploads/brief.md'], attachments,
+  });
+});
+
+test('preserves ordinary prompt text between bare files_input markers', () => {
+  const prompt = 'files_input\n1. Example for the docs\n/files_input';
+  assert.deepEqual(parseFilesInputTag(prompt), { text: prompt, filePaths: [], attachments: [] });
+});
+
 test('appendImagesInputTag and parseImagesInputTag round-trip', () => {
   const prompt = 'Describe these screenshots.\n\nFocus on the header.';
   const tagged = appendImagesInputTag(prompt, [

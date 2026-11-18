@@ -218,6 +218,8 @@ export function appendImagesInputTag(prompt: string, images: unknown): string {
 }
 
 const FILES_INPUT_TAG_PATTERN = /\s*<files_input>([\s\S]*?)<\/files_input>\s*/g;
+// Windows terminals can drop angle brackets. Require the generated header and a numbered list at the end of the prompt.
+const BARE_FILES_INPUT_SUFFIX = /(?:^|\n)files_input\r?\nThe user attached \d+ file\(s\) to this message\.[^\r\n]*\r?\n(1\. [^\r\n]+(?:\r?\n\d+\. [^\r\n]+)*)\r?\n\/files_input\s*$/;
 
 /**
  * Appends a provider-neutral file reference block to a prompt. Provider agents
@@ -283,14 +285,15 @@ export function parseFilesInputTag(text: string): {
   filePaths: string[];
   attachments: ParsedImageAttachment[];
 } {
-  if (typeof text !== 'string' || !text.includes('<files_input>')) {
+  if (typeof text !== 'string' || !text.includes('files_input')) {
     return { text, filePaths: [], attachments: [] };
   }
 
-  let lastMatch: RegExpExecArray | null = null;
-  FILES_INPUT_TAG_PATTERN.lastIndex = 0;
-  for (let match = FILES_INPUT_TAG_PATTERN.exec(text); match; match = FILES_INPUT_TAG_PATTERN.exec(text)) {
-    lastMatch = match;
+  let lastMatch = BARE_FILES_INPUT_SUFFIX.exec(text);
+  if (!lastMatch) {
+    for (const match of text.matchAll(FILES_INPUT_TAG_PATTERN)) {
+      lastMatch = match;
+    }
   }
   if (!lastMatch) {
     return { text, filePaths: [], attachments: [] };

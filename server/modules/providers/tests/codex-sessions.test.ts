@@ -7,7 +7,7 @@ import test from 'node:test';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { CodexSessionSynchronizer } from '@/modules/providers/list/codex/codex-session-synchronizer.provider.js';
-import { CodexSessionsProvider, parseCodexExecScript, readCodexMemoryCitations } from '@/modules/providers/list/codex/codex-sessions.provider.js';
+import { CodexSessionsProvider, parseCodexExecScript, readCodexMemoryCitations, readCodexRollout } from '@/modules/providers/list/codex/codex-sessions.provider.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -580,6 +580,30 @@ test('an exec script that updates the plan yields the steps it set', () => {
   }]);
 });
 
+
+test('live and saved Codex prompts share an ID and repeated sends stay distinct', async () => {
+  const provider = new CodexSessionsProvider();
+  async function* entries() {
+    const timestamp = '2026-11-18T13:43:28.638Z';
+    for (const id of ['prompt-one', 'prompt-two']) {
+      yield { timestamp, type: 'event_msg', payload: {
+        type: 'item_completed', turn_id: 'one-turn',
+        item: { type: 'UserMessage', id, content: [{ type: 'text', text: 'Continue' }] },
+      } };
+    }
+    for (let index = 0; index < 2; index++) {
+      yield { timestamp, type: 'event_msg', payload: { type: 'user_message', message: 'Continue' } };
+    }
+  }
+  const liveIds: string[] = [];
+  await readCodexRollout(entries(), undefined, row => {
+    liveIds.push(provider.normalizeMessage(row, 'session')[0].id);
+  });
+  const history = await readCodexRollout(entries());
+  const savedIds = history.messages.map(row => provider.normalizeMessage(row, 'session')[0].id);
+  assert.equal(new Set(savedIds).size, 4);
+  assert.deepEqual(liveIds, savedIds);
+});
 
 test('Codex history restores user prompts from typed item_completed rows', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-typed-user-history-'));
