@@ -500,6 +500,7 @@
       },
       "attachmentRetentionDays": {
         "label": "Keep pasted files for",
+        "codexDescription": "When staging a new attachment for Windows, AgentHarbor removes temporary copies older than this. Codex and Claude share this setting. Default {{defaultValue}} days.",
         "description": "Copies of pasted images and files handed to a Windows Claude are deleted after this. Default {{defaultValue}}.",
         "unit": "days"
       }
@@ -507,6 +508,7 @@
     "power": {
       "title": "Power",
       "label": "Shut down when all agents finish",
+      "codexDescription": "This switch applies to both Codex and Claude. A working Codex session or one with unknown activity holds off shutdown. A session waiting for your answer allows the timer to run. After {{minutes}} min of inactivity, a {{seconds}} s shutdown countdown starts. The switch applies once.",
       "description": "Once no agent has a turn, a background command or a running subagent for {{minutes}} min, the computer shuts down with a {{seconds}} s countdown. An agent waiting for your answer does not hold it back. Works once, like a sleep timer: it turns itself off after that and does not survive a server restart.",
       "checking": "Checking agents…",
       "waitingFor_one": "Waiting for {{count}} agent:",

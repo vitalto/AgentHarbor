@@ -7,8 +7,8 @@ import type { ProviderAuthStatus } from '@/shared/types';
 
 const { saveAgentSettings } = vi.hoisted(() => ({ saveAgentSettings: vi.fn() }));
 const idleSettings = (minutes: number) => Response.json({ settings: {
-  values: { idleCloseMinutes: minutes }, defaults: { idleCloseMinutes: 60 },
-  limits: { idleCloseMinutes: { minimum: 0, maximum: 10080 } },
+  values: { idleCloseMinutes: minutes, attachmentRetentionDays: 7 }, defaults: { idleCloseMinutes: 60, attachmentRetentionDays: 7 },
+  limits: { idleCloseMinutes: { minimum: 0, maximum: 10080 }, attachmentRetentionDays: { minimum: 1, maximum: 365 } },
 } });
 
 vi.mock('@/shared/api', async (importOriginal) => ({
@@ -16,6 +16,7 @@ vi.mock('@/shared/api', async (importOriginal) => ({
   api: {
     providers: { claudeSettingsPermissions: async () => Response.json({ success: true, data: { sources: [] } }) },
     settings: { agentSettings: async () => idleSettings(30), saveAgentSettings },
+    power: { shutdownWhenIdle: async () => Response.json({ data: { armed: false, shutdownAt: null, quietPeriodMs: 60000, shutdownDelaySeconds: 60 } }) },
   },
 }));
 
@@ -51,7 +52,8 @@ describe('agent selection in settings', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Runtime' }));
     const timeout = await screen.findByRole('spinbutton', { name: /close idle agents after/i });
     expect((timeout as HTMLInputElement).value).toBe('30');
-    expect(screen.getAllByRole('spinbutton')).toHaveLength(1);
+    expect((screen.getByRole('spinbutton', { name: /keep pasted files/i }) as HTMLInputElement).value).toBe('7');
+    expect(screen.getByRole('switch', { name: /shut down when all agents finish/i }).getAttribute('aria-checked')).toBe('false');
     fireEvent.change(timeout, { target: { value: '0' } });
     fireEvent.blur(timeout);
     await waitFor(() => expect(saveAgentSettings).toHaveBeenCalledWith({ idleCloseMinutes: 0 }));

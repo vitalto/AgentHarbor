@@ -151,7 +151,7 @@ function ShutdownStatus({ state, onCancel, isUpdating }: {
 export default function RuntimeContent({ provider }: { provider: AgentProvider }) {
   const { t } = useTranslation('settings');
   const { overview, error: settingsError, savingSetting, saveSetting } = useAgentSettings();
-  const settings: AgentSettingName[] = provider === 'codex' ? ['idleCloseMinutes'] : [
+  const settings: AgentSettingName[] = provider === 'codex' ? ['idleCloseMinutes', 'attachmentRetentionDays'] : [
     'idleCloseMinutes', 'backgroundReminderMinutes', 'apiErrorRetryAttempts', 'apiErrorRetryDelayMinutes', 'attachmentRetentionDays',
   ];
 
@@ -178,12 +178,12 @@ export default function RuntimeContent({ provider }: { provider: AgentProvider }
         {settingsError && <p className="text-sm text-destructive">{settingsError}</p>}
       </SettingsSection>
 
-      {provider === 'claude' && <ShutdownSettings />}
+      <ShutdownSettings provider={provider} />
     </div>
   );
 }
 
-function ShutdownSettings() {
+function ShutdownSettings({ provider }: { provider: AgentProvider }) {
   const { t } = useTranslation('settings');
   const { state: shutdownState, requestError, isUpdating, setArmed, cancelShutdown } = useShutdownWhenIdle();
   return (
@@ -192,7 +192,7 @@ function ShutdownSettings() {
         <SettingsRow
           label={t('runtime.power.label')}
           description={shutdownState
-            ? t('runtime.power.description', {
+            ? t(provider === 'codex' ? 'runtime.power.codexDescription' : 'runtime.power.description', {
               minutes: Math.round(shutdownState.quietPeriodMs / 60_000),
               seconds: shutdownState.shutdownDelaySeconds,
             })
