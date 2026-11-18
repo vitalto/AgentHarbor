@@ -11,13 +11,17 @@ const base = { title: 'thread', dead: false, cursorVisible: true, cursorX: 2, cu
 
 test('Codex pastes preserve punctuation across Windows console input and native terminals', async (t) => {
   const paste = t.mock.method(tmuxService, 'pasteText', async () => {});
-  const text = 'A — €\nБ😀';
+  const text = '> две сессии — €\n\nПерезапустить сейчас 😀';
   await pasteCodexText('%1', text, true);
   await pasteCodexText('%2', text, false);
-  assert.deepEqual(paste.mock.calls.map((call) => call.arguments), [
-    ['%1', 'A \x1b[0;0;8212;1;0;1_ \x1b[0;0;8364;1;0;1_\n\x1b[0;0;1041;1;0;1_😀'],
-    ['%2', text],
-  ]);
+  const [[pane, windowsInput], nativePaste] = paste.mock.calls.map((call) => call.arguments);
+  assert.equal(pane, '%1');
+  assert.ok(typeof windowsInput === 'string');
+  assert.ok(windowsInput.startsWith('\x1b[0;0;62;1;0;1_\x1b[0;0;62;0;0;1_'));
+  const decoded = windowsInput.replace(/\x1b\[0;0;(\d+);1;0;1_\x1b\[0;0;\1;0;0;1_/g,
+    (_, code: string) => String.fromCharCode(Number(code)));
+  assert.equal(decoded, text);
+  assert.deepEqual(nativePaste, ['%2', text]);
 });
 
 test('an automatic prompt does not submit text typed by the user during its paste', async (t) => {
@@ -30,6 +34,25 @@ test('an automatic prompt does not submit text typed by the user during its past
   await assert.rejects(typeCodexInput('%1', 'Continue.', [], base.title, undefined, () => true));
   assert.equal(enter.mock.callCount(), 0);
   assert.match(draft, /my draft$/);
+});
+
+test('a long Windows paste can first appear after the short-prompt timeout', async (t) => {
+  const text = 'повтор '.repeat(600);
+  const startedAt = Date.now();
+  let elapsed = 0;
+  let pasted = false;
+  let submitted = false;
+  t.mock.method(Date, 'now', () => startedAt + elapsed);
+  t.mock.method(tmuxService, 'pasteText', async () => { pasted = true; });
+  t.mock.method(tmuxService, 'inspectPane', async () => {
+    const visible = pasted && elapsed >= 3500 && !submitted;
+    if (pasted) elapsed += 500;
+    const input = visible ? '[Pasted Content]' : '';
+    return { ...base, lines: ['', '› ' + input], cursorX: 2 + input.length };
+  });
+  t.mock.method(tmuxService, 'sendKeys', async () => { submitted = true; });
+  await typeCodexInput('%1', text, [], base.title);
+  assert.equal(submitted, true);
 });
 
 test('a stable partial Windows paste submits the whole multiline caption with four images once', async (t) => {

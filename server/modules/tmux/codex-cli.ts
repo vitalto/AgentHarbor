@@ -19,11 +19,14 @@ export function getCodexCliConfig() {
 
 /** Used by the Codex TUI input driver for message text and attachment paths. */
 export async function pasteCodexText(paneId: string, text: string, windowsInterop = getCodexCliConfig().pathConfig.windowsClaude) {
-  // ConPTY can drop an em dash and other BMP characters when inferring their
-  // keyboard events. A Win32-input-mode key carries the Unicode value directly.
-  // Supplementary characters already pass through ConPTY as surrogate pairs.
+  // ConPTY's keyboard translation can lose even ASCII punctuation such as ">".
+  // Pair each press with a release so Codex receives consecutive identical letters.
+  // Leave line breaks and supplementary characters to the normal tmux paste path.
   const input = windowsInterop
-    ? text.replace(/[\u0080-\uFFFF]/gu, (character) => `\x1b[0;0;${character.charCodeAt(0)};1;0;1_`)
+    ? text.replace(/[\u0020-\u007e\u0080-\uffff]/gu, (character) => {
+      const code = character.charCodeAt(0);
+      return `\x1b[0;0;${code};1;0;1_\x1b[0;0;${code};0;0;1_`;
+    })
     : text;
   await tmuxService.pasteText(paneId, input);
 }

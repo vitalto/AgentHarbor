@@ -205,6 +205,8 @@ async function submitCodexInput(paneId: string, text: string, imagePaths: string
     throw new AgentWindowError('Open Terminal and finish the Codex dialog or draft before sending.');
   }
   if (!text.trim() && !imagePaths.length) throw new AgentWindowError('The Codex message is empty.');
+  // ConPTY may buffer the entire paste before the first visible change to the draft.
+  const pasteTimeoutMs = 3000 + Math.min(text.length * 2, 120_000);
   let lastInput = first.input;
   for (const imagePath of imagePaths) {
     signal?.throwIfAborted();
@@ -217,7 +219,7 @@ async function submitCodexInput(paneId: string, text: string, imagePaths: string
     signal?.throwIfAborted();
     await pasteCodexText(paneId, text);
     const pasted = await waitForScreen(paneId, (screen) => screen.title === expectedTitle && screen.composer && !screen.empty && screen.input !== lastInput,
-      'Codex did not accept the paste. Review the draft in Terminal.', signal);
+      'Codex did not accept the paste. Review the draft in Terminal.', signal, pasteTimeoutMs);
     lastInput = pasted.input;
   }
   let stableSince = performance.now();
@@ -244,16 +246,15 @@ async function submitCodexInput(paneId: string, text: string, imagePaths: string
       stableSince = performance.now();
     }
     return performance.now() - stableSince >= pasteSettleMs;
-  }, 'The pasted Codex message did not finish appearing in the terminal.', signal);
+  }, 'The pasted Codex message did not finish appearing in the terminal.', signal, pasteTimeoutMs);
   signal?.throwIfAborted();
   // ConPTY can show a stable prefix while the rest of the paste is still queued.
   // End closes Codex's paste burst without editing the draft, before Enter reaches it.
   await tmuxService.sendKeys(paneId, ['End', 'Enter']);
   // Windows can deliver long pastes character by character ahead of these keys.
-  const submitTimeoutMs = 3000 + Math.min(text.length * 2, 120_000);
   await waitForScreen(paneId, (screen) => {
     if (screen.title !== expectedTitle) throw new AgentWindowError('The terminal switched to a different Codex session.');
     return screen.empty || screen.dialog !== null;
-  }, 'Codex did not submit the draft after Enter.', undefined, submitTimeoutMs);
+  }, 'Codex did not submit the draft after Enter.', undefined, pasteTimeoutMs);
   return true;
 }
