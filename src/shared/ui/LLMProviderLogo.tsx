@@ -1,6 +1,6 @@
 import type { LLMProvider } from '@/shared/types';
-import { SquareTerminal } from 'lucide-react';
 import ClaudeLogo from '@/shared/ui/ClaudeLogo';
+import CodexLogo from '@/shared/ui/CodexLogo';
 
 type LLMProviderLogoProps = {
   provider?: LLMProvider | string | null;
@@ -12,6 +12,6 @@ export function LLMProviderLogo({
   provider,
   className = 'w-5 h-5',
 }: LLMProviderLogoProps) {
-  if (provider === 'codex') return <SquareTerminal className={className} />;
+  if (provider === 'codex') return <CodexLogo className={className} />;
   return <ClaudeLogo className={className} />;
 }
