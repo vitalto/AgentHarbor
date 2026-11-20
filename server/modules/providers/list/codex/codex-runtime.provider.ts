@@ -7,7 +7,7 @@ import { findCodexRollout, readCodexRollout } from '@/modules/providers/list/cod
 import { readCodexUsage } from '@/modules/providers/list/codex/codex-usage.js';
 import {
   applyCodexSelection, createTranscriptTail, ensureCodexWindow, getCodexCliConfig, readCodexScreen,
-  stageAttachmentForClaude, tmuxService, typeCodexInput, waitForCodexComposer,
+  sendCodexEscape, stageAttachmentForClaude, typeCodexInput, waitForCodexComposer,
 } from '@/modules/tmux/index.js';
 import {
   appendFilesInputTag, createCompleteMessage, createNormalizedMessage, normalizeAttachmentDescriptors, readObjectRecord, recoverSessionTranscript,
@@ -72,7 +72,7 @@ async function interruptCodexTurn(sessionId: string) {
   return withTurnInput(sessionId, async ({ paneId, title }, turn) => {
     const screen = await readCodexScreen(paneId);
     if (screen.title !== title) return false;
-    await tmuxService.sendKeys(paneId, ['Escape']);
+    await sendCodexEscape(paneId);
     turn.interrupted = true;
     if (turns.get(sessionId) === turn) turns.delete(sessionId);
     return true;

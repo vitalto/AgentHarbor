@@ -53,3 +53,11 @@ export async function pasteCodexText(paneId: string, text: string, options: { wi
   const windowsInterop = options.windowsInterop ?? getCodexCliConfig().pathConfig.windowsClaude;
   await tmuxService.pasteText(paneId, windowsInterop ? windowsComposerInput(text, Boolean(options.imagePath)) : text);
 }
+
+/** The Codex runtime interrupts turns with this key. Windows Codex launched through WSL needs a console key event for Escape. */
+export function sendCodexEscape(paneId: string): Promise<void> {
+  if (getCodexCliConfig().pathConfig.windowsClaude) {
+    return tmuxService.pasteText(paneId, windowsKey(27, 1, 27));
+  }
+  return tmuxService.sendKeys(paneId, ['Escape']);
+}

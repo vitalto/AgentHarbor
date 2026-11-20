@@ -14,15 +14,24 @@ const nativeId = '01999999-abcd-7123-9876-123456789abc';
 const appId = 'app-session';
 const event = (type: string, payload: AnyRecord) => JSON.stringify({ timestamp: new Date().toISOString(), type, payload }) + '\n';
 
-for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'draft', 'switched']) {
+for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex via WSL', 'cancel before send', 'draft', 'switched']) {
   const description = scenario === 'resume' ? 'a busy image follow-up leaves the composer ready for the next turn' : scenario;
   test('Codex TUI transport: ' + description, async (t) => {
+    const windowsInterop = scenario === 'interrupt Windows Codex via WSL';
+    const interrupt = scenario === 'interrupt' || windowsInterop;
     const home = await mkdtemp(path.join(os.tmpdir(), 'ah-codex-'));
     const originalHome = process.env.AH_CODEX_HOME;
+    const originalCommand = process.env.AH_CODEX_CMD;
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
     process.env.AH_CODEX_HOME = home;
+    process.env.AH_CODEX_CMD = windowsInterop ? 'codex.exe' : 'codex';
+    if (windowsInterop) Object.defineProperty(process, 'platform', { ...originalPlatform, value: 'linux' });
     t.after(async () => {
       if (originalHome === undefined) delete process.env.AH_CODEX_HOME;
       else process.env.AH_CODEX_HOME = originalHome;
+      if (originalCommand === undefined) delete process.env.AH_CODEX_CMD;
+      else process.env.AH_CODEX_CMD = originalCommand;
+      if (windowsInterop) Object.defineProperty(process, 'platform', originalPlatform);
       await rm(home, { recursive: true, force: true });
     });
     const date = new Date(parseInt(nativeId.slice(0, 13).replace('-', ''), 16)).toISOString().slice(0, 10).split('-');
@@ -59,12 +68,19 @@ for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'dra
     const pasted: string[] = [];
     const submittedDrafts: string[] = [];
     const keys: string[] = [];
+    const command = 'line one\nline two';
+    const windowsEscape = '\x1b[27;1;27;1;0;1_\x1b[27;1;27;0;0;1_';
     let acknowledgeSubmit!: () => void;
     const submitted = new Promise<void>((resolve) => { acknowledgeSubmit = resolve; });
     t.mock.method(tmuxService, 'pasteText', async (id: string, text: string) => {
       assert.equal(id, pane.paneId);
+      if (windowsInterop && text === windowsEscape) {
+        keys.push('Escape');
+        working = false;
+        return;
+      }
       pasted.push(text);
-      draft += text.endsWith('.png') ? '[Image #1]' : text;
+      draft += windowsInterop ? command : text.endsWith('.png') ? '[Image #1]' : text;
       if (text === 'follow-up caption') captionPastedAt = performance.now();
     });
     t.mock.method(tmuxService, 'sendKeys', async (id: string, input: string[]) => {
@@ -72,10 +88,14 @@ for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'dra
       const action = input.at(-1)!;
       assert.deepEqual(input, action === 'Enter' ? ['End', 'Enter'] : ['Escape']);
       keys.push(action);
+      if (action === 'Escape') {
+        if (!windowsInterop) working = false;
+        return;
+      }
       // While Codex is finishing a paste burst, Enter inserts a newline and the current turn can still finish.
       if (performance.now() - captionPastedAt < 120) draft += '\n';
       else {
-        if (action === 'Enter') submittedDrafts.push(draft);
+        submittedDrafts.push(draft);
         draft = '';
       }
       if (!working) {
@@ -83,8 +103,7 @@ for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'dra
         working = true;
         acknowledgeSubmit();
       }
-      if (action === 'Escape' || (scenario === 'interrupt' && keys.length === 1)) return;
-      if (scenario === 'resume' && keys.length === 1) return;
+      if ((interrupt || scenario === 'resume') && keys.length === 1) return;
       await appendFile(file, event('response_item', { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'new reply' }] })
         + event('event_msg', { type: 'task_complete', turn_id: 'turn' }));
       working = false;
@@ -96,14 +115,16 @@ for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'dra
       normalizeMessage: (raw, id) => new CodexSessionsProvider().normalizeMessage(raw, id),
       getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'default' }), isProviderInstalled: async () => true,
     };
-    const run = runCodexTmuxTurn('line one\nline two', { sessionId: appId, images: [{ path: 'one.png' }], files: [{ path: 'notes.txt' }] }, {
+    const attachments = windowsInterop ? {} : { images: [{ path: 'one.png' }], files: [{ path: 'notes.txt' }] };
+    const run = runCodexTmuxTurn(command, { sessionId: appId, ...attachments }, {
       isWebSocketWriter: true, send: (msg) => messages.push(msg as AnyRecord),
     }, context);
     if (scenario === 'resume') {
       assert.equal(await steerCodexTurn(appId, 'follow-up caption', { images: [{ path: 'follow-up.png' }] }), true);
     }
-    if (scenario === 'interrupt') {
+    if (interrupt) {
       await submitted;
+      assert.equal(working, true);
       assert.equal(await codexRuntime.abort(appId), true);
     }
     if (scenario === 'cancel before send') {
@@ -120,11 +141,14 @@ for (const scenario of ['new', 'resume', 'interrupt', 'cancel before send', 'dra
       return;
     }
     assert.equal(session.provider_session_id, nativeId);
-    assert.deepEqual(pasted.slice(0, 1), ['one.png']);
-    assert.match(pasted[1], /line one\nline two/);
-    assert.match(pasted[1], /notes\.txt/);
-    if (scenario === 'interrupt') {
+    if (!windowsInterop) {
+      assert.deepEqual(pasted.slice(0, 1), ['one.png']);
+      assert.match(pasted[1], /line one\nline two/);
+      assert.match(pasted[1], /notes\.txt/);
+    }
+    if (interrupt) {
       assert.deepEqual(keys, ['Enter', 'Escape']);
+      assert.equal(working, false, 'the terminal turn should stop after Escape');
     } else {
       assert.deepEqual(keys, scenario === 'resume' ? ['Enter', 'Enter'] : ['Enter']);
       assert.deepEqual(messages.filter((msg) => msg.kind === 'text').map((msg) => msg.content), ['new reply']);
