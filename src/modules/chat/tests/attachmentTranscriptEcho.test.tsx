@@ -20,26 +20,90 @@ const first: ProjectSession = { id: 'first', __provider: 'codex' };
 const second: ProjectSession = { id: 'second', __provider: 'codex' };
 const noop = () => {};
 
+it.each([
+  { source: 'live', content: 'Привет' },
+  { source: 'history', content: 'Привет' },
+  { source: 'live', content: '/tmp/report.txt is the file to inspect' },
+])('keeps a submitted message visible until its $source transcript echo arrives ($content)', async ({ source, content }) => {
+  const { result } = renderHook(() => useSessionStore());
+  const preview: NormalizedMessage = {
+    id: 'local_send_a', content, timestamp: '2026-11-18T20:57:00Z',
+    sessionId: first.id, provider: 'codex', kind: 'text', role: 'user',
+  };
+  const echo = { ...preview, id: 'codex-user-1', timestamp: '2026-11-18T20:57:01Z' };
+  const visibleIds = () => result.current.getMessages(first.id).map(row => row.id);
+
+  act(() => result.current.appendRealtime(first.id, preview));
+  expect(visibleIds()).toEqual([preview.id]);
+  act(() => result.current.acknowledgeInput(first.id, 'a'));
+  expect(visibleIds()).toEqual([preview.id]);
+
+  if (source === 'live') {
+    act(() => result.current.appendRealtime(first.id, echo));
+  } else {
+    vi.spyOn(api.providers, 'sessionMessages').mockResolvedValue(
+      Response.json({ data: { messages: [echo], total: 1, hasMore: false } }),
+    );
+    await act(async () => { await result.current.refreshLatestFromServer(first.id); });
+  }
+  expect(visibleIds()).toEqual([echo.id]);
+});
+
+it('does not retire an acknowledged prompt against a transcript row with different word boundaries', () => {
+  const { result } = renderHook(() => useSessionStore());
+  const preview: NormalizedMessage = {
+    id: 'local_send_a', content: 'a b', timestamp: '2026-11-18T20:57:00Z',
+    sessionId: first.id, provider: 'codex', kind: 'text', role: 'user',
+  };
+  act(() => {
+    result.current.appendRealtime(first.id, preview);
+    result.current.acknowledgeInput(first.id, 'a');
+    result.current.appendRealtime(first.id, { ...preview, id: 'unrelated', content: 'ab' });
+  });
+  expect(result.current.getMessages(first.id).map(row => row.id)).toEqual([preview.id, 'unrelated']);
+});
+
+it('matches repeated acknowledged sends in order when history arrives with clock skew', async () => {
+  const { result } = renderHook(() => useSessionStore());
+  const row = (id: string, seconds: string): NormalizedMessage => ({
+    id, content: 'continue', timestamp: `2026-11-18T20:57:${seconds}Z`, sessionId: first.id,
+    provider: 'codex', kind: 'text', role: 'user',
+  });
+  act(() => {
+    result.current.appendRealtime(first.id, row('local_send_a', '10'));
+    result.current.appendRealtime(first.id, row('local_send_b', '15'));
+    result.current.acknowledgeInput(first.id, 'a');
+    result.current.acknowledgeInput(first.id, 'b');
+  });
+  vi.spyOn(api.providers, 'sessionMessages').mockResolvedValue(Response.json({
+    data: { messages: [row('first-echo', '04'), row('second-echo', '09')], total: 2, hasMore: false },
+  }));
+  await act(async () => { await result.current.refreshLatestFromServer(first.id); });
+  expect(result.current.getMessages(first.id).map(message => message.id)).toEqual(['first-echo', 'second-echo']);
+});
+
 it('only retires the addressed preview, including across tabs, repeated text and reconnects', () => {
   const { result } = renderHook(() => useSessionStore());
   const row = (id: string, content: string): NormalizedMessage => ({
     id, content, timestamp: '2026-11-18T20:57:00Z', sessionId: first.id, provider: 'codex', kind: 'text', role: 'user',
   });
+  act(() => result.current.appendRealtime(first.id, row('terminal', '☒?')));
   act(() => {
     for (const id of ['a', 'b']) result.current.appendRealtime(first.id, row('local_send_' + id, '☒?'));
     result.current.appendRealtime(second.id, row('local_send_a', 'другая вкладка'));
-    result.current.appendRealtime(first.id, row('terminal', '☒?'));
-    result.current.acknowledgeInput(first.id, 'a');
-    result.current.appendRealtime(first.id, row('first-delivered', 'другое отображение'));
     result.current.acknowledgeInput(first.id, 'a');
   });
-  expect(result.current.getMessages(first.id).map(item => item.id)).toEqual(['local_send_b', 'terminal', 'first-delivered']);
+  expect(result.current.getMessages(first.id).map(item => item.id)).toEqual(['terminal', 'local_send_a', 'local_send_b']);
   expect(result.current.getMessages(second.id)).toHaveLength(1);
   act(() => result.current.discardDisconnectedInputs(['b']));
   expect(result.current.getMessages(second.id)).toHaveLength(0);
   expect(result.current.getMessages(first.id)).toHaveLength(3);
+  act(() => result.current.appendRealtime(first.id, row('first-delivered', '☒?')));
+  expect(result.current.getMessages(first.id).map(item => item.id)).toEqual(['terminal', 'local_send_b', 'first-delivered']);
   act(() => result.current.acknowledgeInput(first.id, 'b'));
-  expect(result.current.getMessages(first.id).map(item => item.id)).toEqual(['terminal', 'first-delivered']);
+  expect(result.current.getMessages(first.id).map(item => item.id)).toEqual(['terminal', 'local_send_b', 'first-delivered']);
+  act(() => result.current.appendRealtime(first.id, row('second-delivered', '☒?')));
+  expect(result.current.getMessages(first.id).map(item => item.id)).toEqual(['terminal', 'first-delivered', 'second-delivered']);
 });
 
 it.each([

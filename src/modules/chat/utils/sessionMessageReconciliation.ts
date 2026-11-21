@@ -19,10 +19,13 @@ function visibleCharacters(text: string): string {
   return text.replace(/[\p{Cf}\s]+/gu, '');
 }
 
-function userTurnFingerprint(message: NormalizedMessage): UserTurnFingerprint | null {
+function userTurnFingerprint(message: NormalizedMessage, preserveWordBoundaries: boolean): UserTurnFingerprint | null {
   if (message.kind !== 'text' || message.role !== 'user') return null;
 
-  const text = visibleCharacters(message.content || '');
+  const content = message.content || '';
+  const text = preserveWordBoundaries
+    ? content.replace(/\p{Cf}/gu, '').replace(/\s+/gu, ' ').trim()
+    : visibleCharacters(content);
   const images = Array.isArray(message.images) ? message.images : [];
   const files = Array.isArray(message.files) ? message.files : [];
   if (!text && images.length === 0 && files.length === 0) return null;
@@ -30,13 +33,16 @@ function userTurnFingerprint(message: NormalizedMessage): UserTurnFingerprint | 
   return { text, images, files };
 }
 
+function storedAttachmentName(attachment: ChatImage): string | undefined {
+  return attachment?.path?.split(/[\\/]/).pop();
+}
+
 function attachmentSourcesMatch(local: ChatImage[], persisted: ChatImage[]): boolean {
   if (local.length !== persisted.length) return false;
   if (local.length === 0) return true;
   // Staging changes an upload's directory but keeps its unique stored filename.
   // An inline image can only be compared by its bytes when both sides carry them.
-  const storedName = (attachment: ChatImage) => attachment?.path?.split(/[\\/]/).pop();
-  const sources = [storedName, (attachment: ChatImage) => attachment?.data];
+  const sources = [storedAttachmentName, (attachment: ChatImage) => attachment?.data];
   return sources.every((readSource) => {
     const available = local.map(readSource);
     for (const attachment of persisted) {
@@ -54,9 +60,17 @@ function attachmentSourcesMatch(local: ChatImage[], persisted: ChatImage[]): boo
 function userTurnFingerprintsMatch(
   local: UserTurnFingerprint,
   server: UserTurnFingerprint,
+  allowUploadedAttachmentMatch: boolean,
 ): boolean {
+  // A unique upload name can identify the turn even if the terminal rewrote its text.
+  const hasMatchingUpload = (localAttachments: ChatImage[], serverAttachments: ChatImage[]) =>
+    localAttachments.some((attachment) => {
+      const name = storedAttachmentName(attachment);
+      return !!name && serverAttachments.some((echo) => storedAttachmentName(echo) === name);
+    });
   return (
-    local.text === server.text
+    (local.text === server.text || (allowUploadedAttachmentMatch
+      && (hasMatchingUpload(local.images, server.images) || hasMatchingUpload(local.files, server.files))))
     && attachmentSourcesMatch(local.images, server.images)
     && attachmentSourcesMatch(local.files, server.files)
   );
@@ -72,7 +86,8 @@ function findServerEchoForLocalUser(
   serverMessages: NormalizedMessage[],
   claimedServerIds: Set<string>,
 ): NormalizedMessage | null {
-  const localFingerprint = userTurnFingerprint(localMessage);
+  const inputSubmitted = localMessage.inputSubmitted === true;
+  const localFingerprint = userTurnFingerprint(localMessage, inputSubmitted);
   const localTime = readMessageTime(localMessage);
   if (!localFingerprint || localTime === null) {
     return null;
@@ -89,17 +104,17 @@ function findServerEchoForLocalUser(
   const dedupeWindow = localFingerprint.text
     ? LOCAL_USER_DEDUPE_WINDOW_MS
     : LOCAL_ATTACHMENT_ONLY_DEDUPE_WINDOW_MS;
-  let closestMatch: NormalizedMessage | null = null;
-  let closestTimeDifference = Number.POSITIVE_INFINITY;
+  let bestMatch: NormalizedMessage | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
 
   for (let index = firstEligibleIndex; index < serverMessages.length; index++) {
     const serverMessage = serverMessages[index];
-    if (claimedServerIds.has(serverMessage.id) || localMessage.priorAttachmentTurnIds?.includes(serverMessage.id)) {
+    if (claimedServerIds.has(serverMessage.id) || localMessage.ineligibleEchoIds?.includes(serverMessage.id)) {
       continue;
     }
 
-    const serverFingerprint = userTurnFingerprint(serverMessage);
-    if (!serverFingerprint || !userTurnFingerprintsMatch(localFingerprint, serverFingerprint)) {
+    const serverFingerprint = userTurnFingerprint(serverMessage, inputSubmitted);
+    if (!serverFingerprint || !userTurnFingerprintsMatch(localFingerprint, serverFingerprint, inputSubmitted)) {
       continue;
     }
 
@@ -112,28 +127,49 @@ function findServerEchoForLocalUser(
       continue;
     }
 
-    const timeDifference = Math.abs(serverTime - localTime);
-    if (timeDifference < closestTimeDifference) {
-      closestMatch = serverMessage;
-      closestTimeDifference = timeDifference;
+    // Consume identical submitted turns in transcript order even when the clocks disagree.
+    const score = inputSubmitted ? serverTime : Math.abs(serverTime - localTime);
+    if (score < bestScore) {
+      bestMatch = serverMessage;
+      bestScore = score;
     }
   }
 
-  return closestMatch;
+  return bestMatch;
 }
 
-/** An inline transcript image may lack its upload path. A turn already visible before the send cannot be its echo. */
-export function recordPriorAttachmentTurns(localMessage: NormalizedMessage, visibleMessages: NormalizedMessage[]): NormalizedMessage {
-  if (!localMessage.images?.length && !localMessage.files?.length) return localMessage;
+/** A turn already visible before the send cannot be its echo, even if the user repeats it. */
+export function recordPriorUserTurns(localMessage: NormalizedMessage, visibleMessages: NormalizedMessage[]): NormalizedMessage {
+  const identifiedSend = localMessage.id.startsWith('local_send_');
+  if (!identifiedSend && !localMessage.images?.length && !localMessage.files?.length) return localMessage;
   const localTime = readMessageTime(localMessage);
   if (localTime === null) return localMessage;
 
   const priorIds = visibleMessages.filter((message) => (
     message.kind === 'text' && message.role === 'user' && !message.id.startsWith('local_')
-    && (message.images?.length || message.files?.length)
+    && (identifiedSend || message.images?.length || message.files?.length)
     && (readMessageTime(message) ?? -Infinity) >= localTime - LOCAL_USER_DEDUPE_CLOCK_SKEW_MS
   )).map((message) => message.id);
-  return priorIds.length ? { ...localMessage, priorAttachmentTurnIds: priorIds } : localMessage;
+  return priorIds.length ? { ...localMessage, ineligibleEchoIds: priorIds } : localMessage;
+}
+
+export function reconcileSubmittedUserEchoes(
+  transcript: NormalizedMessage[],
+  realtime: NormalizedMessage[],
+): NormalizedMessage[] {
+  const claimedIds = new Set<string>();
+  const remaining = realtime.filter((message) => {
+    if (!message.inputSubmitted) return true;
+    const echo = findServerEchoForLocalUser(message, transcript, claimedIds);
+    if (!echo) return true;
+    claimedIds.add(echo.id);
+    return false;
+  });
+  if (claimedIds.size === 0) return realtime;
+
+  return remaining.map((message) => message.id.startsWith('local_send_')
+    ? { ...message, ineligibleEchoIds: [...(message.ineligibleEchoIds ?? []), ...claimedIds] }
+    : message);
 }
 
 /**
@@ -147,8 +183,7 @@ export function removeOptimisticUserEchoes(
   const claimedServerIds = new Set<string>();
 
   return realtimeMessages.filter((message) => {
-    // Identified web sends retire on their own delivery receipt. Identical
-    // text in another tab or in a previous turn cannot acknowledge them.
+    // A uniquely acknowledged web send reconciles only after terminal submission.
     if (!message.id.startsWith('local_') || message.id.startsWith('local_send_')) {
       return true;
     }

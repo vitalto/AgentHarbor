@@ -11,7 +11,11 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
 import type { LLMProvider, NormalizedMessage } from '@/shared/types';
-import { removeOptimisticUserEchoes } from '@/modules/chat/utils/sessionMessageReconciliation';
+import {
+  reconcileSubmittedUserEchoes,
+  recordPriorUserTurns,
+  removeOptimisticUserEchoes,
+} from '@/modules/chat/utils/sessionMessageReconciliation';
 import {
   hasReachedCachedTailTimeBoundary,
   mergeLatestServerPage,
@@ -401,6 +405,12 @@ function recomputeMergedIfNeeded(slot: SessionSlot): boolean {
   if (slot.serverMessages === slot._lastServerRef && slot.realtimeMessages === slot._lastRealtimeRef) {
     return false;
   }
+  if (slot.realtimeMessages.some((message) => message.inputSubmitted)) {
+    slot.realtimeMessages = reconcileSubmittedUserEchoes(
+      persistedEchoCandidates(slot.serverMessages, slot.realtimeMessages),
+      slot.realtimeMessages,
+    );
+  }
   slot._lastServerRef = slot.serverMessages;
   slot._lastRealtimeRef = slot.realtimeMessages;
   slot.merged = computeMerged(slot.serverMessages, slot.realtimeMessages);
@@ -789,7 +799,9 @@ export function useSessionStore() {
     if (rowIndex >= 0) {
       updated[rowIndex] = normalizedMessage;
     } else {
-      updated.push(normalizedMessage);
+      const isLocalUser = normalizedMessage.kind === 'text' && normalizedMessage.role === 'user'
+        && normalizedMessage.id.startsWith('local_');
+      updated.push(isLocalUser ? recordPriorUserTurns(normalizedMessage, slot.merged) : normalizedMessage);
     }
     if (updated.length > MAX_REALTIME_MESSAGES) {
       updated = updated.slice(-MAX_REALTIME_MESSAGES);
@@ -803,9 +815,14 @@ export function useSessionStore() {
     const slot = storeRef.current.get(sessionId);
     if (!slot) return;
     const id = `local_send_${clientMessageId}`;
-    const remaining = slot.realtimeMessages.filter(row => row.id !== id);
-    if (remaining.length === slot.realtimeMessages.length) return;
-    slot.realtimeMessages = remaining;
+    const row = slot.realtimeMessages.find(message => message.id === id);
+    if (!row || row.inputSubmitted) return;
+    // Terminal commands can leave no user row. A path or an attachment is still a prompt.
+    const isTerminalCommand = !row.images?.length && !row.files?.length
+      && /^\/[\w:-]+(?:\s|$)/.test(row.content?.trimStart() ?? '');
+    slot.realtimeMessages = isTerminalCommand
+      ? slot.realtimeMessages.filter(message => message !== row)
+      : slot.realtimeMessages.map(message => message === row ? { ...message, inputSubmitted: true } : message);
     recomputeMergedIfNeeded(slot);
     notify(sessionId);
   }, [notify]);
@@ -813,7 +830,7 @@ export function useSessionStore() {
   const discardDisconnectedInputs = useCallback((resubmittedIds: unknown[]) => {
     const resubmitted = new Set(resubmittedIds.map(id => `local_send_${id}`));
     for (const [sessionId, slot] of storeRef.current) {
-      const remaining = slot.realtimeMessages.filter(row => !row.id.startsWith('local_send_') || resubmitted.has(row.id));
+      const remaining = slot.realtimeMessages.filter(row => row.inputSubmitted || !row.id.startsWith('local_send_') || resubmitted.has(row.id));
       if (remaining.length === slot.realtimeMessages.length) continue;
       slot.realtimeMessages = remaining;
       recomputeMergedIfNeeded(slot);

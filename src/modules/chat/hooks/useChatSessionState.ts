@@ -5,7 +5,6 @@ import { api } from '@/shared/api';
 import type { MarkSessionIdle, SessionActivityMap,Project,ProjectSession,LLMProvider,NormalizedMessage,ChatMessage,DiffCalculator } from '@/shared/types';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { SESSION_MESSAGES_PAGE_SIZE } from '@/modules/chat/utils/sessionMessagePagination';
-import { recordPriorAttachmentTurns } from '@/modules/chat/utils/sessionMessageReconciliation';
 import { createMessageHistoryRefreshCoordinator } from '@/modules/chat/utils/messageHistoryRefreshCoordinator';
 import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransforms';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
@@ -436,7 +435,7 @@ export function useChatSessionState({
     }
     const normalized = chatMessageToNormalized(msg, sessionId, provider);
     if (normalized) {
-      sessionStore.appendRealtime(sessionId, recordPriorAttachmentTurns(normalized, sessionStore.getMessages(sessionId)));
+      sessionStore.appendRealtime(sessionId, normalized);
     }
   }, [activeSessionId, sessionStore]);
 
