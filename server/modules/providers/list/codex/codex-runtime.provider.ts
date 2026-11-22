@@ -6,7 +6,7 @@ import { getCodexModelCatalog } from '@/modules/providers/list/codex/codex-model
 import { findCodexRollout, readCodexRollout } from '@/modules/providers/list/codex/codex-sessions.provider.js';
 import { readCodexUsage } from '@/modules/providers/list/codex/codex-usage.js';
 import {
-  applyCodexSelection, createTranscriptTail, ensureCodexWindow, getCodexCliConfig, readCodexScreen,
+  applyCodexSelection, createTranscriptTail, ensureCodexWindow, getCodexCliConfig, readCodexScreen, readCodexTurnHook,
   sendCodexEscape, stageAttachmentForClaude, typeCodexInput, waitForCodexComposer,
 } from '@/modules/tmux/index.js';
 import {
@@ -174,8 +174,13 @@ export async function runCodexTmuxTurn(command: string, options: AnyRecord, writ
         const silenceLimitMs = !failure && (sawTurn || screen.activity === 'working')
           ? ACTIVE_TURN_SILENCE_MS : TURN_START_SILENCE_MS;
         if (now - noActivitySince > silenceLimitMs) {
+          const hookEvent = turnId ? await readCodexTurnHook(appId, providerSessionId, turnId) : null;
+          if (!failure && hookEvent === 'UserPromptSubmit') {
+            noActivitySince = now;
+            continue;
+          }
           console.warn('[AgentHarbor] Codex turn completion timeout', JSON.stringify({
-            sessionId: appId, providerSessionId, paneId: pane.paneId, turnId: turnId ?? null, sawTurn,
+            sessionId: appId, providerSessionId, paneId: pane.paneId, turnId: turnId ?? null, sawTurn, hookEvent,
             silentForMs: now - noActivitySince, silenceLimitMs,
             lastTranscriptRowAgoMs: lastTranscriptRowAt === null ? null : now - lastTranscriptRowAt,
             lastActiveScreenAgoMs: lastActiveScreenAt === null ? null : now - lastActiveScreenAt,

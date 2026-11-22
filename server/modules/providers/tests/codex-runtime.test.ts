@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,7 +15,7 @@ const nativeId = '01999999-abcd-7123-9876-123456789abc';
 const appId = 'app-session';
 const event = (type: string, payload: AnyRecord) => JSON.stringify({ timestamp: new Date().toISOString(), type, payload }) + '\n';
 
-for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex via WSL', 'cancel before send', 'draft', 'switched', 'timeout', 'slow completion']) {
+for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex via WSL', 'cancel before send', 'draft', 'switched', 'timeout', 'slow completion', 'active hook']) {
   const description = scenario === 'resume' ? 'a busy image follow-up leaves the composer ready for the next turn' : scenario;
   test('Codex TUI transport: ' + description, async (t) => {
     const windowsInterop = scenario === 'interrupt Windows Codex via WSL';
@@ -22,15 +23,19 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
     const home = await mkdtemp(path.join(os.tmpdir(), 'ah-codex-'));
     const originalHome = process.env.AH_CODEX_HOME;
     const originalCommand = process.env.AH_CODEX_CMD;
+    const originalStateDir = process.env.AH_STATE_DIR;
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
     process.env.AH_CODEX_HOME = home;
     process.env.AH_CODEX_CMD = windowsInterop ? 'codex.exe' : 'codex';
+    process.env.AH_STATE_DIR = home;
     if (windowsInterop) Object.defineProperty(process, 'platform', { ...originalPlatform, value: 'linux' });
     t.after(async () => {
       if (originalHome === undefined) delete process.env.AH_CODEX_HOME;
       else process.env.AH_CODEX_HOME = originalHome;
       if (originalCommand === undefined) delete process.env.AH_CODEX_CMD;
       else process.env.AH_CODEX_CMD = originalCommand;
+      if (originalStateDir === undefined) delete process.env.AH_STATE_DIR;
+      else process.env.AH_STATE_DIR = originalStateDir;
       if (windowsInterop) Object.defineProperty(process, 'platform', originalPlatform);
       await rm(home, { recursive: true, force: true });
     });
@@ -57,7 +62,8 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
     let working = false;
     let waitingForCompletion = false;
     const timeout = scenario === 'timeout';
-    const slowCompletion = scenario === 'slow completion';
+    const activeHook = scenario === 'active hook';
+    const slowCompletion = scenario === 'slow completion' || activeHook;
     const simulateSilence = timeout || slowCompletion;
     const warn = simulateSilence ? t.mock.method(console, 'warn', (..._args: unknown[]) => {}) : undefined;
     const now = Date.now;
@@ -72,7 +78,7 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
     t.mock.method(tmuxService, 'inspectPane', async () => {
       if (waitingForCompletion) {
         if (slowCompletion) {
-          if (clockOffset === 0) clockOffset = 99_000;
+          if (clockOffset === 0) clockOffset = activeHook ? 301_000 : 99_000;
           else {
             waitingForCompletion = false;
             await finishTurn();
@@ -132,9 +138,14 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
       if ((interrupt || scenario === 'resume') && keys.length === 1) return;
       if (timeout) {
         await appendFile(file, '{"private":"unfinished');
-        return;
       }
-      if (slowCompletion) return;
+      if (activeHook || timeout) {
+        const statusDir = path.join(home, 'codex-turn-status');
+        await mkdir(statusDir);
+        await writeFile(path.join(statusDir, `${createHash('sha256').update(appId).digest('hex')}.json`),
+          JSON.stringify({ sessionId: nativeId, turnId: activeHook ? 'turn' : 'previous-turn', event: 'UserPromptSubmit' }));
+      }
+      if (timeout || slowCompletion) return;
       await finishTurn();
     });
 

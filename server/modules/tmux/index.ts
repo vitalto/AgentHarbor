@@ -32,6 +32,7 @@ export { tmuxService } from '@/modules/tmux/tmux.service.js';
 export { createTranscriptTail } from '@/modules/tmux/transcript-tail.js';
 export { createCodexTerminalMonitor } from '@/modules/tmux/codex-terminal-monitor.js';
 export { readCodexScreen, typeCodexInput } from '@/modules/tmux/codex-tui.js';
+export { readCodexTurnHook } from '@/modules/tmux/codex-turn-hook.js';
 export { getCodexCliConfig, sendCodexEscape } from '@/modules/tmux/codex-cli.js';
 export { applyCodexSelection, closeCodexWindow, ensureCodexWindow, listCodexLiveThreads, sendCodexRuntimePrompt, waitForCodexComposer } from '@/modules/tmux/codex-windows.service.js';
 export type { AgentPane } from '@/modules/tmux/tmux.service.js';

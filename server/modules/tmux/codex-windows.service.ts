@@ -8,6 +8,7 @@ import { AgentWindowError } from '@/modules/tmux/agent-windows.service.js';
 import { getCodexCliConfig } from '@/modules/tmux/codex-cli.js';
 import { isArchivedCodexRollout, recoverSessionTranscript } from '@/shared/index.js';
 import { listLockedCodexThreads } from '@/modules/tmux/codex-thread-locks.js';
+import { prepareCodexTurnHooks } from '@/modules/tmux/codex-turn-hook.js';
 import { readCodexScreen, readCodexStatusThread, typeCodexInput } from '@/modules/tmux/codex-tui.js';
 import { toClaudePath, toLocalPath } from '@/modules/tmux/path-translation.js';
 import { tmuxService, type AgentPane } from '@/modules/tmux/tmux.service.js';
@@ -61,7 +62,8 @@ async function openWindow(appId: string) {
   if (existing) return existing;
   const row = sessionsDb.getSessionById(appId);
   if (row?.provider !== 'codex') throw new AgentWindowError('Codex session was not found.');
-  const { executable, env, pathConfig } = getCodexCliConfig();
+  const cli = getCodexCliConfig();
+  const { executable, env, pathConfig } = cli;
   if (!await tmuxService.hasSession()) throw new AgentWindowError(`tmux session "${pathConfig.tmuxSession}" is not running.`);
   const nativeId = row.provider_session_id;
   if (nativeId && row.jsonl_path) {
@@ -74,9 +76,11 @@ async function openWindow(appId: string) {
     throw new AgentWindowError('Close this session in the other Codex client before resuming it in tmux.');
   }
   const cwd = toLocalPath(row.project_path || process.cwd(), pathConfig);
+  const hooks = await prepareCodexTurnHooks(appId, cli);
   const args = [
     executable, '--no-daemon', '-C', toClaudePath(cwd, pathConfig),
     '-c', 'tui.terminal_title=["session-id"]',
+    ...(hooks?.args ?? []),
   ];
   const sandbox = env.AH_CODEX_SANDBOX_MODE?.trim();
   if (sandbox === 'danger-full-access') {
@@ -90,7 +94,7 @@ async function openWindow(appId: string) {
   if (nativeId) args.push('resume', nativeId);
   const pane = await tmuxService.newWindow({
     cwd, name: `codex-${appId}`, command: `exec ${args.map(quoteForShell).join(' ')}`,
-    env: { TERM: 'xterm-256color', ...(env.CODEX_HOME && { CODEX_HOME: env.CODEX_HOME }), ...(env.WSLENV && { WSLENV: env.WSLENV }) },
+    env: { TERM: 'xterm-256color', ...(env.CODEX_HOME && { CODEX_HOME: env.CODEX_HOME }), ...(env.WSLENV && { WSLENV: env.WSLENV }), ...hooks?.env },
   });
   try {
     await tmuxService.setWindowOption(pane.windowId, paneIdOption, pane.paneId);

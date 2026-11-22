@@ -10,14 +10,17 @@ import { tmuxService } from '@/modules/tmux/tmux.service.js';
 
 test('a TUI routes approvals to review, honors a read-only host and resumes only its own thread', async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'ah-codex-window-'));
-  const previous = { sandbox: process.env.AH_CODEX_SANDBOX_MODE, home: process.env.AH_CODEX_HOME };
+  const previous = { sandbox: process.env.AH_CODEX_SANDBOX_MODE, home: process.env.AH_CODEX_HOME, stateDir: process.env.AH_STATE_DIR };
   process.env.AH_CODEX_SANDBOX_MODE = 'read-only';
   process.env.AH_CODEX_HOME = home;
+  process.env.AH_STATE_DIR = home;
   t.after(async () => {
     if (previous.sandbox === undefined) delete process.env.AH_CODEX_SANDBOX_MODE;
     else process.env.AH_CODEX_SANDBOX_MODE = previous.sandbox;
     if (previous.home === undefined) delete process.env.AH_CODEX_HOME;
     else process.env.AH_CODEX_HOME = previous.home;
+    if (previous.stateDir === undefined) delete process.env.AH_STATE_DIR;
+    else process.env.AH_STATE_DIR = previous.stateDir;
     await rm(home, { recursive: true, force: true });
   });
   const row = { provider: 'codex', project_path: "/work/it's mine", model: 'test-model', effort: 'high', provider_session_id: null as string | null };
@@ -26,14 +29,16 @@ test('a TUI routes approvals to review, honors a read-only host and resumes only
   t.mock.method(tmuxService, 'listPanes', async () => []);
   t.mock.method(tmuxService, 'inspectPane', async () => { throw new Error('Test pane closed'); });
   const launches: string[] = [];
-  t.mock.method(tmuxService, 'newWindow', async ({ command }: { command: string }) => {
+  t.mock.method(tmuxService, 'newWindow', async ({ command, env }: Parameters<typeof tmuxService.newWindow>[0]) => {
     launches.push(command);
+    assert.match(env?.AH_CODEX_TURN_STATUS ?? '', /codex-turn-status[/\\][a-f0-9]{64}\.json$/);
     return { windowId: '@1', paneId: '%1' };
   });
   t.mock.method(tmuxService, 'setWindowOption', async () => {});
   await Promise.all([ensureCodexWindow('test-app'), ensureCodexWindow('test-app')]);
   assert.equal(launches.length, 1);
   assert.match(launches[0], /'--no-daemon'/);
+  for (const event of ['UserPromptSubmit', 'Stop', 'Interrupt']) assert.ok(launches[0].includes(`hooks.${event}=`));
   assert.match(launches[0], /'--sandbox' 'read-only'/);
   assert.match(launches[0], /'--model' 'test-model'/);
   assert.ok(launches[0].includes('model_reasoning_effort="high"'));
