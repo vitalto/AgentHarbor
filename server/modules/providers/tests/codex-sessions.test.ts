@@ -692,3 +692,35 @@ test('Codex history restores user prompts from typed item_completed rows', { con
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('Codex history displays the output of a computed shell command without guessing its text', async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-result-display-'));
+  const transcript = path.join(directory, 'rollout.jsonl');
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.mock.method(sessionsDb, 'getSessionById', () => ({ jsonl_path: transcript }));
+  const script = `text(await tools.exec_command({cmd: "@'\\n" + load("body") + "\\n'@ | python -"}))`;
+  const userJson = '{"chunk_id":"app","wall_time_seconds":1,"exit_code":9,"output":"application data"}';
+  const text = 'first line\r\n' + userJson + '\r\n';
+  const rows = [
+    { type: 'custom_tool_call', name: 'exec', call_id: 'computed', input: script },
+    { type: 'custom_tool_call_output', call_id: 'computed', output: [
+      { type: 'input_text', text: 'Script completed\nWall time 1 seconds\nOutput:\n' },
+      { type: 'input_text', text: JSON.stringify({ chunk_id: 'ab12', wall_time_seconds: 1, exit_code: 1, output: text }) },
+    ] },
+    { type: 'custom_tool_call', name: 'exec', call_id: 'literal', input: 'text((await tools.exec_command({cmd:"example"})).output)' },
+    { type: 'custom_tool_call_output', call_id: 'literal', output: userJson },
+    { type: 'custom_tool_call', name: 'exec', call_id: 'partial', input: 'text(await tools.exec_command({cmd:"other"}))' },
+    { type: 'custom_tool_call_output', call_id: 'partial', output: JSON.stringify({ chunk_id: 'ab34', wall_time_seconds: 1, session_id: 123, output: 'working\n' }) },
+  ];
+  await writeFile(transcript, rows.map(payload => JSON.stringify({ type: 'response_item', payload })).join('\n'));
+  const history = await new CodexSessionsProvider().fetchHistory('display-test');
+  const tools = history.messages.filter(message => message.kind === 'tool_use');
+  assert.equal(tools.length, 3);
+  assert.equal(tools[0].toolName, 'exec');
+  assert.ok(JSON.stringify(tools[0].toolInput).includes('load'));
+  assert.deepEqual(tools[0].toolResult, { content: text, isError: true });
+  assert.equal(tools[1].toolName, 'Bash');
+  assert.equal(tools[1].toolResult?.content, userJson);
+  assert.equal(tools[1].toolResult?.isError, false);
+  assert.equal(tools[2].toolResult?.content, 'working\n');
+});

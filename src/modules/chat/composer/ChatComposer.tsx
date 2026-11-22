@@ -207,7 +207,7 @@ export default function ChatComposer({
   const canQueueDraft = isLoading && !hasLiveWindow && hasDraft;
   const canStop = isLoading && activity?.canInterrupt === true;
   const submitHint = canSendWhileBusy
-    ? t('input.hintText.sendWhileBusy', { defaultValue: 'Enter to send now — Claude reads it as soon as the current step ends' })
+    ? t('input.hintText.sendWhileBusy', { defaultValue: 'Enter to send a follow-up in the current turn' })
     : canQueueDraft
     ? hasQueuedDraft
       ? t('input.hintText.updateQueued', { defaultValue: 'Enter to update queued message' })

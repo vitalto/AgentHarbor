@@ -132,8 +132,8 @@ function ChatMessagesPane({
   const { t } = useTranslation('chat');
   const lazyRows = useLazyRowObserver(scrollContainerRef);
   const groupedVisibleMessages = useMemo(
-    () => groupConsecutiveTools(visibleMessages, Boolean(showThinking)),
-    [visibleMessages, showThinking],
+    () => groupConsecutiveTools(visibleMessages, Boolean(showThinking), provider),
+    [visibleMessages, showThinking, provider],
   );
 
   // Stable, deterministic keys for the messages rendered this pass.

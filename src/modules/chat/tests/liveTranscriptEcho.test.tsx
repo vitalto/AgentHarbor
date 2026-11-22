@@ -44,6 +44,22 @@ it('drops the optimistic user row once the transcript echo of that prompt stream
   assert.deepEqual(result.current.getMessages('session-1').map((message) => message.id), ['uuid-1_0']);
 });
 
+it('skips store updates for a replayed Codex error and keeps a new failed attempt', async () => {
+  const { useSessionStore } = await import('@/modules/chat/hooks/useSessionStore');
+  const { result } = renderHook(() => useSessionStore());
+  const error: NormalizedMessage = {
+    id: 'error-first', kind: 'error', sessionId: 'session-1', provider: 'codex', seq: 1,
+    timestamp: '2026-01-01T00:00:00Z', content: 'Open the Codex terminal to complete sign-in.',
+  };
+  act(() => result.current.appendRealtime('session-1', error));
+  const received = result.current.getSessionSlot('session-1')?.realtimeMessages;
+  assert.ok(received);
+  act(() => result.current.appendRealtime('session-1', { ...error }));
+  assert.equal(result.current.getSessionSlot('session-1')?.realtimeMessages, received);
+  act(() => result.current.appendRealtime('session-1', { ...error, id: 'error-retry' }));
+  assert.deepEqual(result.current.getMessages('session-1').map((row) => row.id), ['error-first', 'error-retry']);
+});
+
 it('updates streamed Codex command snapshots in place and keeps identical independent calls', async () => {
   const { useSessionStore } = await import('@/modules/chat/hooks/useSessionStore');
   const { result } = renderHook(() => useSessionStore());

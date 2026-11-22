@@ -18,6 +18,7 @@
     "claude": "Claude"
   },
   "tools": {
+    "commands": "Commands",
     "settings": "Tool Settings",
     "error": "Tool Error",
     "result": "Tool Result",
@@ -142,6 +143,7 @@
     "send": "Send",
     "stop": "Stop",
     "hintText": {
+      "sendWhileBusy": "Enter to send a follow-up in the current turn",
       "ctrlEnter": "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
       "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
       "queue": "Enter to queue your next message",

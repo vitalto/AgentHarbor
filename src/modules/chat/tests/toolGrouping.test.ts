@@ -273,3 +273,16 @@ test('a run that grew, changed rows, or changed showThinking is rebuilt', () => 
   assert.ok(isToolGroupItem(rehidden));
   assert.notEqual(rehidden, initial);
 });
+
+test('Codex shell calls and exec wrappers share a collapsed group between visible messages', () => {
+  const commands = [toolMessage('Bash', { command: 'pwd' }), toolMessage('exec', {}), toolMessage('Bash', { command: 'ls' })];
+  const reply = textMessage('done');
+  const next = toolMessage('exec', {});
+  const messages = [...commands, reply, next];
+  const [group, ...rest] = groupConsecutiveTools(messages, true, 'codex');
+  assert.ok(isToolGroupItem(group));
+  assert.equal(group.toolName, 'Commands');
+  assert.deepEqual(group.messages, commands);
+  assert.deepEqual(rest, [reply, next]);
+  assert.deepEqual(groupConsecutiveTools(messages, true, 'claude'), messages);
+});

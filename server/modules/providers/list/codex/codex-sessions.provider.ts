@@ -605,7 +605,7 @@ type CodexShellOutput = {
  *
  * Exported for tests.
  */
-export function cleanCodexShellOutput(rawOutput: string): CodexShellOutput {
+export function cleanCodexShellOutput(rawOutput: string, resultFormat?: 'exec' | 'stdin'): CodexShellOutput {
   let output = rawOutput;
   let exitCode: number | undefined;
   let runningCellId: string | undefined;
@@ -630,6 +630,11 @@ export function cleanCodexShellOutput(rawOutput: string): CodexShellOutput {
     output = output.replace(/^Script error:\s*\n?/i, '');
   }
 
+  const commandResult = resultFormat && readCodexCommandResult(output, resultFormat === 'stdin');
+  if (commandResult) {
+    return { ...commandResult, runningCellId, truncated };
+  }
+
   const exitCodeMatch = /^Exit code:\s*(-?\d+)[^\n]*\n?/i.exec(output);
   if (exitCodeMatch) {
     exitCode = Number.parseInt(exitCodeMatch[1], 10);
@@ -642,30 +647,33 @@ export function cleanCodexShellOutput(rawOutput: string): CodexShellOutput {
   return { output, exitCode, runningCellId, truncated };
 }
 
-/**
- * `write_stdin` answers with a JSON envelope rather than plain text. Only its
- * `output` and `exit_code` matter to a reader.
- */
-function readCodexStdinOutput(rawOutput: string): CodexShellOutput | null {
-  const trimmed = rawOutput.trim();
-  const jsonStart = trimmed.indexOf('{');
-  if (jsonStart === -1) {
-    return null;
-  }
-
+/** Only unwrap the tool's result record. A command can print arbitrary JSON of its own. */
+function readCodexCommandResult(text: string, stdinPoll: boolean): { output: string; exitCode?: number } | null {
+  const start = stdinPoll ? text.indexOf('{') : 0;
+  if (start < 0) return null;
+  const json = text.slice(start).trimStart();
+  if (!json.startsWith('{')) return null;
   try {
-    const parsed = JSON.parse(trimmed.slice(jsonStart)) as AnyRecord;
-    if (typeof parsed.output !== 'string') {
-      return null;
-    }
-    return {
-      output: parsed.output,
-      exitCode: typeof parsed.exit_code === 'number' ? parsed.exit_code : undefined,
-      truncated: false,
-    };
+    const result = JSON.parse(json);
+    if (typeof result?.output !== 'string') return null;
+    if (!stdinPoll && (typeof result.chunk_id !== 'string' || typeof result.wall_time_seconds !== 'number')) return null;
+    return { output: result.output, exitCode: typeof result.exit_code === 'number' ? result.exit_code : undefined };
   } catch {
     return null;
   }
+}
+
+function printsCodexShellResult(input: unknown): boolean {
+  if (typeof input !== 'string' || !/^\s*text\s*\(/.test(input)) return false;
+  const statement = javascriptLanguage.parser.parse(input).topNode.firstChild;
+  if (statement?.name !== 'ExpressionStatement' || statement.nextSibling) return false;
+  const print = statement.getChild('CallExpression');
+  const printTarget = print?.firstChild;
+  if (!print || !printTarget || input.slice(printTarget.from, printTarget.to) !== 'text') return false;
+  const argument = print.getChild('ArgList')?.firstChild?.nextSibling;
+  if (argument?.name !== 'AwaitExpression' || argument.nextSibling?.name !== ')') return false;
+  const command = argument.getChild('CallExpression')?.getChild('MemberExpression');
+  return Boolean(command && /^tools\s*\.\s*(?:exec_command|shell_command)$/.test(input.slice(command.from, command.to)));
 }
 
 // в”Ђв”Ђв”Ђ Unified patches в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -1242,7 +1250,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
   /** Call ids whose orchestration wrapper must never reach the transcript. */
   const ignoredToolCallIds = new Set<string>();
   /** Exec calls that own a shell row, so their output can be routed back. */
-  const shellCallMessages = new Map<string, AnyRecord>();
+  const shellCalls = new Map<string, 'exec' | undefined>();
   const patchCalls = createCodexPatchTracker(recordedCalls, row => {
     const { toolId: toolCallId, timestamp, toolName, toolResult } = row;
     const toolInput = typeof row.toolInput === 'string' ? row.toolInput : JSON.stringify(row.toolInput);
@@ -1532,6 +1540,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
 
       if (name === 'exec') {
         const operations = parseCodexExecScript(rawInput);
+        const resultFormat = printsCodexShellResult(rawInput) ? 'exec' as const : undefined;
         const shellCommands = operations.filter((operation) => operation.kind === 'shell');
         const hasComputedShell = operations.some(operation => operation.kind === 'unresolved-shell');
         const stdinWrites = operations.filter((operation) => operation.kind === 'stdin');
@@ -1562,6 +1571,9 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
           };
           publish(fallbackMessage);
           watchShellRow(fallbackMessage);
+          if (typeof rawInput === 'string' && /\btools\.(?:exec_command|shell_command)\s*\(/.test(rawInput)) {
+            shellCalls.set(callId, resultFormat);
+          }
           continue;
         }
 
@@ -1588,7 +1600,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
           };
           publish(shellMessage);
           watchShellRow(shellMessage, description);
-          shellCallMessages.set(callId, shellMessage);
+          shellCalls.set(callId, resultFormat);
         }
 
         for (const search of searches) {
@@ -1651,7 +1663,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
           toolCallId: callId,
         };
         publish(shellMessage);
-        shellCallMessages.set(callId, shellMessage);
+        shellCalls.set(callId, undefined);
         continue;
       }
 
@@ -1673,7 +1685,7 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
       // A wait / stdin poll delivers the tail of an earlier command's output.
       const continuedCallId = waitCallToExecCall.get(callId);
       if (continuedCallId) {
-        const cleaned = readCodexStdinOutput(rawOutput) ?? cleanCodexShellOutput(rawOutput);
+        const cleaned = cleanCodexShellOutput(rawOutput, 'stdin');
         const accumulated = `${pendingExecOutput.get(continuedCallId) || ''}${cleaned.output}`;
         pendingExecOutput.set(continuedCallId, accumulated);
         if (!cleaned.runningCellId) {
@@ -1708,8 +1720,8 @@ export async function readCodexRollout(entries: AsyncIterable<AnyRecord>, sessio
         continue;
       }
 
-      if (shellCallMessages.has(callId)) {
-        const cleaned = cleanCodexShellOutput(rawOutput);
+      if (shellCalls.has(callId)) {
+        const cleaned = cleanCodexShellOutput(rawOutput, shellCalls.get(callId));
         if (cleaned.runningCellId) {
           execCallByCellId.set(cleaned.runningCellId, callId);
           pendingExecOutput.set(callId, cleaned.output);

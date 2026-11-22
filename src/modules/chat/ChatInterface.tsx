@@ -197,6 +197,10 @@ function ChatInterface({
     onNavigateToSession?.(sessionId);
   }, [setCurrentSessionId, onSessionEstablished, onNavigateToSession]);
 
+  const viewedSessionId = selectedSession?.id || currentSessionId || null;
+  const viewedAgent = findWindow(viewedSessionId);
+  const hasLiveWindow = viewedAgent?.location === 'tmux';
+
   const {
     input,
     setInput,
@@ -248,7 +252,7 @@ function ChatInterface({
     prepareQuestionReply,
     beginEditMessage,
   } = useChatComposerState({
-    sendWhileBusy: findWindow(selectedSession?.id || currentSessionId)?.location === 'tmux',
+    sendWhileBusy: hasLiveWindow,
     beforeSend: (content) => {
       const agent = findWindow(selectedSession?.id || currentSessionId);
       if (content.trim() === '/clear' && agent?.location === 'tmux') {
@@ -309,10 +313,8 @@ function ChatInterface({
     });
   }, [isActive, requestLatestMessages, selectedProject, selectedSession, sendMessage]);
 
-  const viewedSessionId = selectedSession?.id || currentSessionId || null;
   useReportViewedChat({ sendMessage, viewedSessionId, isActive, isConnected });
   const viewedTui = getTuiState(viewedSessionId);
-  const viewedAgent = findWindow(viewedSessionId);
   const viewedOutsideTmux = viewedAgent && (viewedAgent.location !== 'tmux' || viewedAgent.duplicateProcesses) ? viewedAgent : null;
   useEffect(() => {
     setHasMessageAwaitingMove(false);
@@ -594,8 +596,8 @@ function ChatInterface({
           onTuiChoose={chooseTuiOption}
           onTuiKey={pressTuiKey}
           onTuiQuestionStep={switchTuiQuestion}
-          hasLiveWindow={provider === 'claude' && findWindow(viewedSessionId)?.location === 'tmux'}
-          permissionModeControl={viewedSessionId ? <PermissionModePicker sessionId={viewedSessionId} /> : null}
+          hasLiveWindow={hasLiveWindow}
+          permissionModeControl={provider === 'claude' && viewedSessionId ? <PermissionModePicker sessionId={viewedSessionId} /> : null}
           activity={composerActivity}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}

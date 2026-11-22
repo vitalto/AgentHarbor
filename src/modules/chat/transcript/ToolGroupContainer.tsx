@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronRight } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,DiffStats,Project,ToolGroupItem } from '@/shared/types';
@@ -92,8 +93,10 @@ function ToolGroupContainer({
   // has no way to ask.
   const [isExpanded, setIsExpanded] = useState(false);
   const showChildren = isExpanded || isExporting;
-  const config = getToolConfig(group.toolName).input;
-  const label = config.label || group.toolName;
+  const { t } = useTranslation('chat');
+  const isCommandGroup = group.toolName === 'Commands';
+  const config = getToolConfig(isCommandGroup ? 'Bash' : group.toolName).input;
+  const label = isCommandGroup ? t('tools.commands') : config.label || group.toolName;
   const borderClass = config.colorScheme?.border || 'border-border';
   const iconClass = config.colorScheme?.icon || 'text-muted-foreground';
   const icon = getToolGroupIcon(config.icon, group.toolName);

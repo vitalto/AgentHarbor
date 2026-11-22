@@ -43,7 +43,7 @@ function getToolGroup(run: GroupableToolRun, showThinking: boolean): ToolGroupIt
 
   const group: ToolGroupItem = {
     _isGroup: true,
-    toolName: first.toolName,
+    toolName: run.every((row) => row.toolName === first.toolName) ? first.toolName : 'Commands',
     messages: run,
     timestamp: first.timestamp,
     preview: buildGroupPreview(run),
@@ -120,9 +120,14 @@ function buildGroupPreview(messages: ChatMessage[]): string {
   return extraCount > 0 ? `${previewText}, +${extraCount} more` : previewText;
 }
 
+function isCodexCommand(toolName: string): boolean {
+  return toolName === 'Bash' || toolName === 'exec';
+}
+
 export function groupConsecutiveTools(
   messages: ChatMessage[],
   showThinking: boolean = true,
+  provider?: string,
 ): MessageListItem[] {
   const items: MessageListItem[] = [];
   let index = 0;
@@ -136,6 +141,7 @@ export function groupConsecutiveTools(
       continue;
     }
 
+    const groupCommands = provider === 'codex' && isCodexCommand(message.toolName);
     const run: GroupableToolRun = [message];
     let nextIndex = index + 1;
 
@@ -148,7 +154,7 @@ export function groupConsecutiveTools(
         continue;
       }
 
-      if (isGroupableToolMessage(candidate) && candidate.toolName === message.toolName) {
+      if (isGroupableToolMessage(candidate) && (candidate.toolName === message.toolName || (groupCommands && isCodexCommand(candidate.toolName)))) {
         run.push(candidate);
         nextIndex += 1;
         continue;

@@ -786,6 +786,9 @@ export function useSessionStore() {
 
   const appendRealtime = useCallback((sessionId: string, msg: NormalizedMessage) => {
     const slot = getSlot(sessionId);
+    if (msg.seq !== undefined && slot.realtimeMessages.some((row) => row.id === msg.id && row.seq === msg.seq)) {
+      return;
+    }
     const normalizedMessage =
       msg.sessionId === sessionId
         ? msg
