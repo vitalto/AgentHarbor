@@ -14,7 +14,7 @@ const nativeId = '01999999-abcd-7123-9876-123456789abc';
 const appId = 'app-session';
 const event = (type: string, payload: AnyRecord) => JSON.stringify({ timestamp: new Date().toISOString(), type, payload }) + '\n';
 
-for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex via WSL', 'cancel before send', 'draft', 'switched']) {
+for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex via WSL', 'cancel before send', 'draft', 'switched', 'timeout']) {
   const description = scenario === 'resume' ? 'a busy image follow-up leaves the composer ready for the next turn' : scenario;
   test('Codex TUI transport: ' + description, async (t) => {
     const windowsInterop = scenario === 'interrupt Windows Codex via WSL';
@@ -55,8 +55,19 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
     let draft = scenario === 'draft' ? 'already typed' : '';
     let captionPastedAt = -Infinity;
     let working = false;
+    let waitingForCompletion = false;
+    const timeout = scenario === 'timeout';
+    const warn = timeout ? t.mock.method(console, 'warn', (..._args: unknown[]) => {}) : undefined;
+    const now = Date.now;
+    let clockOffset = 0;
+    if (timeout) t.mock.method(Date, 'now', () => now() + clockOffset);
     const title = scenario === 'switched' ? '01999999-1234-7456-9876-123456789abc' : nativeId.slice(0, 29) + '...';
     t.mock.method(tmuxService, 'inspectPane', async () => {
+      if (waitingForCompletion) {
+        clockOffset = 21_000;
+        return { title, dead: false, cursorVisible: false, cursorX: 2, cursorY: 1,
+          lines: ['• Working (1s • esc to interrupt)', '› private draft'] };
+      }
       const draftLines = draft.split('\n');
       const [firstLine, ...continuation] = draftLines;
       return {
@@ -104,6 +115,10 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
         acknowledgeSubmit();
       }
       if ((interrupt || scenario === 'resume') && keys.length === 1) return;
+      if (timeout) {
+        await appendFile(file, '{"private":"unfinished');
+        return;
+      }
       await appendFile(file, event('response_item', { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'new reply' }] })
         + event('event_msg', { type: 'task_complete', turn_id: 'turn' }));
       working = false;
@@ -116,7 +131,9 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
       getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'default' }), isProviderInstalled: async () => true,
     };
     const attachments = windowsInterop ? {} : { images: [{ path: 'one.png' }], files: [{ path: 'notes.txt' }] };
-    const run = runCodexTmuxTurn(command, { sessionId: appId, ...attachments }, {
+    const run = runCodexTmuxTurn(command, { sessionId: appId, ...attachments,
+      onInputSubmitted: () => { waitingForCompletion = timeout; },
+    }, {
       isWebSocketWriter: true, send: (msg) => messages.push(msg as AnyRecord),
     }, context);
     if (scenario === 'resume') {
@@ -135,6 +152,23 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
       return;
     }
     await run;
+    if (timeout) {
+      assert.equal(messages.at(-1)?.success, false);
+      assert.equal(warn!.mock.callCount(), 1);
+      const [label, diagnostic] = warn!.mock.calls[0]?.arguments ?? [];
+      assert.equal(label, '[AgentHarbor] Codex turn completion timeout');
+      const details = JSON.parse(String(diagnostic));
+      assert.equal(details.sessionId, appId);
+      assert.equal(details.providerSessionId, nativeId);
+      assert.equal(details.turnId, 'turn');
+      assert.equal(details.terminal.activity, 'unknown');
+      assert.equal(details.terminal.cursorVisible, false);
+      assert.equal(details.terminal.interruptHintRow, 0);
+      assert.equal(details.transcript.readErrorCode, null);
+      assert.equal(details.transcript.pendingBytes, Buffer.byteLength('{"private":"unfinished'));
+      assert.doesNotMatch(String(diagnostic), /private|notes\.txt|line one/);
+      return;
+    }
     if (scenario === 'switched' || scenario === 'draft') {
       assert.deepEqual(pasted, []);
       assert.equal(messages.at(-1)?.success, false);

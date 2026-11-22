@@ -106,6 +106,11 @@ export function parseCodexScreen(capture: PaneCapture) {
     : { working: false, pendingQuestionCount: 0, turnStatus: null };
   return {
     title: capture.title, lines, composer, empty, pendingQuestionCount, turnStatus,
+    diagnostics: {
+      cursorVisible: capture.cursorVisible, cursorX: capture.cursorX, cursorY: capture.cursorY,
+      composerPromptRow: prompt, rowCount: lines.length,
+      interruptHintRow: lines.findIndex((line) => /esc to interrupt/i.test(line)),
+    },
     backgroundTerminalCount: composer ? readCodexBackgroundTerminalCount(lines, prompt) : 0,
     dialog: questionDrawer ?? (menu ? readFolderAccessPrompt(lines) ?? unreadablePrompt(lines) : null),
     output: working ? lines.slice(0, prompt).filter((line) => line.trim()).slice(-14) : [],

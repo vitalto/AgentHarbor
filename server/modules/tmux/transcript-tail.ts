@@ -18,17 +18,24 @@ const MAX_READ_BYTES = 8 * 1024 * 1024;
 export function createTranscriptTail(filePath: string, startOffset?: number) {
   let offset = startOffset ?? -1;
   let pending = Buffer.alloc(0);
+  let fileSize: number | null = null;
+  let readErrorCode: string | null = null;
+  let malformedRows = 0;
 
   async function currentSize(): Promise<number | null> {
     try {
-      return (await fsp.stat(filePath)).size;
-    } catch {
-      return null;
+      fileSize = (await fsp.stat(filePath)).size;
+      readErrorCode = null;
+    } catch (error) {
+      fileSize = null;
+      readErrorCode = (error as NodeJS.ErrnoException).code ?? 'UNKNOWN';
     }
+    return fileSize;
   }
 
   return {
     offset: () => offset,
+    diagnostics: () => ({ offset, fileSize, readErrorCode, pendingBytes: pending.length, malformedRows }),
 
     async poll(): Promise<TranscriptPoll> {
       const size = await currentSize();
@@ -79,6 +86,7 @@ export function createTranscriptTail(filePath: string, startOffset?: number) {
         try {
           rows.push(JSON.parse(line));
         } catch {
+          malformedRows++;
           // A corrupt line cannot be repaired by waiting; skip it like Claude's own reader does.
         }
       }

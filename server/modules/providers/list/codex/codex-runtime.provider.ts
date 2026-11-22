@@ -118,6 +118,8 @@ export async function runCodexTmuxTurn(command: string, options: AnyRecord, writ
     let failure: string | null = null;
     async function* appendedRows() {
       let noActivitySince = Date.now();
+      let lastTranscriptRowAt: number | null = null;
+      let lastActiveScreenAt: number | null = null;
       let nextFileLookup = 0;
       const localCommand = command.trimStart().startsWith('/');
       let sawTurn = false;
@@ -136,7 +138,7 @@ export async function runCodexTmuxTurn(command: string, options: AnyRecord, writ
         for (const raw of batch?.rows ?? []) {
           const entry = readObjectRecord(raw);
           if (!entry) continue;
-          noActivitySince = Date.now();
+          noActivitySince = lastTranscriptRowAt = Date.now();
           yield entry;
           const payload = entry.payload;
           if (entry.type !== 'event_msg' || !payload) continue;
@@ -164,8 +166,23 @@ export async function runCodexTmuxTurn(command: string, options: AnyRecord, writ
         }
         if (localCommand && !sawTurn && current.activity !== 'working' && (current.empty || isWaiting)
           && Date.now() - noActivitySince > 1500) return;
-        if (current.activity === 'working' || isWaiting) noActivitySince = Date.now();
-        if (Date.now() - noActivitySince > 20_000) throw new Error(failure || 'Codex returned no turn completion. Check the terminal and its transcript.');
+        const now = Date.now();
+        if (current.activity === 'working' || isWaiting) noActivitySince = lastActiveScreenAt = now;
+        if (now - noActivitySince > 20_000) {
+          console.warn('[AgentHarbor] Codex turn completion timeout', JSON.stringify({
+            sessionId: appId, providerSessionId, paneId: pane.paneId, turnId: turnId ?? null, sawTurn,
+            silentForMs: now - noActivitySince,
+            lastTranscriptRowAgoMs: lastTranscriptRowAt === null ? null : now - lastTranscriptRowAt,
+            lastActiveScreenAgoMs: lastActiveScreenAt === null ? null : now - lastActiveScreenAt,
+            providerErrorSeen: failure !== null,
+            transcript: tail?.diagnostics() ?? null,
+            terminal: {
+              activity: current.activity, composer: current.composer, empty: current.empty,
+              titleMatches: current.title === destination.title, ...current.diagnostics,
+            },
+          }));
+          throw new Error(failure || 'Codex returned no turn completion. Check the terminal and its transcript.');
+        }
         await delay(250);
       }
     }

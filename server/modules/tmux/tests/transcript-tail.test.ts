@@ -43,6 +43,7 @@ test('skips malformed lines', async (t) => {
   const tail = createTranscriptTail(filePath, 0);
   await appendFile(filePath, 'not json\n{"ok":true}\n');
   assert.deepEqual((await tail.poll()).rows, [{ ok: true }]);
+  assert.equal(tail.diagnostics().malformedRows, 1);
 });
 
 test('reports a reset when the file shrinks', async (t) => {
@@ -61,6 +62,8 @@ test('a transcript created after tailing started is read from its first row', as
   const later = `${filePath}.new`;
   const tail = createTranscriptTail(later);
   assert.deepEqual(await tail.poll(), { rows: [], reset: false });
+  assert.equal(tail.diagnostics().readErrorCode, 'ENOENT');
   await writeFile(later, '{"first":true}\n');
   assert.deepEqual((await tail.poll()).rows, [{ first: true }]);
+  assert.equal(tail.diagnostics().readErrorCode, null);
 });
