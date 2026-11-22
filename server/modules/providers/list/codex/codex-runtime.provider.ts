@@ -17,6 +17,9 @@ import type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '@
 type Destination = { paneId: string; title: string };
 type Turn = { ready: Promise<Destination | null>; input: Promise<unknown>; startup: AbortController; submitted: boolean; interrupted: boolean };
 const turns = new Map<string, Turn>();
+const TURN_START_SILENCE_MS = 20_000;
+// Codex can show an idle composer while streaming a reply that is not yet in the rollout.
+const ACTIVE_TURN_SILENCE_MS = 5 * 60_000;
 
 async function resolveRollout(appId: string, nativeId: string, searchArchive: boolean) {
   const session = sessionsDb.getSessionById(appId);
@@ -168,10 +171,12 @@ export async function runCodexTmuxTurn(command: string, options: AnyRecord, writ
           && Date.now() - noActivitySince > 1500) return;
         const now = Date.now();
         if (current.activity === 'working' || isWaiting) noActivitySince = lastActiveScreenAt = now;
-        if (now - noActivitySince > 20_000) {
+        const silenceLimitMs = !failure && (sawTurn || screen.activity === 'working')
+          ? ACTIVE_TURN_SILENCE_MS : TURN_START_SILENCE_MS;
+        if (now - noActivitySince > silenceLimitMs) {
           console.warn('[AgentHarbor] Codex turn completion timeout', JSON.stringify({
             sessionId: appId, providerSessionId, paneId: pane.paneId, turnId: turnId ?? null, sawTurn,
-            silentForMs: now - noActivitySince,
+            silentForMs: now - noActivitySince, silenceLimitMs,
             lastTranscriptRowAgoMs: lastTranscriptRowAt === null ? null : now - lastTranscriptRowAt,
             lastActiveScreenAgoMs: lastActiveScreenAt === null ? null : now - lastActiveScreenAt,
             providerErrorSeen: failure !== null,
