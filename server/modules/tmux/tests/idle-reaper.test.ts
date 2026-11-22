@@ -89,6 +89,10 @@ test('the idle sweep closes an unattended Codex window after the configured inte
   liveBackground = false;
   assert.deepEqual(await sweepIdleAgents(listThreads), []);
   clock += 30 * 60_000;
+  assert.deepEqual(await sweepIdleAgents(listThreads, (id) => id === 'owned'), []);
+  assert.equal(kill.mock.callCount(), 0);
+  assert.deepEqual(await sweepIdleAgents(listThreads), []);
+  clock += 30 * 60_000;
   assert.deepEqual(await sweepIdleAgents(listThreads), ['codex-test']);
   assert.deepEqual(kill.mock.calls.map((call) => call.arguments[0]), ['%20']);
 });

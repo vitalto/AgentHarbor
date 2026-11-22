@@ -64,6 +64,13 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
     const timeout = scenario === 'timeout';
     const activeHook = scenario === 'active hook';
     const slowCompletion = scenario === 'slow completion' || activeHook;
+    const writeHook = async (turnId: string) => {
+      const statusDir = path.join(home, 'codex-turn-status');
+      await mkdir(statusDir, { recursive: true });
+      await writeFile(path.join(statusDir, `${createHash('sha256').update(appId).digest('hex')}.json`),
+        JSON.stringify({ sessionId: nativeId, turnId, event: 'UserPromptSubmit' }));
+    };
+    if (timeout) await writeHook('previous-turn');
     const simulateSilence = timeout || slowCompletion;
     const warn = simulateSilence ? t.mock.method(console, 'warn', (..._args: unknown[]) => {}) : undefined;
     const now = Date.now;
@@ -78,14 +85,14 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
     t.mock.method(tmuxService, 'inspectPane', async () => {
       if (waitingForCompletion) {
         if (slowCompletion) {
-          if (clockOffset === 0) clockOffset = activeHook ? 301_000 : 99_000;
+          if (clockOffset === 0) clockOffset = 40 * 60_000;
           else {
             waitingForCompletion = false;
             await finishTurn();
           }
           return { title, dead: false, cursorVisible: true, cursorX: 2, cursorY: 0, lines: ['›'] };
         }
-        clockOffset = 301_000;
+        clockOffset = 21_000;
         return { title, dead: false, cursorVisible: false, cursorX: 2, cursorY: 1,
           lines: ['• Working (1s • esc to interrupt)', '› private draft'] };
       }
@@ -131,7 +138,7 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
         draft = '';
       }
       if (!working) {
-        await appendFile(file, event('event_msg', { type: 'task_started', turn_id: 'turn' }));
+        if (!timeout && !activeHook) await appendFile(file, event('event_msg', { type: 'task_started', turn_id: 'turn' }));
         working = true;
         acknowledgeSubmit();
       }
@@ -139,12 +146,7 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
       if (timeout) {
         await appendFile(file, '{"private":"unfinished');
       }
-      if (activeHook || timeout) {
-        const statusDir = path.join(home, 'codex-turn-status');
-        await mkdir(statusDir);
-        await writeFile(path.join(statusDir, `${createHash('sha256').update(appId).digest('hex')}.json`),
-          JSON.stringify({ sessionId: nativeId, turnId: activeHook ? 'turn' : 'previous-turn', event: 'UserPromptSubmit' }));
-      }
+      if (activeHook) await writeHook('turn');
       if (timeout || slowCompletion) return;
       await finishTurn();
     });
@@ -191,8 +193,8 @@ for (const scenario of ['new', 'resume', 'interrupt', 'interrupt Windows Codex v
       const details = JSON.parse(String(diagnostic));
       assert.equal(details.sessionId, appId);
       assert.equal(details.providerSessionId, nativeId);
-      assert.equal(details.turnId, 'turn');
-      assert.equal(details.silenceLimitMs, 300_000);
+      assert.equal(details.turnId, null);
+      assert.equal(details.silenceLimitMs, 20_000);
       assert.equal(details.terminal.activity, 'unknown');
       assert.equal(details.terminal.cursorVisible, false);
       assert.equal(details.terminal.interruptHintRow, 0);

@@ -57,7 +57,7 @@ async function lastWriteOf(pane: PaneSession): Promise<number | null> {
 let codexIdleSince = new Map<string, number>();
 
 /** Closes AgentHarbor terminal windows after the configured idle interval (0 disables). */
-export async function sweepIdleAgents(listCodexThreads = listCodexLiveThreads): Promise<string[]> {
+export async function sweepIdleAgents(listCodexThreads = listCodexLiveThreads, isCodexRunActive: (providerSessionId: string) => boolean = () => false): Promise<string[]> {
   const idleLimitMs = getAgentConfig().idleCloseMinutes * 60_000;
   if (idleLimitMs <= 0) {
     codexIdleSince.clear();
@@ -87,7 +87,8 @@ export async function sweepIdleAgents(listCodexThreads = listCodexLiveThreads): 
   }
   const nextIdleSince = new Map<string, number>();
   for (const { pane, providerSessionId, activity, updatedAt, backgroundTerminalCount, pendingQuestionCount } of await listCodexThreads()) {
-    if (!pane || activity !== 'idle' || !updatedAt || backgroundTerminalCount || pendingQuestionCount || isAwaitingApiErrorRetry(providerSessionId)) continue;
+    if (!pane || activity !== 'idle' || !updatedAt || backgroundTerminalCount || pendingQuestionCount
+      || isAwaitingApiErrorRetry(providerSessionId) || isCodexRunActive(providerSessionId)) continue;
     const threadPane = `${pane.paneId}:${providerSessionId}`;
     const idleSince = Math.max(updatedAt, codexIdleSince.get(threadPane) ?? Date.now());
     nextIdleSince.set(threadPane, idleSince);
@@ -95,7 +96,7 @@ export async function sweepIdleAgents(listCodexThreads = listCodexLiveThreads): 
     // The shared list is briefly cached; a new turn or draft may already be on screen.
     const screen = await readCodexScreen(pane.paneId).catch(() => null);
     if (screen?.activity !== 'idle' || screen.backgroundTerminalCount || screen.pendingQuestionCount || isWritingCodexInput(pane.paneId)
-      || (pane.title && pane.title !== screen.title)) {
+      || (pane.title && pane.title !== screen.title) || isCodexRunActive(providerSessionId)) {
       nextIdleSince.delete(threadPane);
       continue;
     }
@@ -110,6 +111,8 @@ export async function sweepIdleAgents(listCodexThreads = listCodexLiveThreads): 
   return closed;
 }
 
-export function startIdleReaper(): void {
-  setInterval(() => void sweepIdleAgents().catch((error) => console.error('[AgentHarbor] idle sweep failed', error)), SWEEP_INTERVAL_MS).unref();
+/** The server supplies tracked Codex runs so a quiet tool never looks like an unattended panel. */
+export function startIdleReaper(isCodexRunActive: (providerSessionId: string) => boolean): void {
+  setInterval(() => void sweepIdleAgents(listCodexLiveThreads, isCodexRunActive)
+    .catch((error) => console.error('[AgentHarbor] idle sweep failed', error)), SWEEP_INTERVAL_MS).unref();
 }

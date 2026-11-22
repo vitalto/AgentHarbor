@@ -117,7 +117,10 @@ const sessionMonitor = configureSessionMonitor({
 });
 writeHookSettings(getAgentConfig());
 sessionMonitor.start();
-startIdleReaper();
+startIdleReaper((providerSessionId) => {
+    const session = sessionsDb.getSessionByProviderSessionId(providerSessionId);
+    return Boolean(session && chatRunRegistry.isProcessing(session.session_id));
+});
 startBackgroundCommandReminders();
 startApiErrorRetries();
 

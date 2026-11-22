@@ -18,8 +18,6 @@ type Destination = { paneId: string; title: string };
 type Turn = { ready: Promise<Destination | null>; input: Promise<unknown>; startup: AbortController; submitted: boolean; interrupted: boolean };
 const turns = new Map<string, Turn>();
 const TURN_START_SILENCE_MS = 20_000;
-// Codex can show an idle composer while streaming a reply that is not yet in the rollout.
-const ACTIVE_TURN_SILENCE_MS = 5 * 60_000;
 
 async function resolveRollout(appId: string, nativeId: string, searchArchive: boolean) {
   const session = sessionsDb.getSessionById(appId);
@@ -113,6 +111,7 @@ export async function runCodexTmuxTurn(command: string, options: AnyRecord, writ
     let tail = rollout ? createTranscriptTail(rollout) : null;
     // Baseline before Enter: a short answer can already be on disk when paste/submit returns.
     await tail?.poll();
+    const previousHook = await readCodexTurnHook(appId, providerSessionId);
     await typeMessage(destination, command, options, turn.startup.signal);
     turn.submitted = true;
     options.onInputSubmitted?.();
@@ -125,11 +124,16 @@ export async function runCodexTmuxTurn(command: string, options: AnyRecord, writ
       let lastActiveScreenAt: number | null = null;
       let nextFileLookup = 0;
       const localCommand = command.trimStart().startsWith('/');
-      let sawTurn = false;
+      let sawTurn = screen.activity === 'working';
       let turnId: string | undefined;
       let waiting = false;
       for (;;) {
         if (turn.interrupted) return;
+        const hook = sawTurn ? null : await readCodexTurnHook(appId, providerSessionId);
+        if (hook && hook.turnId !== previousHook?.turnId) {
+          turnId = hook.turnId;
+          sawTurn = true;
+        }
         if (!tail && Date.now() >= nextFileLookup) {
           const file = await resolveRollout(appId, providerSessionId, false);
           if (file) tail = createTranscriptTail(file, 0);
@@ -154,7 +158,7 @@ export async function runCodexTmuxTurn(command: string, options: AnyRecord, writ
           const usage = readCodexUsage(entry);
           if (usage) note('status', { text: 'token_budget', tokenBudget: usage });
           if (payload.type === 'error') failure = payload.message || 'Codex reported an error.';
-          if ((sawTurn || screen.activity === 'working') && ['task_complete', 'turn_complete', 'turn_aborted'].includes(payload.type)) {
+          if (sawTurn && ['task_complete', 'turn_complete', 'turn_aborted'].includes(payload.type)) {
             aborted = payload.type === 'turn_aborted';
             completed = true;
           }
@@ -170,18 +174,13 @@ export async function runCodexTmuxTurn(command: string, options: AnyRecord, writ
         if (localCommand && !sawTurn && current.activity !== 'working' && (current.empty || isWaiting)
           && Date.now() - noActivitySince > 1500) return;
         const now = Date.now();
+        if (current.activity === 'working') sawTurn = true;
         if (current.activity === 'working' || isWaiting) noActivitySince = lastActiveScreenAt = now;
-        const silenceLimitMs = !failure && (sawTurn || screen.activity === 'working')
-          ? ACTIVE_TURN_SILENCE_MS : TURN_START_SILENCE_MS;
-        if (now - noActivitySince > silenceLimitMs) {
-          const hookEvent = turnId ? await readCodexTurnHook(appId, providerSessionId, turnId) : null;
-          if (!failure && hookEvent === 'UserPromptSubmit') {
-            noActivitySince = now;
-            continue;
-          }
+        // An active turn can wait indefinitely for a tool without writing any transcript rows.
+        if ((!sawTurn || failure) && now - noActivitySince > TURN_START_SILENCE_MS) {
           console.warn('[AgentHarbor] Codex turn completion timeout', JSON.stringify({
-            sessionId: appId, providerSessionId, paneId: pane.paneId, turnId: turnId ?? null, sawTurn, hookEvent,
-            silentForMs: now - noActivitySince, silenceLimitMs,
+            sessionId: appId, providerSessionId, paneId: pane.paneId, turnId: turnId ?? null, sawTurn,
+            silentForMs: now - noActivitySince, silenceLimitMs: TURN_START_SILENCE_MS,
             lastTranscriptRowAgoMs: lastTranscriptRowAt === null ? null : now - lastTranscriptRowAt,
             lastActiveScreenAgoMs: lastActiveScreenAt === null ? null : now - lastActiveScreenAt,
             providerErrorSeen: failure !== null,

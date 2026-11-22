@@ -54,13 +54,14 @@ export async function prepareCodexTurnHooks(appSessionId: string, config: Return
   };
 }
 
-/** The providers runtime can check a trusted Codex hook's state for the exact turn it already saw start. */
-export async function readCodexTurnHook(appSessionId: string, sessionId: string, turnId: string) {
+/** The providers runtime reads a trusted Codex hook to identify a newly submitted turn. */
+export async function readCodexTurnHook(appSessionId: string, sessionId: string) {
   const { stateDir } = getCodexCliConfig().pathConfig;
   try {
     const record = readObjectRecord(JSON.parse(await fs.readFile(statusPath(stateDir, appSessionId), 'utf8')));
-    if (record?.sessionId !== sessionId || record?.turnId !== turnId) return null;
-    return events.find((event) => event === record.event) ?? null;
+    if (record?.sessionId !== sessionId || typeof record.turnId !== 'string' || !record.turnId) return null;
+    const event = events.find((candidate) => candidate === record.event);
+    return event ? { event, turnId: record.turnId } : null;
   } catch {
     return null;
   }
